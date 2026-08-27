@@ -1,0 +1,2669 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Danışan Takip</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxOTIgMTkyIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iZyIgeDE9IjAiIHkxPSIwIiB4Mj0iMSIgeTI9IjEiPgogICAgICA8c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiNkZmU3ZjQiLz4KICAgICAgPHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZjZlM2VhIi8+CiAgICA8L2xpbmVhckdyYWRpZW50PgogIDwvZGVmcz4KICA8cmVjdCB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgcng9IjQwIiBmaWxsPSJ1cmwoI2cpIi8+CgogIDwhLS0gYmFjayAobGFyZ2VyKSBzcGVlY2ggYnViYmxlIC0tPgogIDxwYXRoIGQ9IgogICAgTTQyIDUyCiAgICBoNzIKICAgIGExNCAxNCAwIDAgMSAxNCAxNAogICAgdjQwCiAgICBhMTQgMTQgMCAwIDEgLTE0IDE0CiAgICBoLTQ2CiAgICBsLTIwIDIwCiAgICB2LTIwCiAgICBoLTYKICAgIGExNCAxNCAwIDAgMSAtMTQgLTE0CiAgICB2LTQwCiAgICBhMTQgMTQgMCAwIDEgMTQgLTE0CiAgICB6IgogICAgZmlsbD0iI2ZmZmZmZiIgc3Ryb2tlPSIjMmIyZDMzIiBzdHJva2Utd2lkdGg9IjciIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KCiAgPCEtLSBmcm9udCAoc21hbGxlcikgc3BlZWNoIGJ1YmJsZSAtLT4KICA8cGF0aCBkPSIKICAgIE05NiA5NgogICAgaDQ4CiAgICBhMTIgMTIgMCAwIDEgMTIgMTIKICAgIHYyNgogICAgYTEyIDEyIDAgMCAxIC0xMiAxMgogICAgaC00CiAgICB2MTYKICAgIGwtMTggLTE2CiAgICBoLTI2CiAgICBhMTIgMTIgMCAwIDEgLTEyIC0xMgogICAgdi0yNgogICAgYTEyIDEyIDAgMCAxIDEyIC0xMgogICAgeiIKICAgIGZpbGw9IiNmZmZmZmYiIHN0cm9rZT0iIzJiMmQzMyIgc3Ryb2tlLXdpZHRoPSI3IiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+Cjwvc3ZnPgo=">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#2b2d33;
+    --muted:#6b6f78;
+    --card:#ffffff;
+    --card-line:#e2e2ea;
+    --paper:#fbfafc;
+    --highlight:#d9e3f0;
+    --highlight-line:#c3d3e6;
+    --grad-start:#dfe7f4;
+    --grad-end:#f6e3ea;
+    --red:#c15a6b;
+    --red-bg:#f8e2e6;
+    --green:#4f8f7c;
+    --green-bg:#e2f0ea;
+    --neutral:#b7bcc2;
+    --neutral-bg:#eef0f2;
+    --pink:#f0c7d4;
+  }
+  *{box-sizing:border-box;}
+  html, body{
+    height:100%;
+    margin:0;
+    overflow:hidden;
+  }
+  body{
+    font-family:'IBM Plex Sans', sans-serif;
+    color:var(--ink);
+    background:var(--paper);
+  }
+  h1,h2,h3,.brand{font-family:'Fraunces', serif;}
+
+  .file-setup{
+    position:fixed; inset:0;
+    display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(160deg, var(--grad-start) 0%, var(--grad-end) 100%);
+    z-index:50;
+    padding:20px;
+  }
+  .setup-box{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:14px;
+    padding:32px 36px;
+    max-width:420px;
+    text-align:center;
+  }
+  .setup-box h2{margin:0 0 10px; font-size:21px;}
+  .setup-box p{color:var(--muted); font-size:14px; margin:0 0 20px; line-height:1.55;}
+  .setup-box .filename{font-weight:600; color:var(--ink);}
+  .setup-actions{display:flex; gap:10px; justify-content:center; flex-wrap:wrap;}
+  .setup-actions button{
+    padding:10px 18px; border-radius:8px; border:none; cursor:pointer;
+    font-family:inherit; font-weight:600; font-size:13.5px;
+    background:var(--highlight); color:var(--ink);
+  }
+  .setup-actions button.secondary{
+    background:none; border:1px solid var(--card-line); color:var(--muted);
+  }
+  .setup-actions button:hover{filter:brightness(0.97);}
+
+  #appShell{
+    display:none;
+    height:100vh;
+  }
+  #appShell.visible{display:flex;}
+
+  #sidebar{
+    width:280px;
+    flex-shrink:0;
+    background:linear-gradient(165deg, var(--grad-start) 0%, var(--grad-end) 100%);
+    color:var(--ink);
+    border-right:1px solid var(--card-line);
+    padding:18px 16px;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .brand{
+    font-size:18px;
+    font-weight:600;
+    letter-spacing:0.2px;
+    color:var(--ink);
+  }
+  .brand small{
+    display:block;
+    font-family:'IBM Plex Sans',sans-serif;
+    font-size:9.5px;
+    font-weight:500;
+    color:var(--muted);
+    letter-spacing:0.8px;
+    text-transform:uppercase;
+    margin-top:2px;
+  }
+  #addClientForm{
+    display:flex;
+    gap:6px;
+  }
+  #newClientName{
+    flex:1;
+    padding:8px 10px;
+    border-radius:6px;
+    border:1px solid var(--card-line);
+    background:rgba(255,255,255,0.75);
+    color:var(--ink);
+    font-family:inherit;
+    font-size:13px;
+  }
+  #newClientName::placeholder{color:var(--muted);}
+  .search-empty{
+    color:var(--muted);
+    font-size:12.5px;
+    font-style:italic;
+    padding:10px 4px;
+    line-height:1.5;
+  }
+  .sidebar-empty{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    color:var(--muted);
+    opacity:0.75;
+    flex:1;
+    padding:30px 16px;
+    gap:12px;
+  }
+  .sidebar-empty svg{width:52px; height:52px; flex-shrink:0;}
+  .sidebar-empty span{font-size:12.5px; line-height:1.5;}
+  #addClientForm button{
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    font-weight:600;
+    border-radius:6px;
+    padding:8px 12px;
+    cursor:pointer;
+    font-size:13px;
+  }
+  #addClientForm button:hover{filter:brightness(0.97);}
+  .sort-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12px;
+    color:var(--muted);
+  }
+  .sort-row select{
+    flex:1;
+    background:rgba(255,255,255,0.75);
+    color:var(--ink);
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    padding:5px 6px;
+    font-family:inherit;
+    font-size:12.5px;
+  }
+  #clientList{
+    list-style:none;
+    margin:0;
+    padding:0;
+    overflow-y:auto;
+    flex:1;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  .client-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    border:1px solid transparent;
+  }
+  .client-row:hover{background:rgba(255,255,255,0.55);}
+  .client-row.active{background:var(--highlight); border-color:var(--highlight-line);}
+  .seal{
+    width:12px;height:12px;border-radius:50%;
+    flex-shrink:0;
+    box-shadow:0 0 0 3px rgba(43,45,51,0.05);
+  }
+  .seal.red{background:var(--red);}
+  .seal.green{background:var(--green);}
+  .seal.neutral{background:var(--neutral);}
+  .client-name{
+    flex:1;
+    font-size:14px;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .client-del{
+    opacity:0;
+    color:var(--muted);
+    background:none;
+    border:none;
+    cursor:pointer;
+    font-size:13px;
+    padding:2px 4px;
+  }
+  .client-edit{
+    opacity:0;
+    color:var(--muted);
+    background:none;
+    border:none;
+    cursor:pointer;
+    font-size:13px;
+    padding:2px 4px;
+  }
+  .client-row:hover .client-del,
+  .client-row:hover .client-edit{opacity:0.7;}
+  .client-del:hover{opacity:1 !important; color:var(--red);}
+  .client-edit:hover{opacity:1 !important; color:var(--ink);}
+  .client-name-input{
+    flex:1;
+    font-family:inherit;
+    font-size:14px;
+    padding:4px 6px;
+    border-radius:5px;
+    border:1px solid var(--highlight-line);
+    background:#ffffff;
+    color:var(--ink);
+  }
+  #sidebarFooter{
+    margin-top:auto;
+    padding-top:12px;
+    border-top:1px solid var(--card-line);
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  #fileStatus{
+    font-size:11px;
+    color:var(--muted);
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  #fileStatus .dot{
+    display:inline-block; width:7px;height:7px;border-radius:50%;
+    background:var(--green); margin-right:6px;
+  }
+  #manualSaveBtn{
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    font-size:12px;
+    font-weight:600;
+    padding:8px 10px;
+    border-radius:6px;
+    cursor:pointer;
+    width:100%;
+    font-family:inherit;
+  }
+  #manualSaveBtn:hover{filter:brightness(0.97);}
+
+  #settingsNavBtn{
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-size:12px;
+    padding:6px 10px;
+    border-radius:6px;
+    cursor:pointer;
+    width:100%;
+    font-family:inherit;
+  }
+  #settingsNavBtn:hover{color:var(--ink); border-color:var(--highlight-line);}
+
+  .backups-modal{
+    display:none;
+    position:fixed; inset:0;
+    background:rgba(43,45,51,0.35);
+    z-index:60;
+    align-items:center;
+    justify-content:center;
+    padding:20px;
+  }
+  .backups-modal.open{display:flex;}
+  .backups-box{
+    background:var(--card);
+    border-radius:14px;
+    max-width:480px;
+    width:100%;
+    max-height:80vh;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+  }
+  .backups-box-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:18px 20px 10px;
+  }
+  .backups-box-header h2{margin:0; font-size:19px;}
+  .backups-box-header button{
+    background:none; border:none; color:var(--muted); font-size:16px; cursor:pointer; padding:2px 6px;
+  }
+  .backups-box-header button:hover{color:var(--red);}
+  .backups-note{
+    margin:0 20px 12px;
+    font-size:12px;
+    color:var(--muted);
+    line-height:1.5;
+  }
+  #backupsList{
+    overflow-y:auto;
+    padding:0 20px 20px;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .backup-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    padding:10px 12px;
+    border:1px solid var(--card-line);
+    border-radius:8px;
+  }
+  .backup-row-info{font-size:13px; color:var(--ink);}
+  .backup-row-info small{display:block; color:var(--muted); font-size:11px; margin-top:2px;}
+  .backup-restore-btn{
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    font-size:12px;
+    font-weight:600;
+    padding:6px 12px;
+    border-radius:6px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .backup-restore-btn:hover{filter:brightness(0.97);}
+  .backups-empty{color:var(--muted); font-size:13px; font-style:italic; padding:8px 0;}
+  .settings-section{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:12px;
+    padding:18px 20px;
+    margin-bottom:16px;
+  }
+  .settings-section h3{margin:0 0 6px; font-size:15px;}
+  .settings-section p{margin:0 0 12px; font-size:13px; color:var(--muted); line-height:1.5;}
+  .settings-section .settings-btn{
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    font-size:13px;
+    font-weight:600;
+    padding:9px 16px;
+    border-radius:7px;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .settings-section .settings-btn:hover{filter:brightness(0.97);}
+  .settings-section .settings-btn.danger{background:var(--red-bg); border-color:var(--red); color:var(--red);}
+  .settings-section label.settings-btn{display:inline-block;}
+
+  #main{
+    flex:1;
+    min-height:0;
+    padding:32px 40px;
+    overflow-y:auto;
+    background:var(--paper);
+  }
+  #emptyState{
+    color:var(--muted);
+    font-size:15px;
+    max-width:420px;
+    margin-top:60px;
+  }
+  #emptyState h2{margin-bottom:8px; font-size:22px;}
+
+  .empty-state-full{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    min-height:60vh;
+    color:var(--muted);
+    padding:20px;
+  }
+  .empty-state-full .empty-icon{
+    width:72px;
+    height:72px;
+    margin-bottom:20px;
+    opacity:0.55;
+  }
+  .empty-state-full h2{font-size:20px; color:var(--ink); margin:0 0 8px;}
+  .empty-state-full p{font-size:14px; max-width:280px; margin:0 0 20px; line-height:1.5;}
+  .empty-state-full .empty-cta{
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    font-family:inherit;
+    font-size:13.5px;
+    font-weight:600;
+    padding:10px 18px;
+    border-radius:8px;
+    cursor:pointer;
+  }
+  .empty-state-full .empty-cta:hover{filter:brightness(0.97);}
+  #clientHeader{
+    display:flex;
+    align-items:baseline;
+    gap:14px;
+    margin-bottom:6px;
+  }
+  #clientHeader h2{font-size:28px; margin:0;}
+  .status-pill{
+    font-size:12px;
+    font-weight:500;
+    padding:3px 10px;
+    border-radius:20px;
+  }
+  .status-pill.red{background:var(--red-bg); color:var(--red);}
+  .status-pill.green{background:var(--green-bg); color:var(--green);}
+  .status-pill.neutral{background:var(--neutral-bg); color:var(--muted);}
+  #clientSub{color:var(--muted); font-size:13px; margin-bottom:24px;}
+
+  .add-session-toggle{
+    background:var(--highlight);
+    color:var(--ink);
+    border:1px solid var(--highlight-line);
+    padding:10px 16px;
+    border-radius:8px;
+    font-family:inherit;
+    font-size:13px;
+    font-weight:500;
+    cursor:pointer;
+    margin-bottom:22px;
+  }
+  .add-session-toggle:hover{filter:brightness(0.97);}
+
+  .action-row{display:flex; gap:10px; margin-bottom:22px;}
+  .action-row .add-session-toggle{margin-bottom:0;}
+
+  .general-admin-note-block{margin-bottom:20px;}
+  .general-admin-note-block .item-label{display:block; margin-bottom:5px;}
+  .general-admin-note{
+    width:100%;
+    font-family:inherit;
+    font-size:14px;
+    padding:10px 12px;
+    border:1px solid var(--card-line);
+    border-radius:8px;
+    background:var(--card);
+    resize:vertical;
+    min-height:56px;
+  }
+
+  #todoPanel{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:26px;
+    display:none;
+  }
+  #todoPanel.open{display:block;}
+  .todo-add-row{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .todo-add-row .todo-text{flex:2; min-width:140px;}
+  .todo-add-row select,
+  .todo-add-row input{
+    font-family:inherit;
+    font-size:13.5px;
+    padding:8px 10px;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    background:#fdfcfd;
+  }
+  .todo-add-row .todo-importance{flex:1; min-width:110px;}
+  .todo-add-row .todo-duedate{flex:1; min-width:130px;}
+  .todo-add-row .home-todo-client{flex:1; min-width:150px;}
+  .client-picker{position:relative; flex:1; min-width:150px;}
+  .client-picker input[type="text"]{
+    width:100%;
+    font-family:inherit;
+    font-size:13.5px;
+    padding:8px 10px;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    background:#fdfcfd;
+  }
+  .client-picker-list{
+    display:none;
+    position:absolute;
+    left:0; right:0;
+    top:calc(100% + 4px);
+    max-height:180px;
+    overflow-y:auto;
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:8px;
+    box-shadow:0 6px 18px rgba(43,45,51,0.12);
+    z-index:6;
+  }
+  .client-picker-list.open{display:block;}
+  .client-picker-item{
+    padding:8px 12px;
+    font-size:13.5px;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .client-picker-item:hover{background:var(--highlight);}
+  .client-picker-empty{padding:8px 12px; font-size:13px; color:var(--muted); font-style:italic;}
+  .todo-add-btn, .home-todo-add-btn{
+    padding:8px 16px;
+    border-radius:6px;
+    border:none;
+    background:var(--green);
+    color:#fff;
+    font-family:inherit;
+    font-weight:600;
+    font-size:13.5px;
+    cursor:pointer;
+  }
+  .todo-add-btn:hover, .home-todo-add-btn:hover{filter:brightness(1.08);}
+  .todo-sort-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:12px;
+    color:var(--muted);
+    margin-bottom:12px;
+  }
+  .todo-sort-row select{
+    font-family:inherit;
+    font-size:12.5px;
+    padding:5px 8px;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    background:#fdfcfd;
+  }
+  .todo-list{display:flex; flex-direction:column; gap:2px;}
+  .todo-item{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    padding:9px 4px;
+    border-bottom:1px dashed var(--card-line);
+  }
+  .todo-item:last-child{border-bottom:none;}
+  .todo-item input[type="checkbox"]{width:17px; height:17px; margin-top:2px; accent-color:var(--green); flex-shrink:0;}
+  .todo-item-main{flex:1; min-width:0;}
+  .todo-item-text-input{
+    width:100%;
+    font-family:inherit;
+    font-size:14px;
+    color:var(--ink);
+    border:1px solid transparent;
+    background:transparent;
+    border-radius:5px;
+    padding:2px 4px;
+  }
+  .todo-item-text-input:hover, .todo-item-text-input:focus{
+    border-color:var(--card-line);
+    background:#fdfcfd;
+  }
+  .todo-item.done .todo-item-text-input{text-decoration:line-through; color:var(--muted);}
+  .todo-item-meta{display:flex; align-items:center; gap:8px; margin-top:3px;}
+  .todo-item-importance-select{
+    font-family:inherit;
+    font-size:11px;
+    color:var(--muted);
+    background:var(--neutral-bg);
+    border:1px solid transparent;
+    border-radius:10px;
+    padding:2px 6px;
+  }
+  .todo-item-importance-select:hover, .todo-item-importance-select:focus{border-color:var(--card-line);}
+  .todo-item-duedate-input{
+    font-family:inherit;
+    font-size:11px;
+    color:var(--muted);
+    background:var(--neutral-bg);
+    border:1px solid transparent;
+    border-radius:10px;
+    padding:2px 6px;
+  }
+  .todo-item-duedate-input:hover, .todo-item-duedate-input:focus{border-color:var(--card-line);}
+  .todo-item-duedate-input.overdue{background:var(--red-bg); color:var(--red);}
+  .todo-del{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:2px 4px;}
+  .todo-del:hover{color:var(--red);}
+  .todo-empty{color:var(--muted); font-size:13px; font-style:italic; padding:6px 4px;}
+  .todo-done-header{
+    font-size:11px;
+    font-weight:600;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+    margin:14px 0 6px;
+  }
+
+  .nav-row{display:flex; gap:6px;}
+  #homeNavBtn, #providerNavBtn{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:1px;
+    background:none;
+    border:1px solid var(--card-line);
+    border-radius:8px;
+    padding:6px 4px;
+    font-family:inherit;
+    cursor:pointer;
+    min-width:0;
+  }
+  #homeNavBtn .nav-icon, #providerNavBtn .nav-icon{font-size:15px; line-height:1;}
+  #homeNavBtn .nav-label, #providerNavBtn .nav-label{
+    font-size:9.5px;
+    font-weight:600;
+    color:var(--ink);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    max-width:100%;
+  }
+  #homeNavBtn:hover, #providerNavBtn:hover{background:rgba(255,255,255,0.55);}
+  #homeNavBtn.active, #providerNavBtn.active{background:var(--highlight); border-color:var(--highlight-line);}
+
+  .home-sort-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:18px;}
+  .home-sort-row select{
+    font-family:inherit; font-size:13px; padding:6px 10px;
+    border:1px solid var(--card-line); border-radius:6px; background:var(--card);
+  }
+  .home-task-row{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    padding:12px 14px;
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:10px;
+    margin-bottom:8px;
+  }
+  .home-task-row input[type="checkbox"]{width:17px; height:17px; margin-top:2px; accent-color:var(--green); flex-shrink:0;}
+  .home-task-main{flex:1; min-width:0;}
+  .home-task-text-input{
+    width:100%;
+    font-family:inherit;
+    font-size:14px;
+    color:var(--ink);
+    border:1px solid transparent;
+    background:transparent;
+    border-radius:5px;
+    padding:2px 4px;
+  }
+  .home-task-text-input:hover, .home-task-text-input:focus{
+    border-color:var(--card-line);
+    background:#fdfcfd;
+  }
+  .home-task-row.done .home-task-text-input{text-decoration:line-through; color:var(--muted);}
+  .home-task-meta{display:flex; align-items:center; gap:8px; margin-top:4px; flex-wrap:wrap;}
+  .home-task-client{
+    font-size:12px; font-weight:600; color:var(--ink);
+    background:var(--highlight); padding:2px 9px; border-radius:10px; cursor:pointer;
+  }
+  .home-task-client:hover{filter:brightness(0.97);}
+  .home-task-general{
+    font-size:12px; font-weight:600; color:var(--muted);
+    background:var(--neutral-bg); padding:2px 9px; border-radius:10px;
+  }
+  .home-task-importance-select{
+    font-family:inherit;
+    font-size:11px;
+    color:var(--muted);
+    background:var(--neutral-bg);
+    border:1px solid transparent;
+    border-radius:10px;
+    padding:2px 6px;
+  }
+  .home-task-importance-select:hover, .home-task-importance-select:focus{border-color:var(--card-line);}
+  .home-task-duedate-input{
+    font-family:inherit;
+    font-size:11px;
+    color:var(--muted);
+    background:var(--neutral-bg);
+    border:1px solid transparent;
+    border-radius:10px;
+    padding:2px 6px;
+  }
+  .home-task-duedate-input:hover, .home-task-duedate-input:focus{border-color:var(--card-line);}
+  .home-task-duedate-input.overdue{background:var(--red-bg); color:var(--red);}
+  .home-task-del{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:2px 4px; flex-shrink:0;}
+  .home-task-del:hover{color:var(--red);}
+
+  #profilePanel{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:26px;
+    display:none;
+  }
+  #profilePanel.open{display:block;}
+  .contact-row{display:flex; gap:6px; align-items:center;}
+  .contact-row input{
+    flex:1;
+    font-family:inherit;
+    font-size:14px;
+    padding:8px 10px;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    background:#fdfcfd;
+  }
+  .contact-btn{
+    padding:8px 13px;
+    border-radius:6px;
+    font-size:12.5px;
+    font-weight:600;
+    text-decoration:none;
+    white-space:nowrap;
+    cursor:pointer;
+    border:1px solid var(--card-line);
+    flex-shrink:0;
+  }
+  .whatsapp-btn{background:#e3f5ea; color:#2e7d4f; border-color:#bfe6cf;}
+  .gmail-btn{background:var(--highlight); color:var(--ink); border-color:var(--highlight-line);}
+  .mailto-btn{background:var(--neutral-bg); color:var(--muted); border-color:var(--card-line);}
+  .contact-btn.disabled{opacity:0.45; pointer-events:none;}
+
+  #sessionForm{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:12px;
+    padding:20px;
+    margin-bottom:26px;
+    display:none;
+  }
+  #sessionForm.open{display:block;}
+  .form-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+  .field-block{
+    display:flex;
+    flex-direction:column;
+    gap:5px;
+  }
+  .field-block.full{grid-column:1 / -1;}
+  .field-block label{
+    font-size:12px;
+    font-weight:600;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+  }
+  .field-block input[type="date"],
+  .field-block textarea{
+    font-family:inherit;
+    font-size:14px;
+    padding:8px 10px;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    background:#fdfcfd;
+  }
+  .field-block textarea{resize:vertical; min-height:52px;}
+  .tick-row{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    font-size:12.5px;
+    color:var(--muted);
+    margin-top:2px;
+  }
+  .tick-row input{width:15px;height:15px;}
+  .form-actions{
+    display:flex;
+    gap:10px;
+    margin-top:18px;
+  }
+  .form-actions button{
+    padding:9px 16px;
+    border-radius:7px;
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    border:none;
+  }
+  #saveSessionBtn{background:var(--green); color:#fff;}
+  #saveSessionBtn:hover{filter:brightness(1.08);}
+  #cancelSessionBtn{background:none; border:1px solid var(--card-line); color:var(--muted);}
+
+  .session-card{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:12px;
+    padding:18px 20px;
+    margin-bottom:14px;
+  }
+  .session-card-top{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    margin-bottom:12px;
+  }
+  .session-date-input{
+    font-family:inherit;
+    font-weight:600;
+    font-size:15px;
+    color:var(--ink);
+    border:1px solid transparent;
+    background:transparent;
+    border-radius:5px;
+    padding:2px 4px;
+    cursor:pointer;
+  }
+  .session-date-input:hover,
+  .session-date-input:focus{
+    border-color:var(--card-line);
+    background:#fdfcfd;
+    cursor:text;
+  }
+  .session-del{
+    background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;
+  }
+  .session-del:hover{color:var(--red);}
+  .item-row{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    padding:7px 0;
+    border-bottom:1px dashed var(--card-line);
+  }
+  .item-row:last-child{border-bottom:none;}
+  .item-row input[type="checkbox"]{
+    margin-top:2px;
+    width:16px;height:16px;
+    accent-color:var(--green);
+    flex-shrink:0;
+  }
+  .item-label{
+    font-size:11px;
+    font-weight:600;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+    width:120px;
+    flex-shrink:0;
+    padding-top:1px;
+  }
+  .item-value{font-size:14px; white-space:pre-wrap; flex:1;}
+  .item-value.empty{color:#a8adb6; font-style:italic;}
+  .inline-note-input{
+    flex:1;
+    font-family:inherit;
+    font-size:13.5px;
+    padding:4px 8px;
+    border:1px solid var(--card-line);
+    border-radius:5px;
+    background:#fdfcfd;
+  }
+
+  .admin-notes-block{margin-top:10px;}
+  .admin-notes-block .item-label{display:block; margin-bottom:5px;}
+  .admin-note-input{
+    width:100%;
+    font-family:inherit;
+    font-size:14px;
+    padding:8px 10px;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    background:#fdfcfd;
+    resize:vertical;
+    min-height:50px;
+  }
+
+  .invoice-blackout{opacity:0.5;}
+  .invoice-blackout input[type="checkbox"]{accent-color:var(--muted) !important;}
+  .invoice-actions-blackout{
+    margin-top:12px;
+    padding:10px 12px;
+    border-top:1px solid var(--card-line);
+    font-size:12px;
+    color:var(--muted);
+    font-style:italic;
+    text-align:center;
+  }
+  .invoice-actions-label{
+    margin-top:12px;
+    padding-top:12px;
+    border-top:1px solid var(--card-line);
+    font-size:11px;
+    font-weight:600;
+    color:var(--muted);
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+    margin-bottom:8px;
+  }
+  .invoice-actions{
+    display:flex;
+    gap:8px;
+  }
+  .invoice-actions button{
+    flex:1;
+    padding:9px 10px;
+    border-radius:7px;
+    font-family:inherit;
+    font-size:12.5px;
+    font-weight:600;
+    cursor:pointer;
+    border:1px solid var(--card-line);
+    background:var(--neutral-bg);
+    color:var(--ink);
+  }
+  .invoice-actions button:hover{filter:brightness(0.97);}
+  .invoice-email-group{
+    flex:1;
+    display:flex;
+    gap:4px;
+    min-width:0;
+  }
+  .invoice-email-group button{
+    flex:1;
+    min-width:0;
+    padding:9px 4px;
+    border-radius:7px;
+    font-family:inherit;
+    font-size:11px;
+    font-weight:600;
+    cursor:pointer;
+    border:1px solid var(--card-line);
+    background:var(--neutral-bg);
+    color:var(--ink);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .invoice-email-group button:hover{filter:brightness(0.97);}
+  .invoice-email-btn{background:var(--highlight) !important; border-color:var(--highlight-line) !important;}
+  .invoice-gmail-btn{background:var(--highlight) !important; border-color:var(--highlight-line) !important;}
+  .back-to-list{
+    display:none;
+    align-items:center;
+    gap:6px;
+    background:none;
+    border:none;
+    color:var(--muted);
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    padding:4px 0 16px;
+    cursor:pointer;
+  }
+
+  @media (max-width: 768px){
+    #sidebar{ width:100%; }
+    #appShell.visible{ flex-direction:column; }
+    body.mobile-detail #sidebar{ display:none; }
+    body:not(.mobile-detail) #main{ display:none; }
+    #main{ padding:18px 16px; }
+    .back-to-list{ display:flex; }
+    .form-grid{ grid-template-columns:1fr; }
+    .client-del, .client-edit{ opacity:1; font-size:17px; padding:6px 8px; }
+    .client-row{ padding:13px 10px; }
+    .item-row input[type="checkbox"]{ width:20px; height:20px; }
+    .contact-row{ flex-wrap:wrap; }
+    .contact-btn{ padding:10px 14px; font-size:13.5px; }
+    .add-session-toggle, #addClientForm button,
+    .form-actions button, #saveSessionBtn, #cancelSessionBtn,
+    .invoice-actions button, .invoice-email-group button{
+      padding:12px 16px; font-size:14px;
+    }
+    .invoice-actions{ flex-direction:column; }
+    .invoice-email-group{ width:100%; }
+    #newClientName, .sort-row select,
+    .field-block input[type="date"], .field-block textarea,
+    .contact-row input, .admin-note-input, .inline-note-input,
+    .todo-add-row input, .todo-add-row select, .general-admin-note,
+    .home-sort-row select, .client-picker input[type="text"]{
+      font-size:16px;
+    }
+    .todo-add-row .todo-text, .todo-add-row .todo-importance, .todo-add-row .todo-duedate,
+    .todo-add-row .client-picker{
+      flex:1 1 100%;
+    }
+    .action-row{ flex-direction:column; }
+    #clientHeader h2{ font-size:24px; }
+    .session-card{ padding:16px; }
+    .home-task-meta{ gap:6px; }
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut }
+    from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+  import { getFirestore, doc, setDoc, onSnapshot }
+    from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBgK5VzCmfQUqhftug3D5ULZEfMvdkjdNA",
+    authDomain: "danisantakip-f8226.firebaseapp.com",
+    projectId: "danisantakip-f8226",
+    storageBucket: "danisantakip-f8226.firebasestorage.app",
+    messagingSenderId: "171012588947",
+    appId: "1:171012588947:web:832fa17456223a1501d466"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  const provider = new GoogleAuthProvider();
+
+  window.FB = { auth, db, provider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, doc, setDoc, onSnapshot };
+  window.dispatchEvent(new Event('fb-ready'));
+</script>
+</head>
+<body>
+
+<div id="fileSetup" class="file-setup">
+  <div class="setup-box" id="setupBoxContent"><p>Kontrol ediliyor…</p></div>
+</div>
+
+<div id="appShell">
+  <div id="sidebar">
+    <div class="brand">Danışan Takip<small>İki Therapy — admin</small></div>
+    <div class="nav-row">
+      <button id="homeNavBtn" type="button" title="Ana Sayfa"><span class="nav-icon">🏠</span><span class="nav-label">Ana Sayfa</span></button>
+      <button id="providerNavBtn" type="button" title="Uzman Bilgileri"><span class="nav-icon">🩺</span><span class="nav-label">Uzman</span></button>
+    </div>
+    <form id="addClientForm">
+      <input id="newClientName" type="text" placeholder="Ara ya da yeni danışan adı…" autocomplete="off">
+      <button type="submit">Ekle</button>
+    </form>
+    <div class="sort-row">
+      <label for="sortSelect">Sırala</label>
+      <select id="sortSelect">
+        <option value="default">Varsayılan</option>
+        <option value="name">İsme göre (A-Z)</option>
+        <option value="lastSession">Son seansa göre</option>
+      </select>
+    </div>
+    <ul id="clientList"></ul>
+    <div id="sidebarFooter">
+      <div id="fileStatus"></div>
+      <button id="settingsNavBtn" type="button">⚙️ Ayarlar</button>
+    </div>
+  </div>
+  <div id="main"></div>
+
+  <div id="backupsModal" class="backups-modal">
+    <div class="backups-box">
+      <div class="backups-box-header">
+        <h2>Yedekler</h2>
+        <button id="closeBackupsBtn" type="button">✕</button>
+      </div>
+      <p class="backups-note">Her kaydetmede en fazla 3 dakikada bir bu tarayıcıda otomatik yedek alınır (son 30 yedek saklanır). Bu yedekler sadece bu bilgisayarda/tarayıcıda durur, dosyayla birlikte senkronlanmaz.</p>
+      <div id="backupsList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- IndexedDB: remember the picked file handle + rolling backups ---------- */
+const IDB_NAME = 'danisan-takip-db';
+const IDB_STORE = 'handles';
+const IDB_BACKUP_STORE = 'backups';
+const MAX_BACKUPS = 30;
+
+function idbOpen(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open(IDB_NAME, 2);
+    req.onupgradeneeded = ()=>{
+      const db = req.result;
+      if(!db.objectStoreNames.contains(IDB_STORE)){ db.createObjectStore(IDB_STORE); }
+      if(!db.objectStoreNames.contains(IDB_BACKUP_STORE)){
+        db.createObjectStore(IDB_BACKUP_STORE, { keyPath:'timestamp' });
+      }
+    };
+    req.onsuccess = ()=>resolve(req.result);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function idbGet(key){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(IDB_STORE,'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = ()=>resolve(req.result || null);
+    req.onerror = ()=>reject(req.error);
+  });
+}
+async function idbSet(key,val){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(IDB_STORE,'readwrite');
+    tx.objectStore(IDB_STORE).put(val,key);
+    tx.oncomplete = ()=>resolve();
+    tx.onerror = ()=>reject(tx.error);
+  });
+}
+
+async function saveBackupSnapshot(stateObj){
+  try{
+    const db = await idbOpen();
+    const snapshot = { timestamp: Date.now(), data: JSON.stringify(stateObj) };
+    await new Promise((resolve,reject)=>{
+      const tx = db.transaction(IDB_BACKUP_STORE,'readwrite');
+      tx.objectStore(IDB_BACKUP_STORE).put(snapshot);
+      tx.oncomplete = resolve;
+      tx.onerror = ()=>reject(tx.error);
+    });
+    await pruneBackups(db);
+  }catch(e){ console.error('Yedek kaydedilemedi', e); }
+}
+
+async function pruneBackups(db){
+  return new Promise((resolve)=>{
+    const tx = db.transaction(IDB_BACKUP_STORE,'readwrite');
+    const store = tx.objectStore(IDB_BACKUP_STORE);
+    const req = store.getAllKeys();
+    req.onsuccess = ()=>{
+      const keys = req.result.sort((a,b)=>a-b);
+      const excess = keys.length - MAX_BACKUPS;
+      if(excess > 0){
+        for(let i=0;i<excess;i++){ store.delete(keys[i]); }
+      }
+      resolve();
+    };
+  });
+}
+
+async function listBackups(){
+  const db = await idbOpen();
+  return new Promise((resolve,reject)=>{
+    const tx = db.transaction(IDB_BACKUP_STORE,'readonly');
+    const req = tx.objectStore(IDB_BACKUP_STORE).getAll();
+    req.onsuccess = ()=>resolve((req.result||[]).sort((a,b)=>b.timestamp-a.timestamp));
+    req.onerror = ()=>reject(req.error);
+  });
+}
+
+/* ---------- Auth + live data sync (Firebase) ---------- */
+let currentUser = null;
+let unsubscribeSnapshot = null;
+let hasLoadedOnce = false;
+let state = null;
+let activeClientId = null;
+let editingClientId = null;
+let sortMode = 'default';
+let searchQuery = '';
+let mainView = 'client';
+let homeSortMode = 'due';
+
+function init(){
+  window.addEventListener('fb-ready', startAuthListener);
+  if(window.FB) startAuthListener();
+}
+
+let showingDenied = false;
+const ALLOWED_EMAILS = [
+  'rp.duygu@gmail.com',
+  'psikologduygucankaya@gmail.com',
+  'psk.kubilay@gmail.com',
+  'kubilaycadircioglu@gmail.com'
+];
+
+function startAuthListener(){
+  window.FB.getRedirectResult(window.FB.auth).catch((e)=>{
+    console.error('Redirect giriş hatası', e);
+  });
+  window.FB.onAuthStateChanged(window.FB.auth, async (user)=>{
+    if(user){
+      if(!ALLOWED_EMAILS.includes(user.email)){
+        showingDenied = true;
+        setupBoxContent.innerHTML = `<h2>Erişim izni yok</h2><p>Bu hesap (${escapeHtml(user.email||'')}) için erişim izni tanımlı değil. İzin verilen hesaplardan biriyle giriş yapmayı dene.</p>
+          <div class="setup-actions"><button id="tryAgainBtn" class="secondary">Başka Hesapla Dene</button></div>`;
+        await window.FB.signOut(window.FB.auth);
+        const tryBtn = document.getElementById('tryAgainBtn');
+        if(tryBtn) tryBtn.addEventListener('click', ()=>{ showingDenied=false; showSignInScreen(); });
+        return;
+      }
+      showingDenied = false;
+      currentUser = user;
+      hasLoadedOnce = false;
+      subscribeToData();
+    }else{
+      currentUser = null;
+      if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+      document.getElementById('appShell').classList.remove('visible');
+      document.getElementById('fileSetup').style.display = 'flex';
+      if(!showingDenied){ showSignInScreen(); }
+    }
+  });
+}
+
+function showSignInScreen(){
+  setupBoxContent.innerHTML = `
+    <h2>Giriş yap</h2>
+    <p>Danışan verilerine erişmek için Google hesabınla giriş yapman gerekiyor.</p>
+    <div class="setup-actions">
+      <button id="googleSignInBtn">Google ile Giriş Yap</button>
+    </div>`;
+  document.getElementById('googleSignInBtn').addEventListener('click', async ()=>{
+    try{
+      await window.FB.signInWithPopup(window.FB.auth, window.FB.provider);
+    }catch(e){
+      console.error('Popup giriş hatası, redirect deneniyor', e);
+      try{
+        await window.FB.signInWithRedirect(window.FB.auth, window.FB.provider);
+      }catch(e2){
+        alert('Giriş başarısız: ' + e2.message);
+      }
+    }
+  });
+}
+
+function subscribeToData(){
+  const ref = window.FB.doc(window.FB.db, 'users', currentUser.uid, 'appdata', 'main');
+  unsubscribeSnapshot = window.FB.onSnapshot(ref, (snap)=>{
+    if(snap.exists()){
+      state = snap.data();
+    }else{
+      state = exampleData();
+    }
+    if(!state.clients) state.clients = [];
+    if(!state.generalTodos) state.generalTodos = [];
+
+    if(!hasLoadedOnce){
+      hasLoadedOnce = true;
+      finishSetup();
+    }else{
+      render();
+    }
+  }, (err)=>{
+    console.error('Senkron hatası', err);
+    setupBoxContent.innerHTML = `<h2>Bağlantı hatası</h2><p>${escapeHtml(err.message)}</p>`;
+    document.getElementById('appShell').classList.remove('visible');
+    document.getElementById('fileSetup').style.display = 'flex';
+  });
+}
+
+function finishSetup(){
+  document.getElementById('fileSetup').style.display = 'none';
+  document.getElementById('appShell').classList.add('visible');
+  document.getElementById('fileStatus').innerHTML = `<span class="dot"></span>${escapeHtml(currentUser.email || currentUser.displayName || 'Google hesabı')}`;
+  if(!activeClientId && state.clients.length){ activeClientId = state.clients[0].id; }
+  lastBackupTime = Date.now();
+  saveBackupSnapshot(state);
+  render();
+}
+
+let lastBackupTime = 0;
+const BACKUP_INTERVAL_MS = 3 * 60 * 1000; // at most one snapshot every 3 minutes
+
+function maybeSnapshotBackup(){
+  const now = Date.now();
+  if(now - lastBackupTime > BACKUP_INTERVAL_MS){
+    lastBackupTime = now;
+    saveBackupSnapshot(state);
+  }
+}
+
+async function saveState(){
+  maybeSnapshotBackup();
+  if(!currentUser) return;
+  try{
+    const ref = window.FB.doc(window.FB.db, 'users', currentUser.uid, 'appdata', 'main');
+    await window.FB.setDoc(ref, JSON.parse(JSON.stringify(state)));
+  }catch(e){
+    console.error('Kaydetme hatası', e);
+  }
+}
+
+async function handleImportJsonFile(ev){
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if(!file) return;
+  let imported;
+  try{
+    const text = await file.text();
+    imported = JSON.parse(text);
+  }catch(e){
+    alert('Dosya okunamadı. Geçerli bir JSON dosyası seçtiğinden emin ol.');
+    return;
+  }
+  const importedClients = Array.isArray(imported.clients) ? imported.clients : [];
+  const importedTodos = Array.isArray(imported.generalTodos) ? imported.generalTodos : [];
+  if(!importedClients.length && !importedTodos.length){
+    alert('Bu dosyada içe aktarılacak danışan bulunamadı.');
+    return;
+  }
+  if(!confirm(`${importedClients.length} danışan bu hesaba eklenecek. Mevcut verilerin üzerine yazılmaz, üstüne eklenir. Devam edilsin mi?`)) return;
+
+  importedClients.forEach(c=>{
+    if(!c.id) c.id = uid();
+    if(!c.todos) c.todos = [];
+    if(c.generalAdminNote == null) c.generalAdminNote = '';
+    if(!c.profile) c.profile = { info:'', address:'', phone:'', email:'', ifhp:false, rate:null };
+    (c.sessions||[]).forEach(s=>{ if(!s.id) s.id = uid(); });
+  });
+  importedTodos.forEach(t=>{ if(!t.id) t.id = uid(); });
+
+  state.clients = [...state.clients, ...importedClients];
+  state.generalTodos = [...(state.generalTodos||[]), ...importedTodos];
+  if(!activeClientId && state.clients.length){ activeClientId = state.clients[0].id; }
+  saveState();
+  render();
+  alert(`${importedClients.length} danışan başarıyla içe aktarıldı.`);
+}
+
+document.getElementById('closeBackupsBtn').addEventListener('click', closeBackupsModal);
+document.getElementById('backupsModal').addEventListener('click', (ev)=>{
+  if(ev.target.id === 'backupsModal') closeBackupsModal();
+});
+
+function closeBackupsModal(){
+  document.getElementById('backupsModal').classList.remove('open');
+}
+
+function formatBackupTime(ts){
+  const d = new Date(ts);
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+async function openBackupsModal(){
+  const modal = document.getElementById('backupsModal');
+  const list = document.getElementById('backupsList');
+  modal.classList.add('open');
+  list.innerHTML = '<div class="backups-empty">Yükleniyor…</div>';
+  let backups = [];
+  try{ backups = await listBackups(); }catch(e){}
+
+  if(!backups.length){
+    list.innerHTML = '<div class="backups-empty">Henüz yedek yok.</div>';
+    return;
+  }
+
+  list.innerHTML = backups.map(b=>{
+    let clientCount = '?';
+    try{ clientCount = (JSON.parse(b.data).clients || []).length; }catch(e){}
+    return `
+    <div class="backup-row" data-ts="${b.timestamp}">
+      <div class="backup-row-info">
+        ${formatBackupTime(b.timestamp)}
+        <small>${clientCount} danışan</small>
+      </div>
+      <button class="backup-restore-btn" type="button">Geri Yükle</button>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.backup-row').forEach(row=>{
+    const ts = Number(row.getAttribute('data-ts'));
+    row.querySelector('.backup-restore-btn').addEventListener('click', async ()=>{
+      if(!confirm(`${formatBackupTime(ts)} tarihli yedeğe dönülsün mü? Şu anki veriler bu yedeğin üzerine yazılacak.`)) return;
+      const backups2 = await listBackups();
+      const match = backups2.find(b=>b.timestamp===ts);
+      if(!match){ alert('Yedek bulunamadı.'); return; }
+      try{
+        state = JSON.parse(match.data);
+      }catch(e){
+        alert('Yedek okunamadı.');
+        return;
+      }
+      saveState();
+      closeBackupsModal();
+      render();
+    });
+  });
+}
+
+async function signOutAccount(){
+  if(!confirm('Çıkış yapmak istediğine emin misin?')) return;
+  try{ await window.FB.signOut(window.FB.auth); }catch(e){ console.error(e); }
+}
+
+/* ---------- Data model ---------- */
+function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toString(36); }
+
+function exampleData(){
+  return {
+    clients: [],
+    generalTodos: []
+  };
+}
+
+function clientStatus(client){
+  if(!client.sessions.length) return 'neutral';
+  const noInvoice = !!(client.profile && client.profile.noInvoice);
+  for(const s of client.sessions){
+    const invoiceOk = noInvoice ? true : s.invoiceDone;
+    if(!(s.paymentDone && invoiceOk && s.notesDone && s.nextDone)){
+      return 'red';
+    }
+  }
+  return 'green';
+}
+
+function lastSessionDate(client){
+  let max = null;
+  client.sessions.forEach(s=>{
+    if(s.date && (!max || s.date > max)) max = s.date;
+  });
+  return max;
+}
+
+function getSortedClients(){
+  let arr = [...state.clients];
+  if(sortMode === 'name'){
+    arr.sort((a,b)=>a.name.localeCompare(b.name,'tr'));
+  } else if(sortMode === 'lastSession'){
+    arr.sort((a,b)=>{
+      const da = lastSessionDate(a);
+      const db = lastSessionDate(b);
+      if(da === null && db === null) return 0;
+      if(da === null) return 1;
+      if(db === null) return -1;
+      return db.localeCompare(da);
+    });
+  }
+  if(searchQuery.trim()){
+    const q = searchQuery.trim().toLocaleLowerCase('tr');
+    arr = arr.filter(c=>c.name.toLocaleLowerCase('tr').includes(q));
+  }
+  return arr;
+}
+
+/* ---------- Rendering ---------- */
+function render(){
+  renderSidebar();
+  if(mainView === 'home'){
+    renderHome();
+  }else if(mainView === 'provider'){
+    renderProviderPage();
+  }else if(mainView === 'settings'){
+    renderSettingsPage();
+  }else{
+    renderMain();
+  }
+}
+
+function renderSidebar(){
+  document.getElementById('homeNavBtn').classList.toggle('active', mainView==='home');
+  document.getElementById('providerNavBtn').classList.toggle('active', mainView==='provider');
+  const list = document.getElementById('clientList');
+  list.innerHTML = '';
+  const clients = getSortedClients();
+
+  if(!clients.length && searchQuery.trim()){
+    const li = document.createElement('li');
+    li.className = 'search-empty';
+    li.textContent = `Eşleşme yok — "Ekle" ile yeni danışan olarak ekleyebilirsin.`;
+    list.appendChild(li);
+    return;
+  }
+
+  if(!clients.length && !searchQuery.trim()){
+    const li = document.createElement('li');
+    li.className = 'sidebar-empty';
+    li.innerHTML = `
+      <svg viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+        <path d="M42 52 h72 a14 14 0 0 1 14 14 v40 a14 14 0 0 1 -14 14 h-46 l-20 20 v-20 h-6 a14 14 0 0 1 -14 -14 v-40 a14 14 0 0 1 14 -14 z" fill="none" stroke="currentColor" stroke-width="7" stroke-linejoin="round"/>
+      </svg>
+      <span>Henüz danışan yok.<br>Yukarıdan ilk danışanını ekle.</span>`;
+    list.appendChild(li);
+    return;
+  }
+
+  clients.forEach(client=>{
+    const li = document.createElement('li');
+    li.className = 'client-row' + (mainView==='client' && client.id===activeClientId ? ' active' : '');
+    const status = clientStatus(client);
+
+    if(client.id === editingClientId){
+      li.innerHTML = `
+        <span class="seal ${status}"></span>
+        <input type="text" class="client-name-input" value="${escapeAttr(client.name)}">
+      `;
+      const input = li.querySelector('.client-name-input');
+      const commit = ()=>{
+        const val = input.value.trim();
+        if(val){ client.name = val; }
+        editingClientId = null;
+        saveState();
+        render();
+      };
+      input.addEventListener('keydown', (ev)=>{
+        if(ev.key==='Enter'){ commit(); }
+        if(ev.key==='Escape'){ editingClientId = null; render(); }
+      });
+      input.addEventListener('blur', commit);
+      list.appendChild(li);
+      input.focus();
+      input.select();
+      return;
+    }
+
+    li.innerHTML = `
+      <span class="seal ${status}"></span>
+      <span class="client-name">${escapeHtml(client.name)}</span>
+      <button class="client-edit" title="Adını düzenle">✎</button>
+      <button class="client-del" title="Danışanı sil">✕</button>
+    `;
+    li.querySelector('.client-name').addEventListener('click', ()=>{ activeClientId = client.id; mainView='client'; document.body.classList.add('mobile-detail'); render(); });
+    li.querySelector('.seal').addEventListener('click', ()=>{ activeClientId = client.id; mainView='client'; document.body.classList.add('mobile-detail'); render(); });
+    li.querySelector('.client-edit').addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      editingClientId = client.id;
+      render();
+    });
+    li.querySelector('.client-del').addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      if(confirm(`${client.name} silinsin mi? Bu işlem geri alınamaz.`)){
+        state.clients = state.clients.filter(c=>c.id!==client.id);
+        if(activeClientId===client.id){ activeClientId = state.clients.length ? state.clients[0].id : null; }
+        saveState(); render();
+      }
+    });
+    list.appendChild(li);
+  });
+}
+
+function escapeAttr(str){
+  return escapeHtml(str).replace(/"/g,'&quot;');
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+function renderMain(){
+  const main = document.getElementById('main');
+  // Preserve the profile panel's open/closed state whenever renderMain()
+  // rebuilds the client view (e.g. after billing/session checkbox changes).
+  // The profile panel should only close when the Profile button is clicked.
+  const profileWasOpen = !!document.getElementById('profilePanel')?.classList.contains('open');
+  if(!activeClientId){
+    main.innerHTML = `
+      <div class="empty-state-full">
+        <svg class="empty-icon" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+          <path d="M42 52 h72 a14 14 0 0 1 14 14 v40 a14 14 0 0 1 -14 14 h-46 l-20 20 v-20 h-6 a14 14 0 0 1 -14 -14 v-40 a14 14 0 0 1 14 -14 z" fill="none" stroke="var(--muted)" stroke-width="7" stroke-linejoin="round"/>
+          <path d="M96 96 h48 a12 12 0 0 1 12 12 v26 a12 12 0 0 1 -12 12 h-4 v16 l-18 -16 h-26 a12 12 0 0 1 -12 -12 v-26 a12 12 0 0 1 12 -12 z" fill="none" stroke="var(--muted)" stroke-width="7" stroke-linejoin="round"/>
+        </svg>
+        <h2>Henüz danışan yok</h2>
+        <p>İlk danışanını ekleyerek başla — takip, notlar ve faturalar hepsi burada bir arada.</p>
+        <button class="empty-cta" id="emptyAddClientBtn">+ Danışan Ekle</button>
+      </div>`;
+    const emptyBtn = document.getElementById('emptyAddClientBtn');
+    if(emptyBtn){
+      emptyBtn.addEventListener('click', ()=>{
+        document.body.classList.remove('mobile-detail');
+        const input = document.getElementById('newClientName');
+        if(input) input.focus();
+      });
+    }
+    return;
+  }
+  const client = state.clients.find(c=>c.id===activeClientId);
+  if(!client){ main.innerHTML=''; return; }
+  if(!client.todos) client.todos = [];
+  if(client.generalAdminNote == null) client.generalAdminNote = '';
+  const status = clientStatus(client);
+  const statusText = status==='green' ? 'Tamamlandı' : status==='red' ? 'Eksik var' : 'Kayıt yok';
+
+  main.innerHTML = `
+    <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
+    <div id="clientHeader">
+      <h2>${escapeHtml(client.name)}</h2>
+      <span class="status-pill ${status}">${statusText}</span>
+    </div>
+    <div id="clientSub">${client.sessions.length} seans kaydı</div>
+    <div class="general-admin-note-block">
+      <label class="item-label">Genel admin notu</label>
+      <textarea class="general-admin-note" placeholder="Bu danışanla ilgili genel notlar (seansa özel olmayan)…">${escapeHtml(client.generalAdminNote||'')}</textarea>
+    </div>
+    <div class="action-row">
+      <button class="add-session-toggle" id="toggleProfileBtn">👤 Profil</button>
+      <button class="add-session-toggle" id="toggleTodoBtn">✅ Yapılacaklar</button>
+      <button class="add-session-toggle" id="toggleFormBtn">+ Yeni seans kaydı ekle</button>
+    </div>
+    ${profilePanelHtml(client)}
+    ${todoPanelHtml(client)}
+    ${sessionFormHtml()}
+    <div id="sessionsWrap"></div>
+  `;
+
+  document.getElementById('backToListBtn').addEventListener('click', ()=>{
+    document.body.classList.remove('mobile-detail');
+  });
+
+  document.querySelector('.general-admin-note').addEventListener('blur', (ev)=>{
+    client.generalAdminNote = ev.target.value;
+    saveState();
+  });
+
+  document.getElementById('toggleProfileBtn').addEventListener('click', ()=>{
+    document.getElementById('profilePanel').classList.toggle('open');
+  });
+  // Restore the profile panel state after rebuilding the DOM.
+  if(profileWasOpen){
+    document.getElementById('profilePanel').classList.add('open');
+  }
+  wireProfilePanel(client);
+
+  document.getElementById('toggleTodoBtn').addEventListener('click', ()=>{
+    document.getElementById('todoPanel').classList.toggle('open');
+  });
+  wireTodoPanel(client);
+
+  document.getElementById('toggleFormBtn').addEventListener('click', ()=>{
+    document.getElementById('sessionForm').classList.toggle('open');
+  });
+  document.getElementById('cancelSessionBtn').addEventListener('click', ()=>{
+    document.getElementById('sessionForm').classList.remove('open');
+  });
+  document.getElementById('saveSessionBtn').addEventListener('click', ()=>{
+    const draft = readSessionForm();
+    client.sessions.unshift(draft);
+    saveState();
+    render();
+  });
+
+  const wrap = document.getElementById('sessionsWrap');
+  if(!client.sessions.length){
+    wrap.innerHTML = `<div id="emptyState"><h2>Seans kaydı yok</h2><p>İlk seansı yukarıdaki formla ekleyin.</p></div>`;
+    return;
+  }
+  client.sessions.forEach(session=>{
+    wrap.appendChild(renderSessionCard(client, session));
+  });
+}
+
+const DEFAULT_PROVIDER = {
+  name: 'Malik Kubilay Cadircioglu',
+  credential: 'MA',
+  title: 'Registered Psychotherapist',
+  college: 'College of Registered Psychotherapists of Ontario',
+  regNumber: '18488',
+  address: '68 Arnold Estates Lane\nAjax, Ontario L1S 7L6\nCA',
+  phone: '+1 437 256 9397',
+  email: ''
+};
+
+function getProvider(){
+  return (state && state.providerProfile) ? state.providerProfile : DEFAULT_PROVIDER;
+}
+
+function providerAddressLines(){
+  const addr = getProvider().address || '';
+  return addr.split('\n').filter(l=>l.trim());
+}
+
+const TR_MAP = { 'ç':'c','Ç':'C','ğ':'g','Ğ':'G','ı':'i','İ':'I','ö':'o','Ö':'O','ş':'s','Ş':'S','ü':'u','Ü':'U' };
+function toAscii(str){
+  return (str||'').replace(/[çÇğĞıİöÖşŞüÜ]/g, ch => TR_MAP[ch] || ch);
+}
+
+function formatInvoiceDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+function invoiceFilename(client, session){
+  const namePart = toAscii(client.name).replace(/\s+/g,'');
+  let dd='00', mm='00', yy='00';
+  if(session.date){
+    const d = new Date(session.date + 'T00:00:00');
+    dd = String(d.getDate()).padStart(2,'0');
+    mm = String(d.getMonth()+1).padStart(2,'0');
+    yy = String(d.getFullYear()).slice(-2);
+  }
+  return `Invoice-${namePart}${dd}.${mm}.${yy}.pdf`;
+}
+
+function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const amountStr = `CA$${rate.toFixed(2)}`;
+  const docTitle = ifhp ? 'INVOICE' : 'RECEIPT';
+  const clientName = toAscii(client.name);
+
+  // left accent bar
+  doc.setFillColor(217, 227, 240);
+  doc.rect(0, 0, 5, 297, 'F');
+  doc.setFillColor(196, 214, 235);
+  doc.rect(5, 0, 3, 297, 'F');
+
+  // header band
+  doc.setFillColor(246, 249, 252);
+  doc.rect(8, 0, 202, 46, 'F');
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(11.5);
+  doc.setTextColor(43,45,51);
+  doc.text(getProvider().name, 16, 17);
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.setTextColor(107,111,120);
+  let y = 23;
+  providerAddressLines().forEach(line=>{ doc.text(line, 16, y); y += 4.5; });
+  doc.text(`Phone: ${getProvider().phone}`, 16, y);
+
+  doc.setFont('helvetica','bold'); doc.setFontSize(24);
+  doc.setTextColor(43,45,51);
+  doc.text(docTitle, 196, 20, { align:'right' });
+  doc.setFont('helvetica','normal'); doc.setFontSize(10);
+  doc.setTextColor(107,111,120);
+  if(ifhp){ doc.text(`# ${invoiceNumber}`, 196, 27, { align:'right' }); }
+  doc.text(formatInvoiceDate(session.date), 196, ifhp ? 33 : 27, { align:'right' });
+
+  // bill to
+  let by = 60;
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.setTextColor(107,111,120);
+  doc.text('BILL TO', 16, by);
+  by += 6;
+  doc.setFont('helvetica','bold'); doc.setFontSize(12);
+  doc.setTextColor(43,45,51);
+  doc.text(clientName, 16, by);
+  by += 6;
+  if(ifhp){
+    doc.setFont('helvetica','normal'); doc.setFontSize(10);
+    doc.setTextColor(107,111,120);
+    doc.text('Interim Federal Health Program', 16, by);
+    by += 6;
+  }
+
+  // item table
+  doc.autoTable({
+    startY: 82,
+    head: [['Description','Qty','Rate','Amount']],
+    body: [['Psychotherapy Session','1', amountStr, amountStr]],
+    theme: 'striped',
+    margin: { left: 16, right: 16 },
+    styles: { fontSize: 10, textColor: [43,45,51], cellPadding: 4 },
+    headStyles: { fillColor: [217, 230, 245], textColor: [43,45,51], fontStyle: 'bold' },
+    alternateRowStyles: { fillColor: [248, 250, 252] }
+  });
+
+  // total box
+  const ty = doc.lastAutoTable.finalY + 10;
+  doc.setFillColor(217, 227, 240);
+  doc.roundedRect(130, ty, 66, 24, 3, 3, 'F');
+  doc.setFont('helvetica','normal'); doc.setFontSize(9);
+  doc.setTextColor(107,111,120);
+  doc.text('Subtotal', 136, ty + 7);
+  doc.text(amountStr, 191, ty + 7, { align:'right' });
+  doc.text('Tax (0%)', 136, ty + 13);
+  doc.text('CA$0.00', 191, ty + 13, { align:'right' });
+  doc.setFont('helvetica','bold'); doc.setFontSize(12);
+  doc.setTextColor(43,45,51);
+  doc.text(ifhp ? 'BALANCE DUE' : 'AMOUNT PAID', 136, ty + 20.5);
+  doc.text(amountStr, 191, ty + 20.5, { align:'right' });
+
+  // thank you note
+  doc.setFont('helvetica','italic'); doc.setFontSize(10);
+  doc.setTextColor(107,111,120);
+  doc.text(ifhp ? 'Thank you — payment appreciated upon receipt.' : 'Thank you for your payment.', 16, ty + 14);
+
+  // footer band
+  const fy = 258;
+  doc.setDrawColor(226,226,234);
+  doc.line(16, fy, 194, fy);
+  doc.setFont('helvetica','bold'); doc.setFontSize(9);
+  doc.setTextColor(43,45,51);
+  doc.text('Provider Information', 16, fy + 8);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8.5);
+  doc.setTextColor(107,111,120);
+  doc.text(`${getProvider().name}, ${getProvider().credential}  •  ${getProvider().title}`, 16, fy + 14);
+  doc.text(`${getProvider().college}  •  Registration Number: ${getProvider().regNumber}`, 16, fy + 19);
+
+  return doc;
+}
+
+function generateInvoiceForSession(client, session, action){
+  const ifhp = !!(client.profile && client.profile.ifhp);
+  let rate;
+  if(ifhp){
+    rate = 205;
+  }else{
+    rate = client.profile ? Number(client.profile.rate) : NaN;
+    if(!rate || rate <= 0){
+      alert('Önce bu danışanın profiline seans ücretini girmelisin.');
+      return;
+    }
+  }
+  let invoiceNumber = '';
+  if(ifhp){
+    const entered = prompt('IFHP fatura numarasını gir:');
+    if(!entered || !entered.trim()){
+      alert('Fatura numarası girilmeden IFHP faturası oluşturulamaz.');
+      return;
+    }
+    invoiceNumber = entered.trim();
+  }
+
+  const doc = buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber);
+  const filename = invoiceFilename(client, session);
+
+  if(ifhp){
+    session.lastInvoiceNumber = invoiceNumber;
+    saveState();
+  }
+
+  if(action === 'save'){
+    doc.save(filename);
+  }else if(action === 'share'){
+    shareInvoiceFile(doc, filename, client);
+  }else if(action === 'email'){
+    const { email, subject, body } = receiptEmailContent(client, session);
+    window.location.href = email ? `mailto:${email}?subject=${subject}&body=${body}` : `mailto:?subject=${subject}&body=${body}`;
+  }else if(action === 'gmail'){
+    const { email, subject, body } = receiptEmailContent(client, session);
+    window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${email}&su=${subject}&body=${body}`, '_blank');
+  }
+}
+
+function receiptEmailContent(client, session){
+  const email = (client.profile && client.profile.email) ? encodeURIComponent(client.profile.email.trim()) : '';
+  const subject = encodeURIComponent(`Your Receipt from ${getProvider().name} - ${formatInvoiceDate(session.date)}`);
+  const body = encodeURIComponent(
+    `Hello ${client.name},\n\n`+
+    `Please find your receipt for the session on ${formatInvoiceDate(session.date)} attached.\n\n`+
+    `Best regards,`
+  );
+  return { email, subject, body };
+}
+
+async function shareInvoiceFile(doc, filename, client){
+  try{
+    const blob = doc.output('blob');
+    const file = new File([blob], filename, { type:'application/pdf' });
+    if(navigator.canShare && navigator.canShare({ files:[file] })){
+      await navigator.share({ files:[file], title: filename, text: `${client.name}` });
+      return;
+    }
+  }catch(e){ /* user cancelled the share sheet */ }
+  alert('Bu tarayıcı/cihaz dosya paylaşımını desteklemiyor. Bunun yerine "İndir" butonunu kullanabilirsin.');
+}
+
+function waLink(phone){
+  const digits = (phone||'').replace(/[^\d]/g,'');
+  return digits ? `https://wa.me/${digits}` : '#';
+}
+
+function gmailWebLink(email){
+  const e = (email||'').trim();
+  return e ? `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(e)}` : '#';
+}
+
+function mailtoLink(email){
+  const e = (email||'').trim();
+  return e ? `mailto:${e}` : '#';
+}
+
+function todayIso(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+function formatShortDate(iso){
+  if(!iso) return '';
+  const [y,m,d] = iso.split('-');
+  return `${d}.${m}.${y}`;
+}
+
+function stars(n){
+  return '⭐'.repeat(n) + '☆'.repeat(3-n);
+}
+
+let todoSortByClient = {};
+
+function sortedTodos(todos, mode){
+  const pending = todos.filter(t=>!t.done);
+  const done = todos.filter(t=>t.done);
+  if(mode === 'importance'){
+    pending.sort((a,b)=> b.importance - a.importance || (a.dueDate||'9999-99-99').localeCompare(b.dueDate||'9999-99-99'));
+  }else{
+    pending.sort((a,b)=> (a.dueDate||'9999-99-99').localeCompare(b.dueDate||'9999-99-99') || (b.importance-a.importance));
+  }
+  done.sort((a,b)=> (b.doneAt||'').localeCompare(a.doneAt||''));
+  return { pending, done };
+}
+
+function todoItemHtml(todo){
+  const overdue = (!todo.done && todo.dueDate && todo.dueDate < todayIso());
+  return `
+  <div class="todo-item ${todo.done?'done':''}" data-id="${todo.id}">
+    <input type="checkbox" class="todo-check" ${todo.done?'checked':''}>
+    <div class="todo-item-main">
+      <input type="text" class="todo-item-text-input" value="${escapeAttr(todo.text)}">
+      <div class="todo-item-meta">
+        <select class="todo-item-importance-select">
+          <option value="1" ${todo.importance===1?'selected':''}>⭐ Düşük</option>
+          <option value="2" ${todo.importance===2?'selected':''}>⭐⭐ Orta</option>
+          <option value="3" ${todo.importance===3?'selected':''}>⭐⭐⭐ Yüksek</option>
+        </select>
+        <input type="date" class="todo-item-duedate-input ${overdue?'overdue':''}" value="${todo.dueDate||''}">
+      </div>
+    </div>
+    <button class="todo-del" title="Sil">✕</button>
+  </div>`;
+}
+
+function todoPanelHtml(client){
+  const todos = client.todos || [];
+  const mode = todoSortByClient[client.id] || 'due';
+  const { pending, done } = sortedTodos(todos, mode);
+  return `
+  <div id="todoPanel">
+    <div class="todo-add-row">
+      <input type="text" class="todo-text" placeholder="Yapılacak iş…">
+      <select class="todo-importance">
+        <option value="1">⭐ Düşük</option>
+        <option value="2" selected>⭐⭐ Orta</option>
+        <option value="3">⭐⭐⭐ Yüksek</option>
+      </select>
+      <input type="date" class="todo-duedate">
+      <button class="todo-add-btn" type="button">Ekle</button>
+    </div>
+    <div class="todo-sort-row">
+      <label>Sırala</label>
+      <select class="todo-sort-select">
+        <option value="due" ${mode==='due'?'selected':''}>Son tarihe göre</option>
+        <option value="importance" ${mode==='importance'?'selected':''}>Öneme göre</option>
+      </select>
+    </div>
+    <div class="todo-list">
+      ${pending.length ? pending.map(todoItemHtml).join('') : '<div class="todo-empty">Bekleyen iş yok.</div>'}
+    </div>
+    ${done.length ? `
+    <div class="todo-done-header">Tamamlananlar (${done.length})</div>
+    <div class="todo-list todo-done-list">
+      ${done.map(todoItemHtml).join('')}
+    </div>` : ''}
+  </div>`;
+}
+
+function wireTodoPanel(client){
+  const panel = document.getElementById('todoPanel');
+  const wasOpen = panel.classList.contains('open');
+
+  const refresh = ()=>{
+    renderMain();
+    if(wasOpen) document.getElementById('todoPanel').classList.add('open');
+  };
+
+  panel.querySelector('.todo-add-btn').addEventListener('click', ()=>{
+    const textInput = panel.querySelector('.todo-text');
+    const text = textInput.value.trim();
+    if(!text) return;
+    const importance = Number(panel.querySelector('.todo-importance').value);
+    const dueDate = panel.querySelector('.todo-duedate').value;
+    client.todos = client.todos || [];
+    client.todos.push({ id: uid(), text, importance, dueDate, done:false, doneAt:null });
+    saveState();
+    panel.classList.add('open');
+    renderMain();
+    document.getElementById('todoPanel').classList.add('open');
+  });
+
+  panel.querySelector('.todo-sort-select').addEventListener('change', (ev)=>{
+    todoSortByClient[client.id] = ev.target.value;
+    panel.classList.add('open');
+    renderMain();
+    document.getElementById('todoPanel').classList.add('open');
+  });
+
+  panel.querySelectorAll('.todo-item').forEach(row=>{
+    const id = row.getAttribute('data-id');
+    row.querySelector('.todo-check').addEventListener('change', (ev)=>{
+      const todo = client.todos.find(t=>t.id===id);
+      todo.done = ev.target.checked;
+      todo.doneAt = todo.done ? todayIso() : null;
+      saveState();
+      panel.classList.add('open');
+      renderMain();
+      document.getElementById('todoPanel').classList.add('open');
+    });
+    row.querySelector('.todo-item-text-input').addEventListener('blur', (ev)=>{
+      const todo = client.todos.find(t=>t.id===id);
+      const val = ev.target.value.trim();
+      if(val){ todo.text = val; saveState(); }
+      else{ ev.target.value = todo.text; }
+    });
+    row.querySelector('.todo-item-importance-select').addEventListener('change', (ev)=>{
+      const todo = client.todos.find(t=>t.id===id);
+      todo.importance = Number(ev.target.value);
+      saveState();
+      panel.classList.add('open');
+      renderMain();
+      document.getElementById('todoPanel').classList.add('open');
+    });
+    row.querySelector('.todo-item-duedate-input').addEventListener('change', (ev)=>{
+      const todo = client.todos.find(t=>t.id===id);
+      todo.dueDate = ev.target.value;
+      saveState();
+      panel.classList.add('open');
+      renderMain();
+      document.getElementById('todoPanel').classList.add('open');
+    });
+    row.querySelector('.todo-del').addEventListener('click', ()=>{
+      if(confirm('Bu iş silinsin mi?')){
+        client.todos = client.todos.filter(t=>t.id!==id);
+        saveState();
+        panel.classList.add('open');
+        renderMain();
+        document.getElementById('todoPanel').classList.add('open');
+      }
+    });
+  });
+}
+
+function profilePanelHtml(client){
+  const p = client.profile || {};
+  return `
+  <div id="profilePanel">
+    <div class="form-grid">
+      <div class="field-block full">
+        <label>Kişisel bilgiler</label>
+        <textarea class="profile-info" placeholder="Doğum tarihi, meslek, aile durumu vb....">${escapeHtml(p.info||'')}</textarea>
+      </div>
+      <div class="field-block full">
+        <label>Adres</label>
+        <textarea class="profile-address" placeholder="Adres...">${escapeHtml(p.address||'')}</textarea>
+      </div>
+      <div class="field-block">
+        <label>Telefon</label>
+        <div class="contact-row">
+          <input type="text" class="profile-phone" placeholder="+1 416 000 0000" value="${escapeAttr(p.phone||'')}">
+          <a class="contact-btn whatsapp-btn ${p.phone?'':'disabled'}" href="${waLink(p.phone)}" target="_blank" rel="noopener">WhatsApp</a>
+        </div>
+      </div>
+      <div class="field-block">
+        <label>Email</label>
+        <div class="contact-row">
+          <input type="text" class="profile-email" placeholder="ornek@mail.com" value="${escapeAttr(p.email||'')}">
+          <a class="contact-btn gmail-btn ${p.email?'':'disabled'}" href="${gmailWebLink(p.email)}" target="_blank" rel="noopener">Gmail</a>
+          <a class="contact-btn mailto-btn ${p.email?'':'disabled'}" href="${mailtoLink(p.email)}" rel="noopener">Email</a>
+        </div>
+      </div>
+      <div class="field-block full">
+        <label>Faturalama</label>
+        <div class="tick-row"><input type="checkbox" class="profile-ifhp" ${p.ifhp?'checked':''}><span>IFHP danışanı (seans ücreti sabit CA$205)</span></div>
+        <input type="number" class="profile-rate" placeholder="Seans ücreti (CA$)" value="${p.rate!=null?p.rate:''}" ${p.ifhp?'disabled':''} style="margin-top:8px; max-width:180px;">
+        <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-no-invoice" ${p.noInvoice?'checked':''}><span>Bu danışana fatura hazırlanmayacak</span></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function wireProfilePanel(client){
+  if(!client.profile) client.profile = { info:'', address:'', phone:'', email:'', ifhp:false, rate:null };
+  const panel = document.getElementById('profilePanel');
+
+  panel.querySelector('.profile-info').addEventListener('blur', (ev)=>{
+    client.profile.info = ev.target.value;
+    saveState();
+  });
+  panel.querySelector('.profile-address').addEventListener('blur', (ev)=>{
+    client.profile.address = ev.target.value;
+    saveState();
+  });
+
+  const phoneInput = panel.querySelector('.profile-phone');
+  const waBtn = panel.querySelector('.whatsapp-btn');
+  phoneInput.addEventListener('input', (ev)=>{
+    const val = ev.target.value;
+    waBtn.href = waLink(val);
+    waBtn.classList.toggle('disabled', !val.trim());
+  });
+  phoneInput.addEventListener('blur', (ev)=>{
+    client.profile.phone = ev.target.value;
+    saveState();
+  });
+
+  const emailInput = panel.querySelector('.profile-email');
+  const gmailBtn = panel.querySelector('.gmail-btn');
+  const mailtoBtn = panel.querySelector('.mailto-btn');
+  emailInput.addEventListener('input', (ev)=>{
+    const val = ev.target.value;
+    gmailBtn.href = gmailWebLink(val);
+    gmailBtn.classList.toggle('disabled', !val.trim());
+    mailtoBtn.href = mailtoLink(val);
+    mailtoBtn.classList.toggle('disabled', !val.trim());
+  });
+  emailInput.addEventListener('blur', (ev)=>{
+    client.profile.email = ev.target.value;
+    saveState();
+  });
+
+  const ifhpCb = panel.querySelector('.profile-ifhp');
+  const rateInput = panel.querySelector('.profile-rate');
+  ifhpCb.addEventListener('change', ()=>{
+    client.profile.ifhp = ifhpCb.checked;
+    rateInput.disabled = ifhpCb.checked;
+    saveState();
+  });
+  rateInput.addEventListener('blur', ()=>{
+    client.profile.rate = rateInput.value ? Number(rateInput.value) : null;
+    saveState();
+  });
+
+  const noInvoiceCb = panel.querySelector('.profile-no-invoice');
+  noInvoiceCb.addEventListener('change', ()=>{
+    client.profile.noInvoice = noInvoiceCb.checked;
+    saveState();
+    renderMain();
+    document.getElementById('profilePanel').classList.add('open');
+  });
+}
+
+function sessionFormHtml(){
+  return `
+  <div id="sessionForm">
+    <div class="form-grid">
+      <div class="field-block">
+        <label>Seans tarihi</label>
+        <input type="date" id="f_date">
+      </div>
+      <div class="field-block full">
+        <label>Bir sonraki seans</label>
+        <textarea id="f_nextNote" placeholder="Tarih ya da not (örn: hasta arayacak, izinde, planlanmadı vb.)…"></textarea>
+        <div class="tick-row"><input type="checkbox" id="f_nextDone"><span>Netleşti</span></div>
+      </div>
+      <div class="field-block">
+        <label>Ödeme bilgisi</label>
+        <div class="tick-row"><input type="checkbox" id="f_paymentDone"><span>Ödeme alındı</span></div>
+      </div>
+      <div class="field-block">
+        <label>Fatura bilgisi</label>
+        <div class="tick-row"><input type="checkbox" id="f_invoiceDone"><span>Fatura kesildi</span></div>
+      </div>
+      <div class="field-block">
+        <label>Seans notları</label>
+        <div class="tick-row"><input type="checkbox" id="f_notesDone"><span>Yazıldı</span></div>
+      </div>
+      <div class="field-block full">
+        <label>Admin notları</label>
+        <textarea id="f_adminNote" placeholder="Bu danışanla ilgili yapılacak idari işler (bilgi amaçlı)…"></textarea>
+      </div>
+    </div>
+    <div class="form-actions">
+      <button id="saveSessionBtn" type="button">Kaydı ekle</button>
+      <button id="cancelSessionBtn" type="button">Vazgeç</button>
+    </div>
+  </div>`;
+}
+
+function readSessionForm(){
+  return {
+    id: uid(),
+    date: document.getElementById('f_date').value,
+    paymentDone: document.getElementById('f_paymentDone').checked,
+    invoiceDone: document.getElementById('f_invoiceDone').checked,
+    notesDone: document.getElementById('f_notesDone').checked,
+    nextNote: document.getElementById('f_nextNote').value,
+    nextDone: document.getElementById('f_nextDone').checked,
+    adminNote: document.getElementById('f_adminNote').value
+  };
+}
+
+function renderSessionCard(client, session){
+  const div = document.createElement('div');
+  div.className = 'session-card';
+  const noInvoice = !!(client.profile && client.profile.noInvoice);
+
+  div.innerHTML = `
+    <div class="session-card-top">
+      <input type="date" class="session-date-input" value="${session.date||''}">
+      <button class="session-del">Sil</button>
+    </div>
+    ${itemRow('Ödeme', boolLabel(session.paymentDone), 'paymentDone', session)}
+    ${noInvoice ? `
+    <div class="item-row invoice-blackout">
+      <input type="checkbox" disabled>
+      <span class="item-label">Fatura</span>
+      <span class="item-value empty">Bu danışana fatura hazırlanmayacak</span>
+    </div>` : itemRow('Fatura', boolLabel(session.invoiceDone), 'invoiceDone', session)}
+    ${itemRow('Seans notları', boolLabel(session.notesDone), 'notesDone', session)}
+    ${itemRowWithInput('Sonraki seans', 'nextDone', 'nextNote', session)}
+    <div class="admin-notes-block">
+      <label class="item-label">Admin notları</label>
+      <textarea class="admin-note-input" placeholder="Bu danışanla ilgili yapılacak idari işler…">${escapeHtml(session.adminNote||'')}</textarea>
+    </div>
+    ${noInvoice ? `
+    <div class="invoice-actions-blackout">Bu danışan için fatura/makbuz oluşturulmuyor</div>` : `
+    <div class="invoice-actions-label">Fatura / Makbuz</div>
+    <div class="invoice-actions">
+      <button class="invoice-save-btn" type="button">📄 İndir</button>
+      <button class="invoice-share-btn" type="button">📤 Gönder</button>
+      <div class="invoice-email-group">
+        <button class="invoice-email-btn" type="button" title="Mail programında aç">✉️ Email</button>
+        <button class="invoice-gmail-btn" type="button" title="Gmail'de aç">📧 Gmail</button>
+      </div>
+    </div>`}
+  `;
+  div.querySelector('.session-del').addEventListener('click', ()=>{
+    if(confirm('Bu kayıt silinsin mi?')){
+      client.sessions = client.sessions.filter(s=>s.id!==session.id);
+      saveState(); render();
+    }
+  });
+  div.querySelectorAll('.item-row input[type="checkbox"]:not([disabled])').forEach(cb=>{
+    cb.addEventListener('change', (ev)=>{
+      const key = ev.target.getAttribute('data-key');
+      session[key] = ev.target.checked;
+      saveState();
+      render();
+    });
+  });
+  div.querySelector('.inline-note-input').addEventListener('blur', (ev)=>{
+    session.nextNote = ev.target.value;
+    saveState();
+  });
+  div.querySelector('.session-date-input').addEventListener('change', (ev)=>{
+    session.date = ev.target.value;
+    saveState();
+  });
+  div.querySelector('.admin-note-input').addEventListener('blur', (ev)=>{
+    session.adminNote = ev.target.value;
+    saveState();
+  });
+  if(!noInvoice){
+    div.querySelector('.invoice-save-btn').addEventListener('click', ()=>{
+      generateInvoiceForSession(client, session, 'save');
+    });
+    div.querySelector('.invoice-share-btn').addEventListener('click', ()=>{
+      generateInvoiceForSession(client, session, 'share');
+    });
+    div.querySelector('.invoice-email-btn').addEventListener('click', ()=>{
+      generateInvoiceForSession(client, session, 'email');
+    });
+    div.querySelector('.invoice-gmail-btn').addEventListener('click', ()=>{
+      generateInvoiceForSession(client, session, 'gmail');
+    });
+  }
+  return div;
+}
+
+function boolLabel(v){ return v ? 'Evet' : 'Hayır'; }
+
+function itemRow(label, value, key, session){
+  const empty = (value === '—');
+  return `
+    <div class="item-row">
+      <input type="checkbox" data-key="${key}" ${session[key] ? 'checked' : ''}>
+      <span class="item-label">${label}</span>
+      <span class="item-value ${empty?'empty':''}">${escapeHtml(value)}</span>
+    </div>`;
+}
+
+function itemRowWithInput(label, checkboxKey, textKey, session){
+  return `
+    <div class="item-row">
+      <input type="checkbox" data-key="${checkboxKey}" ${session[checkboxKey] ? 'checked' : ''}>
+      <span class="item-label">${label}</span>
+      <input type="text" class="inline-note-input" value="${escapeAttr(session[textKey]||'')}" placeholder="Not…">
+    </div>`;
+}
+
+document.getElementById('newClientName').addEventListener('input', (ev)=>{
+  searchQuery = ev.target.value;
+  renderSidebar();
+});
+
+document.getElementById('addClientForm').addEventListener('submit', (ev)=>{
+  ev.preventDefault();
+  const input = document.getElementById('newClientName');
+  const name = input.value.trim();
+  if(!name) return;
+  const client = { id: uid(), name, sessions: [], todos: [], generalAdminNote: '', profile: { info:'', address:'', phone:'', email:'', ifhp:false, rate:null } };
+  state.clients.push(client);
+  activeClientId = client.id;
+  mainView = 'client';
+  document.body.classList.add('mobile-detail');
+  input.value = '';
+  searchQuery = '';
+  saveState();
+  render();
+});
+
+function resetAllData(){
+  if(confirm('Bu hesaptaki tüm danışan verileri silinecek. Emin misin?')){
+    state = { clients: [], generalTodos: [] };
+    activeClientId = null;
+    saveState();
+    render();
+  }
+}
+
+document.getElementById('sortSelect').addEventListener('change', (ev)=>{
+  sortMode = ev.target.value;
+  renderSidebar();
+});
+
+const setupBoxContent = document.getElementById('setupBoxContent');
+document.getElementById('homeNavBtn').addEventListener('click', ()=>{
+  mainView = 'home';
+  document.body.classList.add('mobile-detail');
+  render();
+});
+
+document.getElementById('providerNavBtn').addEventListener('click', ()=>{
+  mainView = 'provider';
+  document.body.classList.add('mobile-detail');
+  render();
+});
+
+document.getElementById('settingsNavBtn').addEventListener('click', ()=>{
+  mainView = 'settings';
+  document.body.classList.add('mobile-detail');
+  render();
+});
+
+function exportCurrentDataJson(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const d = new Date();
+  const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  a.href = url;
+  a.download = `danisan-takip-yedek-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function renderSettingsPage(){
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
+    <div id="clientHeader"><h2>Ayarlar</h2></div>
+    <div id="clientSub">${escapeHtml(currentUser.email || '')}</div>
+
+    <div class="settings-section">
+      <h3>🕐 Yedekler</h3>
+      <p>Bu tarayıcıda otomatik alınan son 30 yedeği görüntüle ve gerekirse geri yükle.</p>
+      <button class="settings-btn" id="settingsBackupsBtn">Yedekleri Görüntüle</button>
+    </div>
+
+    <div class="settings-section">
+      <h3>📥 Mevcut Veriyi İndir</h3>
+      <p>Tüm danışan verilerinin bir kopyasını JSON dosyası olarak bilgisayarına indir — elle yedek almak için.</p>
+      <button class="settings-btn" id="settingsExportBtn">Şimdi İndir</button>
+    </div>
+
+    <div class="settings-section">
+      <h3>📤 Eski JSON'u İçe Aktar</h3>
+      <p>Daha önce kullandığın bir JSON dosyasındaki danışanları bu hesaba ekle (mevcut verinin üzerine yazmaz).</p>
+      <label class="settings-btn" for="settingsImportInput">Dosya Seç</label>
+      <input type="file" id="settingsImportInput" accept="application/json,.json" style="display:none;">
+    </div>
+
+    <div class="settings-section">
+      <h3>Hesap</h3>
+      <p>Bu hesaptan çıkış yap.</p>
+      <button class="settings-btn" id="settingsSignOutBtn">Çıkış Yap</button>
+    </div>
+
+    <div class="settings-section">
+      <h3>Tehlikeli Bölge</h3>
+      <p>Bu hesaptaki tüm danışan verilerini kalıcı olarak sil. Bu işlem geri alınamaz.</p>
+      <button class="settings-btn danger" id="settingsResetBtn">Tüm Verileri Sıfırla</button>
+    </div>
+  `;
+
+  document.getElementById('backToListBtn').addEventListener('click', ()=>{
+    document.body.classList.remove('mobile-detail');
+  });
+  document.getElementById('settingsBackupsBtn').addEventListener('click', openBackupsModal);
+  document.getElementById('settingsExportBtn').addEventListener('click', exportCurrentDataJson);
+  document.getElementById('settingsImportInput').addEventListener('change', handleImportJsonFile);
+  document.getElementById('settingsSignOutBtn').addEventListener('click', signOutAccount);
+  document.getElementById('settingsResetBtn').addEventListener('click', resetAllData);
+}
+
+function renderProviderPage(){
+  const main = document.getElementById('main');
+  const p = getProvider();
+  main.innerHTML = `
+    <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
+    <div id="clientHeader"><h2>Uzman Bilgileri</h2></div>
+    <div id="clientSub">Bu bilgiler, senin bu hesaptan oluşturduğun faturalarda ve maillerde kullanılır. Her Google hesabı kendi bilgilerini ayrı ayrı saklar.</div>
+    <div id="providerForm">
+      <div class="form-grid">
+        <div class="field-block">
+          <label>Ad Soyad</label>
+          <input type="text" class="provider-name" value="${escapeAttr(p.name||'')}">
+        </div>
+        <div class="field-block">
+          <label>Unvan / Derece</label>
+          <input type="text" class="provider-credential" placeholder="örn. M.A." value="${escapeAttr(p.credential||'')}">
+        </div>
+        <div class="field-block full">
+          <label>Görev</label>
+          <input type="text" class="provider-title" placeholder="örn. Registered Psychotherapist" value="${escapeAttr(p.title||'')}">
+        </div>
+        <div class="field-block full">
+          <label>Kayıtlı Olduğu Kurum</label>
+          <input type="text" class="provider-college" placeholder="örn. College of Registered Psychotherapists of Ontario" value="${escapeAttr(p.college||'')}">
+        </div>
+        <div class="field-block">
+          <label>Kayıt Numarası</label>
+          <input type="text" class="provider-regnumber" value="${escapeAttr(p.regNumber||'')}">
+        </div>
+        <div class="field-block">
+          <label>Telefon</label>
+          <input type="text" class="provider-phone" value="${escapeAttr(p.phone||'')}">
+        </div>
+        <div class="field-block full">
+          <label>Email</label>
+          <input type="text" class="provider-email" value="${escapeAttr(p.email||'')}">
+        </div>
+        <div class="field-block full">
+          <label>Adres (her satır ayrı satırda faturada görünür)</label>
+          <textarea class="provider-address" style="min-height:70px;">${escapeHtml(p.address||'')}</textarea>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('backToListBtn').addEventListener('click', ()=>{
+    document.body.classList.remove('mobile-detail');
+  });
+
+  const fields = [
+    ['provider-name','name'], ['provider-credential','credential'], ['provider-title','title'],
+    ['provider-college','college'], ['provider-regnumber','regNumber'], ['provider-phone','phone'],
+    ['provider-email','email'], ['provider-address','address']
+  ];
+  fields.forEach(([cls,key])=>{
+    document.querySelector('.'+cls).addEventListener('blur', (ev)=>{
+      if(!state.providerProfile) state.providerProfile = { ...DEFAULT_PROVIDER };
+      state.providerProfile[key] = ev.target.value;
+      saveState();
+    });
+  });
+}
+
+function renderHome(){
+  const main = document.getElementById('main');
+  if(!state.generalTodos) state.generalTodos = [];
+
+  const tasks = [];
+  const doneTasks = [];
+  state.clients.forEach(client=>{
+    (client.todos||[]).forEach(t=>{
+      if(!t.done) tasks.push({ clientId: client.id, clientName: client.name, todo:t });
+      else doneTasks.push({ clientId: client.id, clientName: client.name, todo:t });
+    });
+  });
+  state.generalTodos.forEach(t=>{
+    if(!t.done) tasks.push({ clientId: null, clientName: null, todo:t });
+    else doneTasks.push({ clientId: null, clientName: null, todo:t });
+  });
+
+  if(homeSortMode === 'importance'){
+    tasks.sort((a,b)=> b.todo.importance - a.todo.importance || (a.todo.dueDate||'9999-99-99').localeCompare(b.todo.dueDate||'9999-99-99'));
+  }else{
+    tasks.sort((a,b)=> (a.todo.dueDate||'9999-99-99').localeCompare(b.todo.dueDate||'9999-99-99') || (b.todo.importance-a.todo.importance));
+  }
+  doneTasks.sort((a,b)=> (b.todo.doneAt||'').localeCompare(a.todo.doneAt||''));
+
+  main.innerHTML = `
+    <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
+    <div id="clientHeader"><h2>Ana Sayfa</h2></div>
+    <div id="clientSub">${tasks.length} bekleyen iş, tüm danışanlar</div>
+    <div class="todo-add-row">
+      <input type="text" class="home-todo-text" placeholder="Yapılacak iş…">
+      <select class="home-todo-importance">
+        <option value="1">⭐ Düşük</option>
+        <option value="2" selected>⭐⭐ Orta</option>
+        <option value="3">⭐⭐⭐ Yüksek</option>
+      </select>
+      <input type="date" class="home-todo-duedate">
+      <div class="client-picker">
+        <input type="text" class="home-todo-client-search" placeholder="Danışan ara (opsiyonel)…" autocomplete="off">
+        <input type="hidden" class="home-todo-client-id" value="">
+        <div class="client-picker-list"></div>
+      </div>
+      <button class="home-todo-add-btn" type="button">Ekle</button>
+    </div>
+    <div class="home-sort-row">
+      <label>Sırala</label>
+      <select id="homeSortSelect">
+        <option value="due" ${homeSortMode==='due'?'selected':''}>Son tarihe göre</option>
+        <option value="importance" ${homeSortMode==='importance'?'selected':''}>Öneme göre</option>
+      </select>
+    </div>
+    <div id="homeTaskList">
+      ${tasks.length ? tasks.map(({clientId,clientName,todo})=>homeTaskRowHtml(clientId,clientName,todo)).join('') : '<div class="todo-empty">Hiç bekleyen iş yok.</div>'}
+    </div>
+    ${doneTasks.length ? `
+    <div class="todo-done-header">Tamamlananlar (${doneTasks.length})</div>
+    <div id="homeDoneTaskList">
+      ${doneTasks.map(({clientId,clientName,todo})=>homeTaskRowHtml(clientId,clientName,todo)).join('')}
+    </div>` : ''}
+  `;
+
+  document.getElementById('backToListBtn').addEventListener('click', ()=>{
+    document.body.classList.remove('mobile-detail');
+  });
+
+  document.getElementById('homeSortSelect').addEventListener('change', (ev)=>{
+    homeSortMode = ev.target.value;
+    renderHome();
+  });
+
+  wireHomeClientPicker();
+
+  document.querySelector('.home-todo-add-btn').addEventListener('click', ()=>{
+    const textInput = document.querySelector('.home-todo-text');
+    const text = textInput.value.trim();
+    if(!text) return;
+    const importance = Number(document.querySelector('.home-todo-importance').value);
+    const dueDate = document.querySelector('.home-todo-duedate').value;
+    const clientId = document.querySelector('.home-todo-client-id').value;
+    const newTodo = { id: uid(), text, importance, dueDate, done:false, doneAt:null };
+    if(clientId){
+      const client = state.clients.find(c=>c.id===clientId);
+      client.todos = client.todos || [];
+      client.todos.push(newTodo);
+    }else{
+      state.generalTodos.push(newTodo);
+    }
+    saveState();
+    renderHome();
+  });
+
+  document.querySelectorAll('.home-task-row').forEach(row=>{
+    const clientId = row.getAttribute('data-client-id');
+    const todoId = row.getAttribute('data-todo-id');
+    row.querySelector('.home-task-check').addEventListener('change', (ev)=>{
+      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const todo = list.find(t=>t.id===todoId);
+      todo.done = ev.target.checked;
+      todo.doneAt = todo.done ? todayIso() : null;
+      saveState();
+      renderHome();
+    });
+    row.querySelector('.home-task-text-input').addEventListener('blur', (ev)=>{
+      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const todo = list.find(t=>t.id===todoId);
+      const val = ev.target.value.trim();
+      if(val){ todo.text = val; saveState(); }
+      else{ ev.target.value = todo.text; }
+    });
+    row.querySelector('.home-task-importance-select').addEventListener('change', (ev)=>{
+      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const todo = list.find(t=>t.id===todoId);
+      todo.importance = Number(ev.target.value);
+      saveState();
+      renderHome();
+    });
+    row.querySelector('.home-task-duedate-input').addEventListener('change', (ev)=>{
+      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const todo = list.find(t=>t.id===todoId);
+      todo.dueDate = ev.target.value;
+      saveState();
+      renderHome();
+    });
+    row.querySelector('.home-task-del').addEventListener('click', ()=>{
+      if(!confirm('Bu iş silinsin mi?')) return;
+      if(clientId){
+        const client = state.clients.find(c=>c.id===clientId);
+        client.todos = client.todos.filter(t=>t.id!==todoId);
+      }else{
+        state.generalTodos = state.generalTodos.filter(t=>t.id!==todoId);
+      }
+      saveState();
+      renderHome();
+    });
+    const clientBadge = row.querySelector('.home-task-client');
+    if(clientBadge){
+      clientBadge.addEventListener('click', ()=>{
+        activeClientId = clientId;
+        mainView = 'client';
+        document.body.classList.add('mobile-detail');
+        render();
+      });
+    }
+  });
+}
+
+function wireHomeClientPicker(){
+  const wrap = document.querySelector('.client-picker');
+  const searchInput = wrap.querySelector('.home-todo-client-search');
+  const hiddenId = wrap.querySelector('.home-todo-client-id');
+  const listEl = wrap.querySelector('.client-picker-list');
+
+  function renderOptions(query){
+    const q = query.trim().toLocaleLowerCase('tr');
+    const matches = q ? state.clients.filter(c=>c.name.toLocaleLowerCase('tr').includes(q)) : state.clients;
+    listEl.innerHTML = matches.length
+      ? matches.map(c=>`<div class="client-picker-item" data-id="${c.id}">${escapeHtml(c.name)}</div>`).join('')
+      : `<div class="client-picker-empty">Eşleşme yok</div>`;
+    listEl.querySelectorAll('.client-picker-item').forEach(item=>{
+      item.addEventListener('click', ()=>{
+        hiddenId.value = item.getAttribute('data-id');
+        searchInput.value = item.textContent;
+        listEl.classList.remove('open');
+      });
+    });
+  }
+
+  searchInput.addEventListener('focus', ()=>{
+    renderOptions(searchInput.value);
+    listEl.classList.add('open');
+  });
+  searchInput.addEventListener('input', ()=>{
+    hiddenId.value = '';
+    renderOptions(searchInput.value);
+    listEl.classList.add('open');
+  });
+  document.addEventListener('click', (ev)=>{
+    if(!ev.target.closest('.client-picker')) listEl.classList.remove('open');
+  });
+}
+
+function homeTaskRowHtml(clientId, clientName, todo){
+  const overdue = !todo.done && todo.dueDate && todo.dueDate < todayIso();
+  return `
+  <div class="home-task-row ${todo.done?'done':''}" data-client-id="${clientId||''}" data-todo-id="${todo.id}">
+    <input type="checkbox" class="home-task-check" ${todo.done?'checked':''}>
+    <div class="home-task-main">
+      <input type="text" class="home-task-text-input" value="${escapeAttr(todo.text)}">
+      <div class="home-task-meta">
+        ${clientName ? `<span class="home-task-client">${escapeHtml(clientName)}</span>` : `<span class="home-task-general">Genel</span>`}
+        <select class="home-task-importance-select">
+          <option value="1" ${todo.importance===1?'selected':''}>⭐ Düşük</option>
+          <option value="2" ${todo.importance===2?'selected':''}>⭐⭐ Orta</option>
+          <option value="3" ${todo.importance===3?'selected':''}>⭐⭐⭐ Yüksek</option>
+        </select>
+        <input type="date" class="home-task-duedate-input ${overdue?'overdue':''}" value="${todo.dueDate||''}">
+      </div>
+    </div>
+    <button class="home-task-del" title="Sil">✕</button>
+  </div>`;
+}
+
+init();
+</script>
+</body>
+</html>
