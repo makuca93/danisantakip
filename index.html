@@ -2120,7 +2120,6 @@ function wireProfilePanel(client){
   noInvoiceCb.addEventListener('change', ()=>{
     client.profile.noInvoice = noInvoiceCb.checked;
     saveState();
-    document.getElementById('profilePanel').classList.add('open');
     renderMain();
     document.getElementById('profilePanel').classList.add('open');
   });
