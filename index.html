@@ -1146,6 +1146,20 @@
     cursor:pointer;
   }
   .surprise-continue-btn:hover{filter:brightness(0.97);}
+
+  .ios-bottom-fill{
+    display:none;
+    position:fixed;
+    left:0; right:0; bottom:0;
+    height:max(20px, env(safe-area-inset-bottom));
+    background:var(--grad-end);
+    z-index:500;
+    pointer-events:none;
+  }
+  body.mobile-detail .ios-bottom-fill{ background:var(--paper); }
+  @media (max-width: 768px){
+    .ios-bottom-fill{ display:block; }
+  }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -3294,5 +3308,6 @@ if(window.visualViewport){
 
 init();
 </script>
+<div class="ios-bottom-fill"></div>
 </body>
 </html>
