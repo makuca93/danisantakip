@@ -79,6 +79,7 @@
     display:none;
     position:fixed;
     inset:0;
+    height:calc(var(--real-vh, 1vh) * 100);
   }
   #appShell.visible{display:flex;}
 
@@ -3278,6 +3279,17 @@ function homeTaskRowHtml(clientId, clientName, todo){
     </div>
     <button class="home-task-del" title="Sil">✕</button>
   </div>`;
+}
+
+function setRealViewportHeight(){
+  const h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
+  document.documentElement.style.setProperty('--real-vh', (h / 100) + 'px');
+}
+setRealViewportHeight();
+window.addEventListener('resize', setRealViewportHeight);
+window.addEventListener('orientationchange', setRealViewportHeight);
+if(window.visualViewport){
+  window.visualViewport.addEventListener('resize', setRealViewportHeight);
 }
 
 init();
