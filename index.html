@@ -469,6 +469,20 @@
   .status-pill.green{background:var(--green-bg); color:var(--green);}
   .status-pill.neutral{background:var(--neutral-bg); color:var(--muted);}
   #clientSub{color:var(--muted); font-size:13px; margin-bottom:24px;}
+  .next-appt-info{
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    font-size:13px;
+    padding:9px 14px;
+    border-radius:8px;
+    margin:-16px 0 20px;
+  }
+  .next-appt-info.muted-note{
+    background:var(--neutral-bg);
+    border-color:var(--card-line);
+    color:var(--muted);
+  }
 
   .add-session-toggle{
     background:var(--highlight);
@@ -1397,6 +1411,13 @@ async function ensureGoogleAccessToken(){
   return null;
 }
 
+async function getTokenSilentOnly(){
+  if(googleAccessToken && (Date.now() - googleAccessTokenObtainedAt < 50*60*1000)){
+    return googleAccessToken;
+  }
+  return await trySilentGisRefresh();
+}
+
 function tryInteractiveGisRequest(){
   return new Promise((resolve)=>{
     if(!gisTokenClient){ resolve(null); return; }
@@ -1959,6 +1980,7 @@ function renderMain(){
       <span class="status-pill ${status}">${statusText}</span>
     </div>
     <div id="clientSub">${client.sessions.length} seans kaydı</div>
+    ${(client.profile && client.profile.email) ? `<div id="nextApptInfo" class="next-appt-info">Google Takvim kontrol ediliyor…</div>` : ''}
     <div class="general-admin-note-block">
       <label class="item-label">Genel admin notu</label>
       <textarea class="general-admin-note" placeholder="Bu danışanla ilgili genel notlar (seansa özel olmayan)…">${escapeHtml(client.generalAdminNote||'')}</textarea>
@@ -1979,6 +2001,10 @@ function renderMain(){
   document.getElementById('backToListBtn').addEventListener('click', ()=>{
     document.body.classList.remove('mobile-detail');
   });
+
+  if(client.profile && client.profile.email){
+    loadNextAppointmentInfo(client);
+  }
 
   document.querySelector('.general-admin-note').addEventListener('blur', (ev)=>{
     client.generalAdminNote = ev.target.value;
@@ -2072,6 +2098,25 @@ function formatInvoiceDate(iso){
 }
 
 /* ---------- Google Calendar + Gmail (real attachment) integration ---------- */
+async function fetchNextAppointmentForEmail(email){
+  if(!email) return undefined;
+  const token = await getTokenSilentOnly();
+  if(!token) return undefined; // no error state, just "couldn't check silently"
+  const now = new Date();
+  const future = new Date(now.getTime() + 180*24*60*60*1000);
+  try{
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(future.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=15&q=${encodeURIComponent(email)}`;
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+    if(!res.ok) return undefined;
+    const data = await res.json();
+    const items = data.items || [];
+    const match = items.find(ev => (ev.attendees||[]).some(a => (a.email||'').toLowerCase() === email.trim().toLowerCase()));
+    return match || null;
+  }catch(e){
+    return undefined;
+  }
+}
+
 async function fetchDayEvents(dateStr){
   const token = await ensureGoogleAccessToken();
   if(!token) return null;
@@ -2485,6 +2530,37 @@ function calendarPanelHtml(client){
       <button class="cal-create-btn" type="button">Randevu Oluştur</button>
     </div>
   </div>`;
+}
+
+async function loadNextAppointmentInfo(client){
+  const box = document.getElementById('nextApptInfo');
+  if(!box) return;
+  const email = client.profile.email.trim();
+  const ev = await fetchNextAppointmentForEmail(email);
+  const stillThere = document.getElementById('nextApptInfo');
+  if(!stillThere) return; // user navigated away while loading
+  if(ev === undefined){
+    stillThere.textContent = '📅 Takvim kontrol edilemedi (Google bağlantısı gerekebilir).';
+    stillThere.classList.add('muted-note');
+  }else if(ev === null){
+    stillThere.textContent = '📅 Google Takviminde planlı bir randevu bulunamadı.';
+    stillThere.classList.add('muted-note');
+  }else{
+    const start = ev.start && (ev.start.dateTime || ev.start.date);
+    const label = ev.start && ev.start.dateTime
+      ? `${formatShortDate(start.slice(0,10))} ${formatEventTime(start)}`
+      : formatShortDate(start);
+    const fullLabel = `${label}${ev.summary ? ` — ${ev.summary}` : ''}`;
+    stillThere.innerHTML = `📅 Sonraki randevu (Takvimden otomatik): <strong>${escapeHtml(fullLabel)}</strong>`;
+
+    const latestSession = client.sessions && client.sessions[0];
+    if(latestSession && (latestSession.nextNote !== fullLabel || !latestSession.nextDone)){
+      latestSession.nextNote = fullLabel;
+      latestSession.nextDone = true;
+      saveState();
+      render();
+    }
+  }
 }
 
 async function loadCalendarDayEvents(panel){
