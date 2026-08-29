@@ -2580,6 +2580,8 @@ function calendarPanelHtml(client){
   </div>`;
 }
 
+let autoFillCooldown = {};
+
 async function loadNextAppointmentInfo(client){
   const box = document.getElementById('nextApptInfo');
   if(!box) return;
@@ -2603,11 +2605,20 @@ async function loadNextAppointmentInfo(client){
     stillThere.innerHTML = `📅 Sonraki randevu (Takvimden otomatik): <strong>${escapeHtml(fullLabel)}</strong>`;
 
     const latestSession = client.sessions && client.sessions[0];
-    if(latestSession && (latestSession.nextNote !== fullLabel || !latestSession.nextDone)){
+    const now = Date.now();
+    const lastRun = autoFillCooldown[client.id] || 0;
+    if(latestSession && (latestSession.nextNote !== fullLabel || !latestSession.nextDone) && (now - lastRun > 8000)){
+      autoFillCooldown[client.id] = now;
       latestSession.nextNote = fullLabel;
       latestSession.nextDone = true;
       saveState();
-      render();
+      const firstCard = document.querySelector('.session-card');
+      if(firstCard){
+        const noteInput = firstCard.querySelector('.inline-note-input');
+        const checkbox = firstCard.querySelector('input[data-key="nextDone"]');
+        if(noteInput) noteInput.value = fullLabel;
+        if(checkbox) checkbox.checked = true;
+      }
     }
   }
 }
