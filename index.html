@@ -1184,6 +1184,8 @@
   const auth = getAuth(app);
   const db = getFirestore(app);
   const provider = new GoogleAuthProvider();
+  provider.addScope('https://www.googleapis.com/auth/calendar.events');
+  provider.addScope('https://www.googleapis.com/auth/gmail.compose');
 
   window.FB = {
     auth, db, provider, signInWithPopup, signInWithRedirect, getRedirectResult,
@@ -1366,6 +1368,15 @@ function storeGoogleAccessToken(token){
   }catch(e){ /* sessionStorage unavailable, ignore */ }
 }
 
+function captureAccessTokenFromResult(result){
+  try{
+    const cred = window.FB.credentialFromResult(result);
+    if(cred && cred.accessToken){
+      storeGoogleAccessToken(cred.accessToken);
+    }
+  }catch(e){ console.error('Token yakalama hatası', e); }
+}
+
 function trySilentGisRefresh(){
   return new Promise((resolve)=>{
     if(!gisTokenClient){ resolve(null); return; }
@@ -1443,7 +1454,9 @@ const ALLOWED_EMAILS = [
 ];
 
 function startAuthListener(){
-  window.FB.getRedirectResult(window.FB.auth).catch((e)=>{
+  window.FB.getRedirectResult(window.FB.auth).then((result)=>{
+    if(result) captureAccessTokenFromResult(result);
+  }).catch((e)=>{
     console.error('Redirect giriş hatası', e);
   });
   window.FB.onAuthStateChanged(window.FB.auth, async (user)=>{
@@ -1480,7 +1493,8 @@ function showSignInScreen(){
     </div>`;
   document.getElementById('googleSignInBtn').addEventListener('click', async ()=>{
     try{
-      await window.FB.signInWithPopup(window.FB.auth, window.FB.provider);
+      const result = await window.FB.signInWithPopup(window.FB.auth, window.FB.provider);
+      captureAccessTokenFromResult(result);
     }catch(e){
       console.error('Popup giriş hatası, redirect deneniyor', e);
       try{
