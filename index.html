@@ -725,6 +725,30 @@
   #homeNavBtn.active, #providerNavBtn.active{background:var(--highlight); border-color:var(--highlight-line);}
 
   .home-sort-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:18px;}
+  .home-columns{display:flex; gap:28px; align-items:flex-start;}
+  .home-tasks-col{flex:1.3; min-width:0;}
+  .home-calendar-col{flex:1; min-width:0; position:sticky; top:0;}
+  .home-col-title{font-size:16px; margin:0 0 12px;}
+  .home-calendar-list{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:12px;
+    padding:16px;
+    max-height:70vh;
+    overflow-y:auto;
+  }
+  .agenda-day-group{margin-bottom:14px;}
+  .agenda-day-group:last-child{margin-bottom:0;}
+  .agenda-day-header{
+    font-size:12px;
+    font-weight:700;
+    color:var(--ink);
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+    margin-bottom:6px;
+    padding-bottom:4px;
+    border-bottom:1px solid var(--card-line);
+  }
   .home-sort-row select{
     font-family:inherit; font-size:13px; padding:6px 10px;
     border:1px solid var(--card-line); border-radius:6px; background:var(--card);
@@ -1086,6 +1110,9 @@
     #clientHeader h2{ font-size:24px; }
     .session-card{ padding:16px; }
     .home-task-meta{ gap:6px; }
+    .home-columns{ flex-direction:column; }
+    .home-calendar-col{ position:static; }
+    .home-calendar-list{ max-height:none; }
   }
 
   .surprise-overlay{
@@ -1208,7 +1235,7 @@
       <small>Danışan Takip<br>admin</small>
     </div>
     <div class="nav-row">
-      <button id="homeNavBtn" type="button" title="Yapılacaklar"><span class="nav-icon">✅</span><span class="nav-label">Görevler</span></button>
+      <button id="homeNavBtn" type="button" title="Ana Sayfa"><span class="nav-icon">🏠</span><span class="nav-label">Ana Sayfa</span></button>
       <button id="providerNavBtn" type="button" title="Uzman Bilgileri"><span class="nav-icon">🩺</span><span class="nav-label">Uzman</span></button>
     </div>
     <form id="addClientForm">
@@ -3178,6 +3205,80 @@ function renderProviderPage(){
   });
 }
 
+function getKnownClientEmails(){
+  const map = {};
+  state.clients.forEach(c=>{
+    const email = c.profile && c.profile.email && c.profile.email.trim().toLowerCase();
+    if(email) map[email] = c;
+  });
+  return map;
+}
+
+async function fetchUpcomingRangeEvents(days){
+  const token = await getTokenSilentOnly();
+  if(!token) return null;
+  const now = new Date();
+  const future = new Date(now.getTime() + days*24*60*60*1000);
+  try{
+    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(future.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=100`;
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+    if(!res.ok) return null;
+    const data = await res.json();
+    return data.items || [];
+  }catch(e){
+    return null;
+  }
+}
+
+async function loadHomeCalendarAgenda(){
+  const box = document.getElementById('homeCalendarList');
+  if(!box) return;
+
+  const emailMap = getKnownClientEmails();
+  if(!Object.keys(emailMap).length){
+    box.innerHTML = `<div class="cal-day-empty">Email'i kayıtlı danışan yok — profilden email ekleyince burada görünür.</div>`;
+    return;
+  }
+
+  const events = await fetchUpcomingRangeEvents(30);
+  if(!document.getElementById('homeCalendarList')) return; // view changed while loading
+  if(events === null){
+    box.innerHTML = `<div class="cal-day-empty" style="color:var(--muted);">Takvim yüklenemedi (Google bağlantısı gerekebilir).</div>`;
+    return;
+  }
+
+  const matched = [];
+  events.forEach(ev=>{
+    const attendees = ev.attendees || [];
+    const hit = attendees.find(a => emailMap[(a.email||'').trim().toLowerCase()]);
+    if(hit){
+      matched.push({ ev, client: emailMap[hit.email.trim().toLowerCase()] });
+    }
+  });
+
+  if(!matched.length){
+    box.innerHTML = `<div class="cal-day-empty">Önümüzdeki 30 günde danışan randevusu yok.</div>`;
+    return;
+  }
+
+  const byDate = {};
+  matched.forEach(({ev,client})=>{
+    const dt = ev.start && (ev.start.dateTime || ev.start.date);
+    if(!dt) return;
+    const dateStr = dt.slice(0,10);
+    if(!byDate[dateStr]) byDate[dateStr] = [];
+    byDate[dateStr].push({ ev, client });
+  });
+
+  box.innerHTML = Object.keys(byDate).sort().map(dateStr=>{
+    const rows = byDate[dateStr].map(({ev,client})=>{
+      const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
+      return `<div class="cal-day-event-row"><span class="cal-day-event-time">${timeLabel}</span><span class="cal-day-event-title">${escapeHtml(client.name)}</span></div>`;
+    }).join('');
+    return `<div class="agenda-day-group"><div class="agenda-day-header">${turkishDayName(dateStr)}, ${formatShortDate(dateStr)}</div>${rows}</div>`;
+  }).join('');
+}
+
 function renderHome(){
   const main = document.getElementById('main');
   if(!state.generalTodos) state.generalTodos = [];
@@ -3204,39 +3305,49 @@ function renderHome(){
 
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
-    <div id="clientHeader"><h2>Yapılacaklar</h2></div>
-    <div id="clientSub">${tasks.length} bekleyen iş, tüm danışanlar</div>
-    <div class="todo-add-row">
-      <input type="text" class="home-todo-text" placeholder="Yapılacak iş…">
-      <select class="home-todo-importance">
-        <option value="1">⭐ Düşük</option>
-        <option value="2" selected>⭐⭐ Orta</option>
-        <option value="3">⭐⭐⭐ Yüksek</option>
-      </select>
-      <input type="date" class="home-todo-duedate">
-      <div class="client-picker">
-        <input type="text" class="home-todo-client-search" placeholder="Danışan ara (opsiyonel)…" autocomplete="off">
-        <input type="hidden" class="home-todo-client-id" value="">
-        <div class="client-picker-list"></div>
+    <div id="clientHeader"><h2>Ana Sayfa</h2></div>
+    <div id="clientSub">${tasks.length} bekleyen iş • sağda danışan randevuları</div>
+    <div class="home-columns">
+      <div class="home-tasks-col">
+        <div class="todo-add-row">
+          <input type="text" class="home-todo-text" placeholder="Yapılacak iş…">
+          <select class="home-todo-importance">
+            <option value="1">⭐ Düşük</option>
+            <option value="2" selected>⭐⭐ Orta</option>
+            <option value="3">⭐⭐⭐ Yüksek</option>
+          </select>
+          <input type="date" class="home-todo-duedate">
+          <div class="client-picker">
+            <input type="text" class="home-todo-client-search" placeholder="Danışan ara (opsiyonel)…" autocomplete="off">
+            <input type="hidden" class="home-todo-client-id" value="">
+            <div class="client-picker-list"></div>
+          </div>
+          <button class="home-todo-add-btn" type="button">Ekle</button>
+        </div>
+        <div class="home-sort-row">
+          <label>Sırala</label>
+          <select id="homeSortSelect">
+            <option value="due" ${homeSortMode==='due'?'selected':''}>Son tarihe göre</option>
+            <option value="importance" ${homeSortMode==='importance'?'selected':''}>Öneme göre</option>
+          </select>
+        </div>
+        <div id="homeTaskList">
+          ${tasks.length ? tasks.map(({clientId,clientName,todo})=>homeTaskRowHtml(clientId,clientName,todo)).join('') : '<div class="todo-empty">Hiç bekleyen iş yok.</div>'}
+        </div>
+        ${doneTasks.length ? `
+        <div class="todo-done-header">Tamamlananlar (${doneTasks.length})</div>
+        <div id="homeDoneTaskList">
+          ${doneTasks.map(({clientId,clientName,todo})=>homeTaskRowHtml(clientId,clientName,todo)).join('')}
+        </div>` : ''}
       </div>
-      <button class="home-todo-add-btn" type="button">Ekle</button>
+      <div class="home-calendar-col">
+        <h3 class="home-col-title">📅 Danışan Randevuları</h3>
+        <div id="homeCalendarList" class="home-calendar-list">Yükleniyor…</div>
+      </div>
     </div>
-    <div class="home-sort-row">
-      <label>Sırala</label>
-      <select id="homeSortSelect">
-        <option value="due" ${homeSortMode==='due'?'selected':''}>Son tarihe göre</option>
-        <option value="importance" ${homeSortMode==='importance'?'selected':''}>Öneme göre</option>
-      </select>
-    </div>
-    <div id="homeTaskList">
-      ${tasks.length ? tasks.map(({clientId,clientName,todo})=>homeTaskRowHtml(clientId,clientName,todo)).join('') : '<div class="todo-empty">Hiç bekleyen iş yok.</div>'}
-    </div>
-    ${doneTasks.length ? `
-    <div class="todo-done-header">Tamamlananlar (${doneTasks.length})</div>
-    <div id="homeDoneTaskList">
-      ${doneTasks.map(({clientId,clientName,todo})=>homeTaskRowHtml(clientId,clientName,todo)).join('')}
-    </div>` : ''}
   `;
+
+  loadHomeCalendarAgenda();
 
   document.getElementById('backToListBtn').addEventListener('click', ()=>{
     document.body.classList.remove('mobile-detail');
