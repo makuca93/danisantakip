@@ -2452,6 +2452,13 @@ function formatShortDate(iso){
   return `${d}.${m}.${y}`;
 }
 
+function turkishDayName(iso){
+  if(!iso) return '';
+  const days = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+  const d = new Date(iso + 'T00:00:00');
+  return days[d.getDay()];
+}
+
 function stars(n){
   return '⭐'.repeat(n) + '☆'.repeat(3-n);
 }
@@ -2547,9 +2554,10 @@ async function loadNextAppointmentInfo(client){
     stillThere.classList.add('muted-note');
   }else{
     const start = ev.start && (ev.start.dateTime || ev.start.date);
+    const dateOnly = start ? start.slice(0,10) : '';
     const label = ev.start && ev.start.dateTime
-      ? `${formatShortDate(start.slice(0,10))} ${formatEventTime(start)}`
-      : formatShortDate(start);
+      ? `${turkishDayName(dateOnly)}, ${formatShortDate(dateOnly)} ${formatEventTime(start)}`
+      : `${turkishDayName(dateOnly)}, ${formatShortDate(dateOnly)}`;
     const fullLabel = `${label}${ev.summary ? ` — ${ev.summary}` : ''}`;
     stillThere.innerHTML = `📅 Sonraki randevu (Takvimden otomatik): <strong>${escapeHtml(fullLabel)}</strong>`;
 
