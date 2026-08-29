@@ -2581,20 +2581,35 @@ function calendarPanelHtml(client){
 }
 
 let autoFillCooldown = {};
+let calendarCheckedClientIds = new Set();
+let lastApptDisplay = {};
 
 async function loadNextAppointmentInfo(client){
   const box = document.getElementById('nextApptInfo');
   if(!box) return;
+  if(calendarCheckedClientIds.has(client.id)){
+    const cached = lastApptDisplay[client.id];
+    if(cached){
+      box.innerHTML = cached.html;
+      if(cached.muted) box.classList.add('muted-note');
+    }
+    return;
+  }
   const email = client.profile.email.trim();
   const ev = await fetchNextAppointmentForEmail(email);
   const stillThere = document.getElementById('nextApptInfo');
   if(!stillThere) return; // user navigated away while loading
+  calendarCheckedClientIds.add(client.id);
   if(ev === undefined){
-    stillThere.textContent = '📅 Takvim kontrol edilemedi (Google bağlantısı gerekebilir).';
+    const html = '📅 Takvim kontrol edilemedi (Google bağlantısı gerekebilir).';
+    stillThere.textContent = html;
     stillThere.classList.add('muted-note');
+    lastApptDisplay[client.id] = { html, muted: true };
   }else if(ev === null){
-    stillThere.textContent = '📅 Google Takviminde planlı bir randevu bulunamadı.';
+    const html = '📅 Google Takviminde planlı bir randevu bulunamadı.';
+    stillThere.textContent = html;
     stillThere.classList.add('muted-note');
+    lastApptDisplay[client.id] = { html, muted: true };
   }else{
     const start = ev.start && (ev.start.dateTime || ev.start.date);
     const dateOnly = start ? start.slice(0,10) : '';
@@ -2602,7 +2617,9 @@ async function loadNextAppointmentInfo(client){
       ? `${turkishDayName(dateOnly)}, ${formatShortDate(dateOnly)} ${formatEventTime(start)}`
       : `${turkishDayName(dateOnly)}, ${formatShortDate(dateOnly)}`;
     const fullLabel = `${label}${ev.summary ? ` — ${ev.summary}` : ''}`;
-    stillThere.innerHTML = `📅 Sonraki randevu (Takvimden otomatik): <strong>${escapeHtml(fullLabel)}</strong>`;
+    const html = `📅 Sonraki randevu (Takvimden otomatik): <strong>${escapeHtml(fullLabel)}</strong>`;
+    stillThere.innerHTML = html;
+    lastApptDisplay[client.id] = { html, muted: false };
 
     const latestSession = client.sessions && client.sessions[0];
     const now = Date.now();
@@ -2665,7 +2682,9 @@ function wireCalendarPanel(client){
     btn.disabled = false; btn.textContent = 'Randevu Oluştur';
     if(ok){
       alert('Randevu Google Takvimine eklendi.');
+      calendarCheckedClientIds.delete(client.id);
       panel.classList.remove('open');
+      loadNextAppointmentInfo(client);
     }else{
       loadCalendarDayEvents(panel);
     }
