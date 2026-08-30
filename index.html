@@ -1157,9 +1157,18 @@
     .home-sort-row select, .client-picker input[type="text"]{
       font-size:16px;
     }
-    .todo-add-row .todo-text, .todo-add-row .todo-importance, .todo-add-row .todo-duedate,
-    .todo-add-row .client-picker{
-      flex:1 1 100%;
+    .todo-add-row{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:8px;
+    }
+    .todo-add-row input, .todo-add-row select{
+      width:100%;
+    }
+    .todo-add-row .todo-text, .todo-add-row .home-todo-text,
+    .todo-add-row .client-picker,
+    .todo-add-row .todo-add-btn, .todo-add-row .home-todo-add-btn{
+      grid-column: 1 / -1;
     }
     .action-row{ flex-direction:column; }
     #clientHeader h2{ font-size:24px; }
