@@ -303,7 +303,7 @@
   }
   #manualSaveBtn:hover{filter:brightness(0.97);}
 
-  #settingsNavBtn{
+  #settingsNavBtn, #langToggleBtn{
     background:none;
     border:1px solid var(--card-line);
     color:var(--muted);
@@ -314,7 +314,7 @@
     width:100%;
     font-family:inherit;
   }
-  #settingsNavBtn:hover{color:var(--ink); border-color:var(--highlight-line);}
+  #settingsNavBtn:hover, #langToggleBtn:hover{color:var(--ink); border-color:var(--highlight-line);}
 
   .backups-modal{
     display:none;
@@ -1131,11 +1131,11 @@
   }
 
   @media (max-width: 768px){
-    #sidebar{ width:100%; height:100%; padding-top:max(18px, env(safe-area-inset-top)); padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; }
+    #sidebar{ width:100%; height:100%; padding-top:18px; }
     #appShell.visible{ flex-direction:column; }
     body.mobile-detail #sidebar{ display:none; }
     body:not(.mobile-detail) #main{ display:none; }
-    #main{ padding:18px 16px; padding-top:max(18px, env(safe-area-inset-top)); padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; }
+    #main{ padding:18px 16px; }
     .back-to-list{ display:flex; }
     .form-grid{ grid-template-columns:1fr; }
     .client-del, .client-edit{ opacity:1; font-size:17px; padding:6px 8px; }
@@ -1267,6 +1267,14 @@
     cursor:pointer;
   }
   .surprise-continue-btn:hover{filter:brightness(0.97);}
+
+  /* Isolated to installed Home Screen apps only — never affects the normal Safari tab,
+     where the layout already renders correctly edge to edge. */
+  @media (display-mode: standalone){
+    #sidebar, #main{
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -1336,6 +1344,7 @@
     <div id="sidebarFooter">
       <div id="fileStatus"></div>
       <button id="settingsNavBtn" type="button">⚙️ Ayarlar</button>
+      <button id="langToggleBtn" type="button"></button>
     </div>
   </div>
   <div id="main"></div>
@@ -1441,6 +1450,93 @@ let activeClientId = null;
 let editingClientId = null;
 let sortMode = 'default';
 let searchQuery = '';
+/* ---------- i18n (Türkçe / English) ---------- */
+let currentLang = 'tr';
+try{ currentLang = localStorage.getItem('appLang') || 'tr'; }catch(e){}
+
+const I18N = {
+  tr: {
+    nav_home: 'Ana Sayfa', nav_provider: 'Uzman', settings: 'Ayarlar',
+    search_placeholder: 'Ara ya da yeni danışan adı…', add_btn: 'Ekle',
+    sort_label: 'Sırala', sort_default: 'Varsayılan', sort_name: 'İsme göre (A-Z)',
+    sort_lastSession: 'Son seansa göre', sort_pendingChecks: 'Seans eksiklerine göre',
+    sort_pendingTodos: 'Bekleyen işlere göre',
+    back_to_list: '← Danışanlar',
+    tab_profile: '👤 Profil', tab_todo: '✅ Yapılacaklar', tab_calendar: '📅 Randevu',
+    add_session_btn: '+ Yeni seans kaydı ekle',
+    field_payment: 'Ödeme', field_invoice: 'Fatura', field_notes: 'Seans notları',
+    field_next: 'Sonraki seans',
+    invoice_save: '📄 İndir', invoice_share: '📤 Gönder', invoice_email: '✉️ Email',
+    invoice_gmail: '📧 Gmail Taslağı',
+    session_delete: 'Sil',
+    home_page_title: 'Ana Sayfa',
+    home_tasks_tab: '✅ Görevler', home_calendar_tab: '📅 Takvim',
+    todo_placeholder: 'Yapılacak iş…', client_search_placeholder: 'Danışan ara (opsiyonel)…',
+    settings_title: 'Ayarlar',
+    provider_title: 'Uzman Bilgileri'
+  },
+  en: {
+    nav_home: 'Home', nav_provider: 'Provider', settings: 'Settings',
+    search_placeholder: 'Search or add a new client…', add_btn: 'Add',
+    sort_label: 'Sort', sort_default: 'Default', sort_name: 'By name (A-Z)',
+    sort_lastSession: 'By last session', sort_pendingChecks: 'By session gaps',
+    sort_pendingTodos: 'By pending tasks',
+    back_to_list: '← Clients',
+    tab_profile: '👤 Profile', tab_todo: '✅ To-Do', tab_calendar: '📅 Appointment',
+    add_session_btn: '+ Add new session record',
+    field_payment: 'Payment', field_invoice: 'Invoice', field_notes: 'Session notes',
+    field_next: 'Next session',
+    invoice_save: '📄 Download', invoice_share: '📤 Share', invoice_email: '✉️ Email',
+    invoice_gmail: '📧 Gmail Draft',
+    session_delete: 'Delete',
+    home_page_title: 'Home',
+    home_tasks_tab: '✅ Tasks', home_calendar_tab: '📅 Calendar',
+    todo_placeholder: 'Task to do…', client_search_placeholder: 'Search client (optional)…',
+    settings_title: 'Settings',
+    provider_title: 'Provider Info'
+  }
+};
+
+function t(key){
+  return (I18N[currentLang] && I18N[currentLang][key]) || (I18N.tr[key]) || key;
+}
+
+function setLang(lang){
+  currentLang = lang;
+  try{ localStorage.setItem('appLang', lang); }catch(e){}
+  render();
+}
+
+function applyStaticTranslations(){
+  const homeLabel = document.querySelector('#homeNavBtn .nav-label');
+  if(homeLabel) homeLabel.textContent = t('nav_home');
+  const providerLabel = document.querySelector('#providerNavBtn .nav-label');
+  if(providerLabel) providerLabel.textContent = t('nav_provider');
+  const searchInput = document.getElementById('newClientName');
+  if(searchInput) searchInput.placeholder = t('search_placeholder');
+  const addBtn = document.querySelector('#addClientForm button');
+  if(addBtn) addBtn.textContent = t('add_btn');
+  const sortLabel = document.querySelector('.sort-row label');
+  if(sortLabel) sortLabel.textContent = t('sort_label');
+  const sortSelect = document.getElementById('sortSelect');
+  if(sortSelect){
+    const opts = sortSelect.querySelectorAll('option');
+    const keys = ['sort_default','sort_name','sort_lastSession','sort_pendingChecks','sort_pendingTodos'];
+    opts.forEach((opt,i)=>{ if(keys[i]) opt.textContent = t(keys[i]); });
+  }
+  const settingsBtn = document.getElementById('settingsNavBtn');
+  if(settingsBtn) settingsBtn.textContent = '⚙️ ' + t('settings');
+}
+
+function updateLangToggleLabel(){
+  const btn = document.getElementById('langToggleBtn');
+  if(btn) btn.textContent = currentLang === 'tr' ? '🌐 EN' : '🌐 TR';
+}
+
+document.getElementById('langToggleBtn').addEventListener('click', ()=>{
+  setLang(currentLang === 'tr' ? 'en' : 'tr');
+});
+
 let mainView = 'client';
 
 function saveViewState(){
@@ -2001,6 +2097,8 @@ function getSortedClients(){
 /* ---------- Rendering ---------- */
 function render(){
   saveViewState();
+  updateLangToggleLabel();
+  applyStaticTranslations();
   renderSidebar();
   if(mainView === 'home'){
     renderHome();
@@ -2159,10 +2257,10 @@ function renderMain(){
       <textarea class="general-admin-note" placeholder="Bu danışanla ilgili genel notlar (seansa özel olmayan)…">${escapeHtml(client.generalAdminNote||'')}</textarea>
     </div>
     <div class="action-row">
-      <button class="add-session-toggle" id="toggleProfileBtn">👤 Profil</button>
-      <button class="add-session-toggle" id="toggleTodoBtn">✅ Yapılacaklar</button>
-      <button class="add-session-toggle" id="toggleCalendarBtn">📅 Randevu</button>
-      <button class="add-session-toggle" id="toggleFormBtn">+ Yeni seans kaydı ekle</button>
+      <button class="add-session-toggle" id="toggleProfileBtn">${t('tab_profile')}</button>
+      <button class="add-session-toggle" id="toggleTodoBtn">${t('tab_todo')}</button>
+      <button class="add-session-toggle" id="toggleCalendarBtn">${t('tab_calendar')}</button>
+      <button class="add-session-toggle" id="toggleFormBtn">${t('add_session_btn')}</button>
     </div>
     ${profilePanelHtml(client)}
     ${todoPanelHtml(client)}
@@ -2184,8 +2282,18 @@ function renderMain(){
     saveState();
   });
 
+  function closeAllActionPanels(){
+    document.getElementById('profilePanel').classList.remove('open');
+    document.getElementById('todoPanel').classList.remove('open');
+    document.getElementById('calendarPanel').classList.remove('open');
+    document.getElementById('sessionForm').classList.remove('open');
+  }
+
   document.getElementById('toggleProfileBtn').addEventListener('click', ()=>{
-    document.getElementById('profilePanel').classList.toggle('open');
+    const panel = document.getElementById('profilePanel');
+    const wasOpen = panel.classList.contains('open');
+    closeAllActionPanels();
+    if(!wasOpen) panel.classList.add('open');
   });
   // Restore the profile panel state after rebuilding the DOM.
   if(profileWasOpen){
@@ -2194,7 +2302,10 @@ function renderMain(){
   wireProfilePanel(client);
 
   document.getElementById('toggleTodoBtn').addEventListener('click', ()=>{
-    document.getElementById('todoPanel').classList.toggle('open');
+    const panel = document.getElementById('todoPanel');
+    const wasOpen = panel.classList.contains('open');
+    closeAllActionPanels();
+    if(!wasOpen) panel.classList.add('open');
   });
   if(todoWasOpen){
     document.getElementById('todoPanel').classList.add('open');
@@ -2203,8 +2314,12 @@ function renderMain(){
 
   document.getElementById('toggleCalendarBtn').addEventListener('click', ()=>{
     const panel = document.getElementById('calendarPanel');
-    panel.classList.toggle('open');
-    if(panel.classList.contains('open')) loadCalendarDayEvents(panel, client);
+    const wasOpen = panel.classList.contains('open');
+    closeAllActionPanels();
+    if(!wasOpen){
+      panel.classList.add('open');
+      loadCalendarDayEvents(panel, client);
+    }
   });
   if(calendarWasOpen){
     document.getElementById('calendarPanel').classList.add('open');
@@ -2212,7 +2327,10 @@ function renderMain(){
   wireCalendarPanel(client);
 
   document.getElementById('toggleFormBtn').addEventListener('click', ()=>{
-    document.getElementById('sessionForm').classList.toggle('open');
+    const panel = document.getElementById('sessionForm');
+    const wasOpen = panel.classList.contains('open');
+    closeAllActionPanels();
+    if(!wasOpen) panel.classList.add('open');
   });
   document.getElementById('cancelSessionBtn').addEventListener('click', ()=>{
     document.getElementById('sessionForm').classList.remove('open');
@@ -2569,11 +2687,6 @@ function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber){
   doc.text(ifhp ? 'BALANCE DUE' : 'AMOUNT PAID', 136, ty + 20.5);
   doc.text(amountStr, 191, ty + 20.5, { align:'right' });
 
-  // thank you note
-  doc.setFont('helvetica','italic'); doc.setFontSize(10);
-  doc.setTextColor(107,111,120);
-  doc.text(ifhp ? 'Thank you — payment appreciated upon receipt.' : 'Thank you for your payment.', 16, ty + 14);
-
   // footer band
   const fy = 258;
   doc.setDrawColor(226,226,234);
@@ -2736,7 +2849,7 @@ function calendarPanelHtml(client){
     <div class="form-grid">
       <div class="field-block full">
         <label>Başlık</label>
-        <input type="text" class="cal-title" value="${escapeAttr(client.name + '-Therapy Session')}">
+        <input type="text" class="cal-title" value="${escapeAttr(client.name + '-Psikoterapi Seansı')}">
       </div>
       <div class="field-block">
         <label>Tarih</label>
@@ -3013,7 +3126,7 @@ function todoPanelHtml(client){
   return `
   <div id="todoPanel">
     <div class="todo-add-row">
-      <input type="text" class="todo-text" placeholder="Yapılacak iş…">
+      <input type="text" class="todo-text" placeholder="${t('todo_placeholder')}">
       <select class="todo-importance">
         <option value="1">⭐ Düşük</option>
         <option value="2" selected>⭐⭐ Orta</option>
@@ -3295,7 +3408,7 @@ function renderSessionCard(client, session, index){
     <div class="session-card-top">
       <button class="session-collapse-toggle" type="button" title="Daralt/Genişlet">${collapsed ? '▸' : '▾'}</button>
       <input type="date" class="session-date-input" value="${session.date||''}">
-      <button class="session-del">Sil</button>
+      <button class="session-del">${t('session_delete')}</button>
     </div>
     ${isFuture ? `
     <div class="future-session-banner">
@@ -3307,15 +3420,15 @@ function renderSessionCard(client, session, index){
       </div>` : ''}
     </div>` : ''}
     <div class="session-card-body ${collapsed ? 'collapsed' : ''}">
-    ${itemRow('Ödeme', boolLabel(session.paymentDone), 'paymentDone', session)}
+    ${itemRow(t('field_payment'), boolLabel(session.paymentDone), 'paymentDone', session)}
     ${noInvoice ? `
     <div class="item-row invoice-blackout">
       <input type="checkbox" disabled>
       <span class="item-label">Fatura</span>
       <span class="item-value empty">Bu danışana fatura hazırlanmayacak</span>
-    </div>` : itemRow('Fatura', boolLabel(session.invoiceDone), 'invoiceDone', session)}
-    ${itemRow('Seans notları', boolLabel(session.notesDone), 'notesDone', session)}
-    ${itemRowWithInput('Sonraki seans', 'nextDone', 'nextNote', session)}
+    </div>` : itemRow(t('field_invoice'), boolLabel(session.invoiceDone), 'invoiceDone', session)}
+    ${itemRow(t('field_notes'), boolLabel(session.notesDone), 'notesDone', session)}
+    ${itemRowWithInput(t('field_next'), 'nextDone', 'nextNote', session)}
     <div class="admin-notes-block">
       <label class="item-label">Admin notları</label>
       <textarea class="admin-note-input" placeholder="Bu danışanla ilgili yapılacak idari işler…">${escapeHtml(session.adminNote||'')}</textarea>
@@ -3324,11 +3437,11 @@ function renderSessionCard(client, session, index){
     <div class="invoice-actions-blackout">Bu danışan için fatura/makbuz oluşturulmuyor</div>` : `
     <div class="invoice-actions-label">Fatura / Makbuz</div>
     <div class="invoice-actions">
-      <button class="invoice-save-btn" type="button">📄 İndir</button>
-      <button class="invoice-share-btn" type="button">📤 Gönder</button>
+      <button class="invoice-save-btn" type="button">${t('invoice_save')}</button>
+      <button class="invoice-share-btn" type="button">${t('invoice_share')}</button>
       <div class="invoice-email-group">
-        <button class="invoice-email-btn" type="button" title="Mail programında aç">✉️ Email</button>
-        <button class="invoice-gmail-btn" type="button" title="Gmail'de ekli taslak oluştur">📧 Gmail Taslağı</button>
+        <button class="invoice-email-btn" type="button" title="Mail programında aç">${t('invoice_email')}</button>
+        <button class="invoice-gmail-btn" type="button" title="Gmail'de ekli taslak oluştur">${t('invoice_gmail')}</button>
       </div>
     </div>`}
     </div>
@@ -3516,7 +3629,7 @@ function renderSettingsPage(){
   const main = document.getElementById('main');
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
-    <div id="clientHeader"><h2>Ayarlar</h2></div>
+    <div id="clientHeader"><h2>${t('settings_title')}</h2></div>
     <div id="clientSub">${escapeHtml(currentUser.email || '')}</div>
 
     <div class="settings-section">
@@ -3566,7 +3679,7 @@ function renderProviderPage(){
   const p = getProvider();
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
-    <div id="clientHeader"><h2>Uzman Bilgileri</h2></div>
+    <div id="clientHeader"><h2>${t('provider_title')}</h2></div>
     <div id="clientSub">Bu bilgiler, senin bu hesaptan oluşturduğun faturalarda ve maillerde kullanılır. Her Google hesabı kendi bilgilerini ayrı ayrı saklar.</div>
     <div id="providerForm">
       <div class="form-grid">
@@ -3791,16 +3904,16 @@ function renderHome(){
 
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
-    <div id="clientHeader"><h2>Ana Sayfa</h2></div>
+    <div id="clientHeader"><h2>${t('home_page_title')}</h2></div>
     <div id="clientSub">${tasks.length} bekleyen iş • sağda danışan randevuları</div>
     <div class="home-mobile-tabs">
-      <button class="home-tab-btn ${homeMobileTab==='tasks'?'active':''}" data-tab="tasks">✅ Görevler</button>
-      <button class="home-tab-btn ${homeMobileTab==='calendar'?'active':''}" data-tab="calendar">📅 Takvim</button>
+      <button class="home-tab-btn ${homeMobileTab==='tasks'?'active':''}" data-tab="tasks">${t('home_tasks_tab')}</button>
+      <button class="home-tab-btn ${homeMobileTab==='calendar'?'active':''}" data-tab="calendar">${t('home_calendar_tab')}</button>
     </div>
     <div class="home-columns home-mobile-tab-${homeMobileTab}">
       <div class="home-tasks-col">
         <div class="todo-add-row">
-          <input type="text" class="home-todo-text" placeholder="Yapılacak iş…">
+          <input type="text" class="home-todo-text" placeholder="${t('todo_placeholder')}">
           <select class="home-todo-importance">
             <option value="1">⭐ Düşük</option>
             <option value="2" selected>⭐⭐ Orta</option>
@@ -3808,7 +3921,7 @@ function renderHome(){
           </select>
           <input type="date" class="home-todo-duedate">
           <div class="client-picker">
-            <input type="text" class="home-todo-client-search" placeholder="Danışan ara (opsiyonel)…" autocomplete="off">
+            <input type="text" class="home-todo-client-search" placeholder="${t('client_search_placeholder')}" autocomplete="off">
             <input type="hidden" class="home-todo-client-id" value="">
             <div class="client-picker-list"></div>
           </div>
