@@ -1838,7 +1838,12 @@ function closeBackupsModal(){
 function formatBackupTime(ts){
   const d = new Date(ts);
   const pad = n => String(n).padStart(2,'0');
-  return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  let hour = d.getHours();
+  const minute = pad(d.getMinutes());
+  const meridiem = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12;
+  if(hour === 0) hour = 12;
+  return `${pad(d.getDate())}.${pad(d.getMonth()+1)}.${d.getFullYear()} ${hour}:${minute} ${meridiem}`;
 }
 
 async function openBackupsModal(){
@@ -2290,7 +2295,12 @@ async function fetchDayEvents(dateStr){
 function formatEventTime(iso){
   if(!iso) return '';
   const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  let hour = d.getHours();
+  const minute = String(d.getMinutes()).padStart(2,'0');
+  const meridiem = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12;
+  if(hour === 0) hour = 12;
+  return `${hour}:${minute} ${meridiem}`;
 }
 
 async function cancelCalendarEvent(eventId){
@@ -2739,7 +2749,7 @@ function calendarPanelHtml(client){
       </div>
       <div class="field-block">
         <label>Saat</label>
-        <input type="time" class="cal-time" value="10:00">
+        <input type="text" class="cal-time" placeholder="örn: 10:00 AM" value="10:00 AM">
       </div>
       <div class="field-block">
         <label>Süre</label>
@@ -2968,11 +2978,16 @@ function wireCalendarPanel(client){
   panel.querySelector('.cal-create-btn').addEventListener('click', async ()=>{
     const title = panel.querySelector('.cal-title').value.trim();
     const dateStr = panel.querySelector('.cal-date').value;
-    const timeStr = panel.querySelector('.cal-time').value;
+    const timeRaw = panel.querySelector('.cal-time').value;
+    const timeStr = parseAmPmTime(timeRaw);
     const durationMinutes = Number(panel.querySelector('.cal-duration').value);
     const inviteClient = panel.querySelector('.cal-invite').checked;
-    if(!title || !dateStr || !timeStr){
+    if(!title || !dateStr || !timeRaw){
       alert('Başlık, tarih ve saat gerekli.');
+      return;
+    }
+    if(!timeStr){
+      alert('Saat formatı geçersiz. Örnek: 2:30 PM ya da 10:00 AM şeklinde gir.');
       return;
     }
     const btn = panel.querySelector('.cal-create-btn');
