@@ -303,18 +303,32 @@
   }
   #manualSaveBtn:hover{filter:brightness(0.97);}
 
-  #settingsNavBtn, #langToggleBtn{
+  .footer-btn-row{display:flex; gap:6px;}
+  #settingsNavBtn{
     background:none;
     border:1px solid var(--card-line);
     color:var(--muted);
-    font-size:12px;
-    padding:6px 10px;
+    font-size:11.5px;
+    padding:6px 8px;
     border-radius:6px;
     cursor:pointer;
-    width:100%;
+    flex:1;
+    min-width:0;
     font-family:inherit;
   }
-  #settingsNavBtn:hover, #langToggleBtn:hover{color:var(--ink); border-color:var(--highlight-line);}
+  #settingsNavBtn:hover{color:var(--ink); border-color:var(--highlight-line);}
+  #langToggleBtn{
+    background:none;
+    border:1px solid var(--card-line);
+    font-size:16px;
+    padding:5px 8px;
+    border-radius:6px;
+    cursor:pointer;
+    flex-shrink:0;
+    font-family:inherit;
+    line-height:1;
+  }
+  #langToggleBtn:hover{border-color:var(--highlight-line);}
 
   .backups-modal{
     display:none;
@@ -1274,6 +1288,9 @@
     #sidebar, #main{
       padding-bottom: env(safe-area-inset-bottom);
     }
+    #sidebar{
+      padding-top: max(18px, env(safe-area-inset-top));
+    }
   }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -1343,8 +1360,10 @@
     <ul id="clientList"></ul>
     <div id="sidebarFooter">
       <div id="fileStatus"></div>
-      <button id="settingsNavBtn" type="button">⚙️ Ayarlar</button>
-      <button id="langToggleBtn" type="button"></button>
+      <div class="footer-btn-row">
+        <button id="settingsNavBtn" type="button">⚙️ Ayarlar</button>
+        <button id="langToggleBtn" type="button" title="Dili değiştir"></button>
+      </div>
     </div>
   </div>
   <div id="main"></div>
@@ -1473,7 +1492,10 @@ const I18N = {
     home_tasks_tab: '✅ Görevler', home_calendar_tab: '📅 Takvim',
     todo_placeholder: 'Yapılacak iş…', client_search_placeholder: 'Danışan ara (opsiyonel)…',
     settings_title: 'Ayarlar',
-    provider_title: 'Uzman Bilgileri'
+    provider_title: 'Uzman Bilgileri',
+    provider_sub: 'Bu bilgiler, senin bu hesaptan oluşturduğun faturalarda ve maillerde kullanılır. Her Google hesabı kendi bilgilerini ayrı ayrı saklar.',
+    home_sub: '{n} bekleyen iş • sağda danışan randevuları',
+    home_calendar_col_title: '📅 Danışan Randevuları'
   },
   en: {
     nav_home: 'Home', nav_provider: 'Provider', settings: 'Settings',
@@ -1493,7 +1515,10 @@ const I18N = {
     home_tasks_tab: '✅ Tasks', home_calendar_tab: '📅 Calendar',
     todo_placeholder: 'Task to do…', client_search_placeholder: 'Search client (optional)…',
     settings_title: 'Settings',
-    provider_title: 'Provider Info'
+    provider_title: 'Provider Info',
+    provider_sub: 'This information is used on invoices and emails you create from this account. Each Google account keeps its own information separately.',
+    home_sub: '{n} pending tasks • client appointments on the right',
+    home_calendar_col_title: '📅 Client Appointments'
   }
 };
 
@@ -1530,7 +1555,7 @@ function applyStaticTranslations(){
 
 function updateLangToggleLabel(){
   const btn = document.getElementById('langToggleBtn');
-  if(btn) btn.textContent = currentLang === 'tr' ? '🌐 EN' : '🌐 TR';
+  if(btn) btn.textContent = currentLang === 'tr' ? '🇨🇦' : '🇹🇷';
 }
 
 document.getElementById('langToggleBtn').addEventListener('click', ()=>{
@@ -2849,7 +2874,7 @@ function calendarPanelHtml(client){
     <div class="form-grid">
       <div class="field-block full">
         <label>Başlık</label>
-        <input type="text" class="cal-title" value="${escapeAttr(client.name + '-Psikoterapi Seansı')}">
+        <input type="text" class="cal-title" value="${escapeAttr(client.name + '-Psychotherapy Session')}">
       </div>
       <div class="field-block">
         <label>Tarih</label>
@@ -3680,7 +3705,7 @@ function renderProviderPage(){
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader"><h2>${t('provider_title')}</h2></div>
-    <div id="clientSub">Bu bilgiler, senin bu hesaptan oluşturduğun faturalarda ve maillerde kullanılır. Her Google hesabı kendi bilgilerini ayrı ayrı saklar.</div>
+    <div id="clientSub">${t('provider_sub')}</div>
     <div id="providerForm">
       <div class="form-grid">
         <div class="field-block">
@@ -3905,7 +3930,7 @@ function renderHome(){
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader"><h2>${t('home_page_title')}</h2></div>
-    <div id="clientSub">${tasks.length} bekleyen iş • sağda danışan randevuları</div>
+    <div id="clientSub">${t('home_sub').replace('{n}', tasks.length)}</div>
     <div class="home-mobile-tabs">
       <button class="home-tab-btn ${homeMobileTab==='tasks'?'active':''}" data-tab="tasks">${t('home_tasks_tab')}</button>
       <button class="home-tab-btn ${homeMobileTab==='calendar'?'active':''}" data-tab="calendar">${t('home_calendar_tab')}</button>
@@ -3944,7 +3969,7 @@ function renderHome(){
         </div>` : ''}
       </div>
       <div class="home-calendar-col">
-        <h3 class="home-col-title">📅 Danışan Randevuları</h3>
+        <h3 class="home-col-title">${t('home_calendar_col_title')}</h3>
         <div id="homeCalendarList" class="home-calendar-list">Yükleniyor…</div>
       </div>
     </div>
