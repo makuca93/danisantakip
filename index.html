@@ -5,7 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#dfe7f4">
 <!-- <link rel="manifest" href="manifest.json"> -->
 <title>Danışan Takip</title>
@@ -1131,11 +1131,11 @@
   }
 
   @media (max-width: 768px){
-    #sidebar{ width:100%; height:100%; padding-top:max(18px, env(safe-area-inset-top)); padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; }
+    #sidebar{ width:100%; height:100%; padding-top:18px; padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; }
     #appShell.visible{ flex-direction:column; }
     body.mobile-detail #sidebar{ display:none; }
     body:not(.mobile-detail) #main{ display:none; }
-    #main{ padding:18px 16px; padding-top:max(18px, env(safe-area-inset-top)); padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; }
+    #main{ padding:18px 16px; padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; }
     .back-to-list{ display:flex; }
     .form-grid{ grid-template-columns:1fr; }
     .client-del, .client-edit{ opacity:1; font-size:17px; padding:6px 8px; }
