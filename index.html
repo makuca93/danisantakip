@@ -2307,6 +2307,34 @@ async function cancelCalendarEvent(eventId){
   }
 }
 
+function parseAmPmTime(input){
+  if(!input) return null;
+  const match = input.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/);
+  if(!match) return null;
+  let hour = parseInt(match[1], 10);
+  const minute = match[2];
+  const meridiem = match[3].toUpperCase();
+  if(hour < 1 || hour > 12 || Number(minute) > 59) return null;
+  if(meridiem === 'AM'){
+    if(hour === 12) hour = 0;
+  }else{
+    if(hour !== 12) hour += 12;
+  }
+  return `${String(hour).padStart(2,'0')}:${minute}`;
+}
+
+function promptForTime(defaultText){
+  let attempt = prompt('Yeni saat (örn: 2:30 PM):', defaultText || '10:00 AM');
+  if(!attempt) return null;
+  let parsed = parseAmPmTime(attempt);
+  while(attempt && !parsed){
+    attempt = prompt('Geçersiz format. Örnek: 2:30 PM ya da 10:00 AM şeklinde gir:', attempt);
+    if(!attempt) return null;
+    parsed = parseAmPmTime(attempt);
+  }
+  return parsed;
+}
+
 async function rescheduleCalendarEvent(eventId, dateStr, timeStr){
   const token = await ensureGoogleAccessToken();
   if(!token) return false;
@@ -2916,7 +2944,7 @@ async function loadCalendarDayEvents(panel, client){
       const eventId = row.getAttribute('data-event-id');
       const newDate = prompt('Yeni tarih (YYYY-AA-GG):', dateStr);
       if(!newDate) return;
-      const newTime = prompt('Yeni saat (SS:DD):', '10:00');
+      const newTime = promptForTime('10:00 AM');
       if(!newTime) return;
       btn.disabled = true;
       const ok = await rescheduleCalendarEvent(eventId, newDate, newTime);
@@ -3304,7 +3332,7 @@ function renderSessionCard(client, session, index){
     div.querySelector('.future-reschedule-btn').addEventListener('click', async ()=>{
       const newDate = prompt('Yeni tarih (YYYY-AA-GG):', session.date);
       if(!newDate) return;
-      const newTime = prompt('Yeni saat (SS:DD):', '10:00');
+      const newTime = promptForTime('10:00 AM');
       if(!newTime) return;
       const ok = await rescheduleCalendarEvent(session.calendarEventId, newDate, newTime);
       if(ok){
@@ -3691,7 +3719,7 @@ function wireHomeCalendarButtons(box){
       const currentDate = row.getAttribute('data-event-date');
       const newDate = prompt('Yeni tarih (YYYY-AA-GG):', currentDate);
       if(!newDate) return;
-      const newTime = prompt('Yeni saat (SS:DD):', '10:00');
+      const newTime = promptForTime('10:00 AM');
       if(!newTime) return;
       btn.disabled = true;
       const ok = await rescheduleCalendarEvent(eventId, newDate, newTime);
