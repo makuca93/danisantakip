@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" id="htmlRoot">
 <head>
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://apis.google.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.googleusercontent.com; connect-src 'self' https://*.googleapis.com https://*.google.com https://accounts.google.com; frame-src https://accounts.google.com https://*.firebaseapp.com;">
 <meta charset="UTF-8">
@@ -1146,7 +1146,7 @@
   }
 
   @media (max-width: 768px){
-    #sidebar{ width:100%; height:100%; padding-top:18px; }
+    #sidebar{ width:100%; height:100%; padding-top:56px; }
     #appShell.visible{ flex-direction:column; }
     body.mobile-detail #sidebar{ display:none; }
     body:not(.mobile-detail) #main{ display:none; }
@@ -1570,7 +1570,7 @@ const I18N = {
     no_registered_client_emails: 'Email\'i kayıtlı danışan yok — profilden email ekleyince burada görünür.',
     no_appt_30days: 'Önümüzdeki 30 günde danışan randevusu yok.',
     hi_task_empty: 'Hiç bekleyen iş yok.',
-    no_match: 'Eşleşme yok'
+    no_match: 'Eşleşme yok', general_admin_note_label: 'Genel admin notu', phone_label: 'Telefon'
   },
   en: {
     nav_home: 'Home', nav_provider: 'Provider', settings: 'Settings',
@@ -1675,7 +1675,7 @@ const I18N = {
     no_registered_client_emails: 'No clients with an email on file — add one from the profile to see this here.',
     no_appt_30days: 'No client appointments in the next 30 days.',
     hi_task_empty: 'No pending tasks.',
-    no_match: 'No matches'
+    no_match: 'No matches', general_admin_note_label: 'General admin note', phone_label: 'Phone'
   }
 };
 
@@ -1690,6 +1690,8 @@ function setLang(lang){
 }
 
 function applyStaticTranslations(){
+  const htmlRoot = document.getElementById('htmlRoot');
+  if(htmlRoot) htmlRoot.lang = currentLang;
   const homeLabel = document.querySelector('#homeNavBtn .nav-label');
   if(homeLabel) homeLabel.textContent = t('nav_home');
   const providerLabel = document.querySelector('#providerNavBtn .nav-label');
@@ -2441,7 +2443,7 @@ function renderMain(){
     <div id="clientSub">${client.sessions.length} ${t('session_count')}</div>
     ${(client.profile && client.profile.email) ? `<div id="nextApptInfo" class="next-appt-info">Google Takvim kontrol ediliyor…</div>` : ''}
     <div class="general-admin-note-block">
-      <label class="item-label">Genel admin notu</label>
+      <label class="item-label">${t('general_admin_note_label')}</label>
       <textarea class="general-admin-note" placeholder="${t('general_note_placeholder')}">${escapeHtml(client.generalAdminNote||'')}</textarea>
     </div>
     <div class="action-row">
@@ -3434,7 +3436,7 @@ function profilePanelHtml(client){
         <textarea class="profile-address" placeholder="Adres...">${escapeHtml(p.address||'')}</textarea>
       </div>
       <div class="field-block">
-        <label>Telefon</label>
+        <label>${t('phone_label')}</label>
         <div class="contact-row">
           <input type="text" class="profile-phone" placeholder="+1 416 000 0000" value="${escapeAttr(p.phone||'')}">
           <a class="contact-btn whatsapp-btn ${p.phone?'':'disabled'}" href="${waLink(p.phone)}" target="_blank" rel="noopener">WhatsApp</a>
@@ -3896,7 +3898,7 @@ function renderProviderPage(){
           <input type="text" class="provider-regnumber" value="${escapeAttr(p.regNumber||'')}">
         </div>
         <div class="field-block">
-          <label>Telefon</label>
+          <label>${t('phone_label')}</label>
           <input type="text" class="provider-phone" value="${escapeAttr(p.phone||'')}">
         </div>
         <div class="field-block full">
