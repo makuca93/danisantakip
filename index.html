@@ -1928,11 +1928,18 @@ function exampleData(){
   };
 }
 
+function isSessionDue(session){
+  if(session.calendarEndTime){
+    return Date.now() >= new Date(session.calendarEndTime).getTime();
+  }
+  if(!session.date) return true;
+  return session.date <= todayIso();
+}
+
 function clientStatus(client){
   if(!client.sessions.length) return 'neutral';
   const noInvoice = !!(client.profile && client.profile.noInvoice);
-  const today = todayIso();
-  const pastSessions = client.sessions.filter(s => !s.date || s.date <= today);
+  const pastSessions = client.sessions.filter(s => isSessionDue(s));
   if(!pastSessions.length) return 'neutral';
   for(const s of pastSessions){
     const invoiceOk = noInvoice ? true : s.invoiceDone;
@@ -1945,10 +1952,9 @@ function clientStatus(client){
 
 function pendingChecklistCount(client){
   const noInvoice = !!(client.profile && client.profile.noInvoice);
-  const today = todayIso();
   let count = 0;
   (client.sessions||[]).forEach(s=>{
-    if(s.date && s.date > today) return; // future session — not due yet, don't count as pending
+    if(!isSessionDue(s)) return; // not due yet (session hasn't ended), don't count as pending
     if(!s.paymentDone) count++;
     if(!noInvoice && !s.invoiceDone) count++;
     if(!s.notesDone) count++;
@@ -2775,10 +2781,15 @@ async function loadNextAppointmentInfo(client){
   matches.forEach(ev=>{
     const start = ev.start.dateTime || ev.start.date;
     const dateOnly = start.slice(0,10);
+    const endTime = ev.end && ev.end.dateTime ? ev.end.dateTime : null;
     let session = client.sessions.find(s => s.calendarEventId === ev.id);
     if(session){
       if(session.date !== dateOnly){
         session.date = dateOnly;
+        changed = true;
+      }
+      if(session.calendarEndTime !== endTime){
+        session.calendarEndTime = endTime;
         changed = true;
       }
     }else{
@@ -2788,7 +2799,8 @@ async function loadNextAppointmentInfo(client){
         paymentDone:false, invoiceDone:false, notesDone:false,
         nextNote:'', nextDone:false,
         adminNote:'',
-        calendarEventId: ev.id
+        calendarEventId: ev.id,
+        calendarEndTime: endTime
       });
       changed = true;
     }
@@ -3220,7 +3232,7 @@ function renderSessionCard(client, session, index){
   div.className = 'session-card';
   const noInvoice = !!(client.profile && client.profile.noInvoice);
   const collapsed = isSessionCollapsed(session, index);
-  const isFuture = session.date && session.date > todayIso();
+  const isFuture = session.date && session.date >= todayIso();
   const isCalendarLinked = !!session.calendarEventId;
 
   div.innerHTML = `
