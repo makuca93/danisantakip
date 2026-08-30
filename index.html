@@ -953,6 +953,32 @@
   }
   .session-collapse-toggle:hover{color:var(--ink);}
   .session-card-body.collapsed{display:none;}
+  .future-session-banner{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    font-size:12.5px;
+    padding:8px 12px;
+    border-radius:8px;
+    margin-bottom:12px;
+  }
+  .future-session-actions{display:flex; gap:8px;}
+  .future-reschedule-btn, .future-cancel-btn{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    color:var(--ink);
+    font-size:12px;
+    font-weight:600;
+    padding:5px 10px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .future-cancel-btn:hover{color:var(--red); border-color:var(--red);}
   .session-date-input{
     font-family:inherit;
     font-weight:600;
@@ -3118,6 +3144,8 @@ function renderSessionCard(client, session, index){
   div.className = 'session-card';
   const noInvoice = !!(client.profile && client.profile.noInvoice);
   const collapsed = isSessionCollapsed(session, index);
+  const isFuture = session.date && session.date > todayIso();
+  const isCalendarLinked = !!session.calendarEventId;
 
   div.innerHTML = `
     <div class="session-card-top">
@@ -3125,6 +3153,15 @@ function renderSessionCard(client, session, index){
       <input type="date" class="session-date-input" value="${session.date||''}">
       <button class="session-del">Sil</button>
     </div>
+    ${isFuture ? `
+    <div class="future-session-banner">
+      <span>📅 Bu randevu henüz gerçekleşmedi${isCalendarLinked ? ' — Takvim ile bağlantılı' : ''}.</span>
+      ${isCalendarLinked ? `
+      <div class="future-session-actions">
+        <button class="future-reschedule-btn" type="button">✏️ Yeniden Planla</button>
+        <button class="future-cancel-btn" type="button">✕ İptal Et</button>
+      </div>` : ''}
+    </div>` : ''}
     <div class="session-card-body ${collapsed ? 'collapsed' : ''}">
     ${itemRow('Ödeme', boolLabel(session.paymentDone), 'paymentDone', session)}
     ${noInvoice ? `
@@ -3175,6 +3212,33 @@ function renderSessionCard(client, session, index){
       saveState(); render();
     }
   });
+  if(isFuture && isCalendarLinked){
+    div.querySelector('.future-reschedule-btn').addEventListener('click', async ()=>{
+      const newDate = prompt('Yeni tarih (YYYY-AA-GG):', session.date);
+      if(!newDate) return;
+      const newTime = prompt('Yeni saat (SS:DD):', '10:00');
+      if(!newTime) return;
+      const ok = await rescheduleCalendarEvent(session.calendarEventId, newDate, newTime);
+      if(ok){
+        session.date = newDate;
+        saveState();
+        render();
+      }else{
+        alert('Randevu güncellenemedi.');
+      }
+    });
+    div.querySelector('.future-cancel-btn').addEventListener('click', async ()=>{
+      if(!confirm('Bu randevu Takvim\'den iptal edilsin ve bu kayıt silinsin mi? Danışana bilgilendirme gider.')) return;
+      const ok = await cancelCalendarEvent(session.calendarEventId);
+      if(ok){
+        client.sessions = client.sessions.filter(s=>s.id!==session.id);
+        saveState();
+        render();
+      }else{
+        alert('Randevu iptal edilemedi.');
+      }
+    });
+  }
   div.querySelectorAll('.item-row input[type="checkbox"]:not([disabled])').forEach(cb=>{
     cb.addEventListener('change', (ev)=>{
       const key = ev.target.getAttribute('data-key');
