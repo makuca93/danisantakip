@@ -2860,18 +2860,24 @@ async function loadNextAppointmentInfo(client){
     saveState();
   }
 
-  if(!matches.length){
+  const displayCandidates = matches.filter(ev=>{
+    const end = ev.end && (ev.end.dateTime || ev.end.date);
+    if(!end) return true;
+    return new Date(end).getTime() > Date.now();
+  });
+
+  if(!displayCandidates.length){
     const html = '📅 Google Takviminde planlı bir randevu bulunamadı.';
     stillThere.textContent = html;
     stillThere.classList.add('muted-note');
     lastApptDisplay[client.id] = { html, muted: true };
   }else{
-    matches.sort((a,b)=>{
+    displayCandidates.sort((a,b)=>{
       const sa = a.start.dateTime || a.start.date;
       const sb = b.start.dateTime || b.start.date;
       return sa.localeCompare(sb);
     });
-    const soonest = matches[0];
+    const soonest = displayCandidates[0];
     const start = soonest.start.dateTime || soonest.start.date;
     const dateOnly = start.slice(0,10);
     const label = soonest.start.dateTime
