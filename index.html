@@ -946,9 +946,10 @@
     background:none;
     border:none;
     color:var(--muted);
-    font-size:13px;
+    font-size:20px;
+    line-height:1;
     cursor:pointer;
-    padding:2px 4px;
+    padding:4px 8px;
     flex-shrink:0;
   }
   .session-collapse-toggle:hover{color:var(--ink);}
@@ -1448,6 +1449,36 @@ let editingClientId = null;
 let sortMode = 'default';
 let searchQuery = '';
 let mainView = 'client';
+
+function saveViewState(){
+  try{
+    sessionStorage.setItem('viewState', JSON.stringify({ mainView, activeClientId }));
+  }catch(e){ /* sessionStorage unavailable, ignore */ }
+}
+
+function restoreViewState(){
+  try{
+    const raw = sessionStorage.getItem('viewState');
+    if(!raw) return false;
+    const saved = JSON.parse(raw);
+    if(saved.mainView === 'client' && saved.activeClientId){
+      const exists = state.clients.some(c => c.id === saved.activeClientId);
+      if(exists){
+        mainView = 'client';
+        activeClientId = saved.activeClientId;
+        return true;
+      }
+      return false;
+    }
+    if(['home','provider','settings'].includes(saved.mainView)){
+      mainView = saved.mainView;
+      return true;
+    }
+    return false;
+  }catch(e){
+    return false;
+  }
+}
 let homeSortMode = 'due';
 let homeMobileTab = 'tasks';
 
@@ -1658,7 +1689,8 @@ function proceedToApp(){
   document.getElementById('fileSetup').style.display = 'none';
   document.getElementById('appShell').classList.add('visible');
   document.getElementById('fileStatus').innerHTML = `<span class="dot"></span>${escapeHtml(currentUser.email || currentUser.displayName || 'Google hesabı')}`;
-  if(!activeClientId && state.clients.length){ activeClientId = state.clients[0].id; }
+  const restored = restoreViewState();
+  if(!restored && !activeClientId && state.clients.length){ activeClientId = state.clients[0].id; }
   lastBackupTime = Date.now();
   saveBackupSnapshot(state);
   resetInactivityTimer();
@@ -1864,6 +1896,7 @@ async function silentSignOut(){
   googleAccessToken = null;
   googleAccessTokenObtainedAt = 0;
   try{ sessionStorage.removeItem('googleAccessToken'); sessionStorage.removeItem('googleAccessTokenObtainedAt'); }catch(e){}
+  try{ sessionStorage.removeItem('viewState'); }catch(e){}
   try{ await window.FB.signOut(window.FB.auth); }catch(e){ console.error(e); }
 }
 
@@ -1963,6 +1996,7 @@ function getSortedClients(){
 
 /* ---------- Rendering ---------- */
 function render(){
+  saveViewState();
   renderSidebar();
   if(mainView === 'home'){
     renderHome();
