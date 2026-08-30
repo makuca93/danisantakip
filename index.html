@@ -35,22 +35,10 @@
   }
   *{box-sizing:border-box;}
   html, body{
-    width:100%;
     height:100%;
-    min-height:100%;
     margin:0;
     overflow:hidden;
     background:var(--paper);
-  }
-
-  /* iOS/iPadOS standalone web-app viewport fix */
-  html{
-    min-height:100dvh;
-    background:var(--paper);
-  }
-  body{
-    min-height:100dvh;
-    min-height:100svh;
   }
   body{
     font-family:'IBM Plex Sans', sans-serif;
@@ -92,12 +80,6 @@
     display:none;
     position:fixed;
     inset:0;
-    width:100%;
-    height:100%;
-    height:100dvh;
-    min-height:100svh;
-    overflow:hidden;
-    background:var(--paper);
   }
   #appShell.visible{display:flex;}
 
@@ -229,6 +211,7 @@
   .seal.red{background:var(--red);}
   .seal.green{background:var(--green);}
   .seal.neutral{background:var(--neutral);}
+  .seal.terminated{background:#4a4a52; box-shadow:0 0 0 3px rgba(74,74,82,0.18);}
   .client-name{
     flex:1;
     font-size:14px;
@@ -1148,11 +1131,11 @@
   }
 
   @media (max-width: 768px){
-    #sidebar{ width:100%; height:100%; height:100dvh; min-height:100svh; padding-top:max(18px, env(safe-area-inset-top)); padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; }
+    #sidebar{ width:100%; height:100%; padding-top:max(18px, env(safe-area-inset-top)); padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; }
     #appShell.visible{ flex-direction:column; }
     body.mobile-detail #sidebar{ display:none; }
     body:not(.mobile-detail) #main{ display:none; }
-    #main{ padding:18px 16px; padding-top:max(18px, env(safe-area-inset-top)); padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; min-height:0; height:100%; }
+    #main{ padding:18px 16px; padding-top:max(18px, env(safe-area-inset-top)); padding-bottom:max(18px, env(safe-area-inset-bottom)); position:relative; }
     .back-to-list{ display:flex; }
     .form-grid{ grid-template-columns:1fr; }
     .client-del, .client-edit{ opacity:1; font-size:17px; padding:6px 8px; }
@@ -1284,15 +1267,6 @@
     cursor:pointer;
   }
   .surprise-continue-btn:hover{filter:brightness(0.97);}
-
-/* iOS standalone viewport fix */
-html{height:100%;min-height:100%;margin:0;padding:0;overflow:hidden;}
-body{height:100%;min-height:100%;min-height:-webkit-fill-available;margin:0;padding:0;overflow:hidden;}
-#appShell{position:fixed;inset:0;width:100%;height:100%;min-height:100%;min-height:-webkit-fill-available;box-sizing:border-box;overflow:hidden;}
-@supports (height:100dvh){#appShell{height:100dvh;min-height:100dvh;}}
-#sidebar,#main{box-sizing:border-box;min-height:0;}
-#sidebar{height:100%;}
-#main{height:100%;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -1326,9 +1300,6 @@ body{height:100%;min-height:100%;min-height:-webkit-fill-available;margin:0;padd
     credentialFromResult: GoogleAuthProvider.credentialFromResult
   };
   window.dispatchEvent(new Event('fb-ready'));
-</script>
-<script>
-(function(){function sync(){var s=document.getElementById("appShell");if(!s)return;var v=window.visualViewport,h=v?v.height:window.innerHeight;s.style.height=h+"px";s.style.minHeight=h+"px";}window.addEventListener("resize",sync,{passive:true});window.addEventListener("orientationchange",function(){setTimeout(sync,100);setTimeout(sync,500);},{passive:true});if(window.visualViewport)window.visualViewport.addEventListener("resize",sync,{passive:true});document.addEventListener("DOMContentLoaded",function(){sync();setTimeout(sync,100);setTimeout(sync,500);});})();
 </script>
 </head>
 <body>
@@ -1834,7 +1805,7 @@ async function handleImportJsonFile(ev){
     if(!c.id) c.id = uid();
     if(!c.todos) c.todos = [];
     if(c.generalAdminNote == null) c.generalAdminNote = '';
-    if(!c.profile) c.profile = { info:'', address:'', phone:'', email:'', ifhp:false, rate:null };
+    if(!c.profile) c.profile = { info:'', address:'', phone:'', email:'', ifhp:false, rate:null, terminated:false };
     (c.sessions||[]).forEach(s=>{ if(!s.id) s.id = uid(); });
   });
   importedTodos.forEach(t=>{ if(!t.id) t.id = uid(); });
@@ -2072,11 +2043,13 @@ function renderSidebar(){
   clients.forEach(client=>{
     const li = document.createElement('li');
     li.className = 'client-row' + (mainView==='client' && client.id===activeClientId ? ' active' : '');
-    const status = clientStatus(client);
+    const isTerminated = !!(client.profile && client.profile.terminated);
+    const status = isTerminated ? 'terminated' : clientStatus(client);
+    const sealTitle = isTerminated ? 'Sonlanmış danışan' : '';
 
     if(client.id === editingClientId){
       li.innerHTML = `
-        <span class="seal ${status}"></span>
+        <span class="seal ${status}" title="${sealTitle}"></span>
         <input type="text" class="client-name-input" value="${escapeAttr(client.name)}">
       `;
       const input = li.querySelector('.client-name-input');
@@ -2101,7 +2074,7 @@ function renderSidebar(){
     const pendingCount = pendingTodoCount(client);
     const hasOverdueTodo = (client.todos||[]).some(t=>!t.done && t.dueDate && t.dueDate < todayIso());
     li.innerHTML = `
-      <span class="seal ${status}"></span>
+      <span class="seal ${status}" title="${sealTitle}"></span>
       <span class="client-name">${escapeHtml(client.name)}</span>
       ${pendingCount ? `<span class="todo-badge ${hasOverdueTodo?'overdue':''}" title="${pendingCount} tamamlanmamış iş${hasOverdueTodo?' — süresi geçmiş iş var':''}">${pendingCount}</span>` : ''}
       <button class="client-edit" title="Adını düzenle">✎</button>
@@ -3176,12 +3149,16 @@ function profilePanelHtml(client){
         <input type="number" class="profile-rate" placeholder="Seans ücreti (CA$)" value="${p.rate!=null?p.rate:''}" ${p.ifhp?'disabled':''} style="margin-top:8px; max-width:180px;">
         <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-no-invoice" ${p.noInvoice?'checked':''}><span>Bu danışana fatura hazırlanmayacak</span></div>
       </div>
+      <div class="field-block full">
+        <label>Danışan Durumu</label>
+        <div class="tick-row"><input type="checkbox" class="profile-terminated" ${p.terminated?'checked':''}><span>Danışan sonlandı (aktif değil)</span></div>
+      </div>
     </div>
   </div>`;
 }
 
 function wireProfilePanel(client){
-  if(!client.profile) client.profile = { info:'', address:'', phone:'', email:'', ifhp:false, rate:null };
+  if(!client.profile) client.profile = { info:'', address:'', phone:'', email:'', ifhp:false, rate:null, terminated:false };
   const panel = document.getElementById('profilePanel');
 
   panel.querySelector('.profile-info').addEventListener('blur', (ev)=>{
@@ -3237,6 +3214,14 @@ function wireProfilePanel(client){
     client.profile.noInvoice = noInvoiceCb.checked;
     saveState();
     renderMain();
+    document.getElementById('profilePanel').classList.add('open');
+  });
+
+  const terminatedCb = panel.querySelector('.profile-terminated');
+  terminatedCb.addEventListener('change', ()=>{
+    client.profile.terminated = terminatedCb.checked;
+    saveState();
+    render();
     document.getElementById('profilePanel').classList.add('open');
   });
 }
@@ -3466,7 +3451,7 @@ document.getElementById('addClientForm').addEventListener('submit', (ev)=>{
   const input = document.getElementById('newClientName');
   const name = input.value.trim();
   if(!name) return;
-  const client = { id: uid(), name, sessions: [], todos: [], generalAdminNote: '', profile: { info:'', address:'', phone:'', email:'', ifhp:false, rate:null } };
+  const client = { id: uid(), name, sessions: [], todos: [], generalAdminNote: '', profile: { info:'', address:'', phone:'', email:'', ifhp:false, rate:null, terminated:false } };
   state.clients.push(client);
   activeClientId = client.id;
   mainView = 'client';
