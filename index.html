@@ -2198,7 +2198,7 @@ function renderMain(){
   document.getElementById('toggleCalendarBtn').addEventListener('click', ()=>{
     const panel = document.getElementById('calendarPanel');
     panel.classList.toggle('open');
-    if(panel.classList.contains('open')) loadCalendarDayEvents(panel);
+    if(panel.classList.contains('open')) loadCalendarDayEvents(panel, client);
   });
   if(calendarWasOpen){
     document.getElementById('calendarPanel').classList.add('open');
@@ -2343,7 +2343,7 @@ async function createCalendarEvent(client, opts){
   const sessionLink = getProvider().sessionLink;
   if(sessionLink && sessionLink.trim()){
     event.location = sessionLink.trim();
-    event.description = `Seansımıza, yukarıdaki Konum (Location) alanındaki bağlantıya tıklayarak katılabilirsiniz.\n\nYou can join our session by clicking the link in the Location field above.`;
+    event.description = `You can join our session by clicking the link in the Location field.`;
   }
   if(opts.inviteClient && client.profile && client.profile.email){
     event.attendees = [{ email: client.profile.email.trim() }];
@@ -2793,6 +2793,18 @@ async function loadNextAppointmentInfo(client){
       changed = true;
     }
   });
+
+  // Detect sessions linked to a calendar event that no longer exists (cancelled directly
+  // in Google Calendar, outside the app) and remove them too — today-forward only.
+  const matchedEventIds = new Set(matches.map(ev => ev.id));
+  const cancelledElsewhere = client.sessions.filter(s =>
+    s.calendarEventId && s.date >= today && !matchedEventIds.has(s.calendarEventId)
+  );
+  if(cancelledElsewhere.length){
+    client.sessions = client.sessions.filter(s => !cancelledElsewhere.includes(s));
+    changed = true;
+  }
+
   if(changed){
     client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
     saveState();
@@ -2826,7 +2838,27 @@ async function loadNextAppointmentInfo(client){
   }
 }
 
-async function loadCalendarDayEvents(panel){
+function syncSessionDateForCalendarEvent(client, eventId, newDate){
+  const session = client.sessions.find(s => s.calendarEventId === eventId);
+  if(session && session.date !== newDate){
+    session.date = newDate;
+    saveState();
+    return true;
+  }
+  return false;
+}
+
+function removeSessionForCalendarEvent(client, eventId){
+  const before = client.sessions.length;
+  client.sessions = client.sessions.filter(s => s.calendarEventId !== eventId);
+  if(client.sessions.length !== before){
+    saveState();
+    return true;
+  }
+  return false;
+}
+
+async function loadCalendarDayEvents(panel, client){
   const dateStr = panel.querySelector('.cal-date').value;
   const box = panel.querySelector('.cal-day-events');
   if(!dateStr){ box.textContent = 'Tarih seçince görünecek…'; return; }
@@ -2857,8 +2889,13 @@ async function loadCalendarDayEvents(panel){
       if(!confirm('Bu randevu iptal edilsin mi? Danışana bilgilendirme gider.')) return;
       btn.disabled = true;
       const ok = await cancelCalendarEvent(eventId);
-      if(ok){ loadCalendarDayEvents(panel); }
-      else{ alert('Randevu iptal edilemedi.'); btn.disabled = false; }
+      if(ok){
+        const sessionRemoved = removeSessionForCalendarEvent(client, eventId);
+        if(sessionRemoved){ render(); }
+        else{ loadCalendarDayEvents(panel, client); }
+      }else{
+        alert('Randevu iptal edilemedi.'); btn.disabled = false;
+      }
     });
   });
   box.querySelectorAll('.cal-event-edit-btn').forEach(btn=>{
@@ -2871,8 +2908,13 @@ async function loadCalendarDayEvents(panel){
       if(!newTime) return;
       btn.disabled = true;
       const ok = await rescheduleCalendarEvent(eventId, newDate, newTime);
-      if(ok){ loadCalendarDayEvents(panel); }
-      else{ alert('Randevu güncellenemedi.'); btn.disabled = false; }
+      if(ok){
+        const sessionUpdated = syncSessionDateForCalendarEvent(client, eventId, newDate);
+        if(sessionUpdated){ render(); }
+        else{ loadCalendarDayEvents(panel, client); }
+      }else{
+        alert('Randevu güncellenemedi.'); btn.disabled = false;
+      }
     });
   });
 }
@@ -2880,8 +2922,8 @@ async function loadCalendarDayEvents(panel){
 function wireCalendarPanel(client){
   const panel = document.getElementById('calendarPanel');
 
-  panel.querySelector('.cal-date').addEventListener('change', ()=>loadCalendarDayEvents(panel));
-  if(panel.classList.contains('open')) loadCalendarDayEvents(panel);
+  panel.querySelector('.cal-date').addEventListener('change', ()=>loadCalendarDayEvents(panel, client));
+  if(panel.classList.contains('open')) loadCalendarDayEvents(panel, client);
 
   panel.querySelector('.cal-create-btn').addEventListener('click', async ()=>{
     const title = panel.querySelector('.cal-title').value.trim();
@@ -2903,7 +2945,7 @@ function wireCalendarPanel(client){
       panel.classList.remove('open');
       loadNextAppointmentInfo(client);
     }else{
-      loadCalendarDayEvents(panel);
+      loadCalendarDayEvents(panel, client);
     }
   });
 }
@@ -3596,7 +3638,7 @@ async function loadHomeCalendarAgenda(){
   homeCalendarCache = Object.keys(byDate).sort().map(dateStr=>{
     const rows = byDate[dateStr].map(({ev,client})=>{
       const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
-      return `<div class="cal-day-event-row" data-event-id="${ev.id}" data-event-date="${dateStr}">
+      return `<div class="cal-day-event-row" data-event-id="${ev.id}" data-event-date="${dateStr}" data-client-id="${client.id}">
         <span class="cal-day-event-time">${timeLabel}</span>
         <span class="cal-day-event-title">${escapeHtml(client.name)}</span>
         <button class="cal-event-edit-btn" type="button" title="Yeniden planla">✏️</button>
@@ -3614,10 +3656,13 @@ function wireHomeCalendarButtons(box){
     btn.addEventListener('click', async (ev)=>{
       const row = ev.target.closest('.cal-day-event-row');
       const eventId = row.getAttribute('data-event-id');
+      const clientId = row.getAttribute('data-client-id');
       if(!confirm('Bu randevu iptal edilsin mi? Danışana bilgilendirme gider.')) return;
       btn.disabled = true;
       const ok = await cancelCalendarEvent(eventId);
       if(ok){
+        const client = state.clients.find(c=>c.id===clientId);
+        if(client) removeSessionForCalendarEvent(client, eventId);
         homeCalendarCache = null;
         loadHomeCalendarAgenda();
       }else{
@@ -3630,6 +3675,7 @@ function wireHomeCalendarButtons(box){
     btn.addEventListener('click', async (ev)=>{
       const row = ev.target.closest('.cal-day-event-row');
       const eventId = row.getAttribute('data-event-id');
+      const clientId = row.getAttribute('data-client-id');
       const currentDate = row.getAttribute('data-event-date');
       const newDate = prompt('Yeni tarih (YYYY-AA-GG):', currentDate);
       if(!newDate) return;
@@ -3638,6 +3684,8 @@ function wireHomeCalendarButtons(box){
       btn.disabled = true;
       const ok = await rescheduleCalendarEvent(eventId, newDate, newTime);
       if(ok){
+        const client = state.clients.find(c=>c.id===clientId);
+        if(client) syncSessionDateForCalendarEvent(client, eventId, newDate);
         homeCalendarCache = null;
         loadHomeCalendarAgenda();
       }else{
