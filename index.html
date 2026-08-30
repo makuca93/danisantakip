@@ -3281,7 +3281,7 @@ function renderSessionCard(client, session, index){
   div.className = 'session-card';
   const noInvoice = !!(client.profile && client.profile.noInvoice);
   const collapsed = isSessionCollapsed(session, index);
-  const isFuture = session.date && session.date >= todayIso();
+  const isFuture = !isSessionDue(session);
   const isCalendarLinked = !!session.calendarEventId;
 
   div.innerHTML = `
