@@ -548,10 +548,23 @@
   }
   .cal-day-event-row{
     display:flex;
+    align-items:center;
     gap:10px;
     padding:5px 0;
     border-bottom:1px dashed var(--card-line);
   }
+  .cal-day-event-title{flex:1;}
+  .cal-event-edit-btn, .cal-event-cancel-btn{
+    background:none;
+    border:none;
+    color:var(--muted);
+    cursor:pointer;
+    font-size:12px;
+    padding:2px 4px;
+    flex-shrink:0;
+  }
+  .cal-event-edit-btn:hover{color:var(--ink);}
+  .cal-event-cancel-btn:hover{color:var(--red);}
   .cal-day-event-row:last-child{border-bottom:none;}
   .cal-day-event-time{font-weight:600; color:var(--ink); flex-shrink:0; width:48px;}
   .cal-day-event-title{color:var(--ink);}
@@ -923,10 +936,23 @@
   }
   .session-card-top{
     display:flex;
-    justify-content:space-between;
-    align-items:flex-start;
+    align-items:center;
+    gap:8px;
     margin-bottom:12px;
+    cursor:pointer;
   }
+  .session-card-top .session-date-input{flex:1;}
+  .session-collapse-toggle{
+    background:none;
+    border:none;
+    color:var(--muted);
+    font-size:13px;
+    cursor:pointer;
+    padding:2px 4px;
+    flex-shrink:0;
+  }
+  .session-collapse-toggle:hover{color:var(--ink);}
+  .session-card-body.collapsed{display:none;}
   .session-date-input{
     font-family:inherit;
     font-weight:600;
@@ -2132,8 +2158,8 @@ function renderMain(){
     wrap.innerHTML = `<div id="emptyState"><h2>Seans kaydı yok</h2><p>İlk seansı yukarıdaki formla ekleyin.</p></div>`;
     return;
   }
-  client.sessions.forEach(session=>{
-    wrap.appendChild(renderSessionCard(client, session));
+  client.sessions.forEach((session, index)=>{
+    wrap.appendChild(renderSessionCard(client, session, index));
   });
 }
 
@@ -2174,25 +2200,6 @@ function formatInvoiceDate(iso){
 }
 
 /* ---------- Google Calendar + Gmail (real attachment) integration ---------- */
-async function fetchNextAppointmentForEmail(email){
-  if(!email) return undefined;
-  const token = await getTokenSilentOnly();
-  if(!token) return undefined; // no error state, just "couldn't check silently"
-  const now = new Date();
-  const future = new Date(now.getTime() + 180*24*60*60*1000);
-  try{
-    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(now.toISOString())}&timeMax=${encodeURIComponent(future.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=15&q=${encodeURIComponent(email)}`;
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-    if(!res.ok) return undefined;
-    const data = await res.json();
-    const items = data.items || [];
-    const match = items.find(ev => (ev.attendees||[]).some(a => (a.email||'').toLowerCase() === email.trim().toLowerCase()));
-    return match || null;
-  }catch(e){
-    return undefined;
-  }
-}
-
 async function fetchDayEvents(dateStr){
   const token = await ensureGoogleAccessToken();
   if(!token) return null;
@@ -2215,6 +2222,48 @@ function formatEventTime(iso){
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
+async function cancelCalendarEvent(eventId){
+  const token = await ensureGoogleAccessToken();
+  if(!token) return false;
+  try{
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`, {
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    return res.ok || res.status === 410 || res.status === 404;
+  }catch(e){
+    return false;
+  }
+}
+
+async function rescheduleCalendarEvent(eventId, dateStr, timeStr){
+  const token = await ensureGoogleAccessToken();
+  if(!token) return false;
+  try{
+    const getRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(!getRes.ok) return false;
+    const existing = await getRes.json();
+    const oldStart = new Date(existing.start.dateTime || existing.start.date);
+    const oldEnd = new Date(existing.end.dateTime || existing.end.date);
+    const durationMs = oldEnd - oldStart;
+    const newStart = new Date(`${dateStr}T${timeStr}:00`);
+    const newEnd = new Date(newStart.getTime() + durationMs);
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`, {
+      method: 'PATCH',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        start: { dateTime: newStart.toISOString() },
+        end: { dateTime: newEnd.toISOString() }
+      })
+    });
+    return res.ok;
+  }catch(e){
+    return false;
+  }
+}
+
 async function createCalendarEvent(client, opts){
   const token = await ensureGoogleAccessToken();
   if(!token) return false;
@@ -2229,6 +2278,7 @@ async function createCalendarEvent(client, opts){
   const sessionLink = getProvider().sessionLink;
   if(sessionLink && sessionLink.trim()){
     event.location = sessionLink.trim();
+    event.description = `Seansımıza, yukarıdaki Konum (Location) alanındaki bağlantıya tıklayarak katılabilirsiniz.\n\nYou can join our session by clicking the link in the Location field above.`;
   }
   if(opts.inviteClient && client.profile && client.profile.email){
     event.attendees = [{ email: client.profile.email.trim() }];
@@ -2630,48 +2680,84 @@ async function loadNextAppointmentInfo(client){
     }
     return;
   }
-  const email = client.profile.email.trim();
-  const ev = await fetchNextAppointmentForEmail(email);
+  const email = client.profile.email.trim().toLowerCase();
+  const events = await fetchUpcomingRangeEvents(180);
   const stillThere = document.getElementById('nextApptInfo');
   if(!stillThere) return; // user navigated away while loading
   calendarCheckedClientIds.add(client.id);
-  if(ev === undefined){
+
+  if(events === null){
     const html = '📅 Takvim kontrol edilemedi (Google bağlantısı gerekebilir).';
     stillThere.textContent = html;
     stillThere.classList.add('muted-note');
     lastApptDisplay[client.id] = { html, muted: true };
-  }else if(ev === null){
+    return;
+  }
+
+  const today = todayIso();
+  const matches = events.filter(ev=>{
+    const attendees = ev.attendees || [];
+    const isMatch = attendees.some(a => (a.email||'').trim().toLowerCase() === email);
+    if(!isMatch) return false;
+    const start = ev.start && (ev.start.dateTime || ev.start.date);
+    if(!start) return false;
+    return start.slice(0,10) >= today;
+  });
+
+  // Sync: create a session record for any calendar appointment that doesn't have one yet,
+  // and keep the date of already-linked sessions up to date if it changed on Calendar.
+  let changed = false;
+  matches.forEach(ev=>{
+    const start = ev.start.dateTime || ev.start.date;
+    const dateOnly = start.slice(0,10);
+    let session = client.sessions.find(s => s.calendarEventId === ev.id);
+    if(session){
+      if(session.date !== dateOnly){
+        session.date = dateOnly;
+        changed = true;
+      }
+    }else{
+      client.sessions.push({
+        id: uid(),
+        date: dateOnly,
+        paymentDone:false, invoiceDone:false, notesDone:false,
+        nextNote:'', nextDone:false,
+        adminNote:'',
+        calendarEventId: ev.id
+      });
+      changed = true;
+    }
+  });
+  if(changed){
+    client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    saveState();
+  }
+
+  if(!matches.length){
     const html = '📅 Google Takviminde planlı bir randevu bulunamadı.';
     stillThere.textContent = html;
     stillThere.classList.add('muted-note');
     lastApptDisplay[client.id] = { html, muted: true };
   }else{
-    const start = ev.start && (ev.start.dateTime || ev.start.date);
-    const dateOnly = start ? start.slice(0,10) : '';
-    const label = ev.start && ev.start.dateTime
+    matches.sort((a,b)=>{
+      const sa = a.start.dateTime || a.start.date;
+      const sb = b.start.dateTime || b.start.date;
+      return sa.localeCompare(sb);
+    });
+    const soonest = matches[0];
+    const start = soonest.start.dateTime || soonest.start.date;
+    const dateOnly = start.slice(0,10);
+    const label = soonest.start.dateTime
       ? `${turkishDayName(dateOnly)}, ${formatShortDate(dateOnly)} ${formatEventTime(start)}`
       : `${turkishDayName(dateOnly)}, ${formatShortDate(dateOnly)}`;
-    const fullLabel = `${label}${ev.summary ? ` — ${ev.summary}` : ''}`;
+    const fullLabel = `${label}${soonest.summary ? ` — ${soonest.summary}` : ''}`;
     const html = `📅 Sonraki randevu (Takvimden otomatik): <strong>${escapeHtml(fullLabel)}</strong>`;
     stillThere.innerHTML = html;
     lastApptDisplay[client.id] = { html, muted: false };
+  }
 
-    const latestSession = client.sessions && client.sessions[0];
-    const now = Date.now();
-    const lastRun = autoFillCooldown[client.id] || 0;
-    if(latestSession && (latestSession.nextNote !== fullLabel || !latestSession.nextDone) && (now - lastRun > 8000)){
-      autoFillCooldown[client.id] = now;
-      latestSession.nextNote = fullLabel;
-      latestSession.nextDone = true;
-      saveState();
-      const firstCard = document.querySelector('.session-card');
-      if(firstCard){
-        const noteInput = firstCard.querySelector('.inline-note-input');
-        const checkbox = firstCard.querySelector('input[data-key="nextDone"]');
-        if(noteInput) noteInput.value = fullLabel;
-        if(checkbox) checkbox.checked = true;
-      }
-    }
+  if(changed){
+    render();
   }
 }
 
@@ -2691,8 +2777,39 @@ async function loadCalendarDayEvents(panel){
   }
   box.innerHTML = events.map(ev=>{
     const timeLabel = ev.start && ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
-    return `<div class="cal-day-event-row"><span class="cal-day-event-time">${timeLabel}</span><span class="cal-day-event-title">${escapeHtml(ev.summary||'(başlıksız)')}</span></div>`;
+    return `<div class="cal-day-event-row" data-event-id="${ev.id}">
+      <span class="cal-day-event-time">${timeLabel}</span>
+      <span class="cal-day-event-title">${escapeHtml(ev.summary||'(başlıksız)')}</span>
+      <button class="cal-event-edit-btn" type="button" title="Yeniden planla">✏️</button>
+      <button class="cal-event-cancel-btn" type="button" title="İptal et">✕</button>
+    </div>`;
   }).join('');
+
+  box.querySelectorAll('.cal-event-cancel-btn').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const row = ev.target.closest('.cal-day-event-row');
+      const eventId = row.getAttribute('data-event-id');
+      if(!confirm('Bu randevu iptal edilsin mi? Danışana bilgilendirme gider.')) return;
+      btn.disabled = true;
+      const ok = await cancelCalendarEvent(eventId);
+      if(ok){ loadCalendarDayEvents(panel); }
+      else{ alert('Randevu iptal edilemedi.'); btn.disabled = false; }
+    });
+  });
+  box.querySelectorAll('.cal-event-edit-btn').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const row = ev.target.closest('.cal-day-event-row');
+      const eventId = row.getAttribute('data-event-id');
+      const newDate = prompt('Yeni tarih (YYYY-AA-GG):', dateStr);
+      if(!newDate) return;
+      const newTime = prompt('Yeni saat (SS:DD):', '10:00');
+      if(!newTime) return;
+      btn.disabled = true;
+      const ok = await rescheduleCalendarEvent(eventId, newDate, newTime);
+      if(ok){ loadCalendarDayEvents(panel); }
+      else{ alert('Randevu güncellenemedi.'); btn.disabled = false; }
+    });
+  });
 }
 
 function wireCalendarPanel(client){
@@ -2984,16 +3101,26 @@ function readSessionForm(){
   };
 }
 
-function renderSessionCard(client, session){
+let sessionCollapseOverrides = {};
+
+function isSessionCollapsed(session, index){
+  if(sessionCollapseOverrides.hasOwnProperty(session.id)) return sessionCollapseOverrides[session.id];
+  return index !== 0;
+}
+
+function renderSessionCard(client, session, index){
   const div = document.createElement('div');
   div.className = 'session-card';
   const noInvoice = !!(client.profile && client.profile.noInvoice);
+  const collapsed = isSessionCollapsed(session, index);
 
   div.innerHTML = `
     <div class="session-card-top">
+      <button class="session-collapse-toggle" type="button" title="Daralt/Genişlet">${collapsed ? '▸' : '▾'}</button>
       <input type="date" class="session-date-input" value="${session.date||''}">
       <button class="session-del">Sil</button>
     </div>
+    <div class="session-card-body ${collapsed ? 'collapsed' : ''}">
     ${itemRow('Ödeme', boolLabel(session.paymentDone), 'paymentDone', session)}
     ${noInvoice ? `
     <div class="item-row invoice-blackout">
@@ -3018,7 +3145,25 @@ function renderSessionCard(client, session){
         <button class="invoice-gmail-btn" type="button" title="Gmail'de ekli taslak oluştur">📧 Gmail Taslağı</button>
       </div>
     </div>`}
+    </div>
   `;
+
+  const toggleCollapse = ()=>{
+    const body = div.querySelector('.session-card-body');
+    const nowCollapsed = !body.classList.contains('collapsed');
+    body.classList.toggle('collapsed', nowCollapsed);
+    div.querySelector('.session-collapse-toggle').textContent = nowCollapsed ? '▸' : '▾';
+    sessionCollapseOverrides[session.id] = nowCollapsed;
+  };
+  div.querySelector('.session-collapse-toggle').addEventListener('click', (ev)=>{
+    ev.stopPropagation();
+    toggleCollapse();
+  });
+  div.querySelector('.session-card-top').addEventListener('click', (ev)=>{
+    if(ev.target.closest('.session-date-input') || ev.target.closest('.session-del')) return;
+    toggleCollapse();
+  });
+
   div.querySelector('.session-del').addEventListener('click', ()=>{
     if(confirm('Bu kayıt silinsin mi?')){
       client.sessions = client.sessions.filter(s=>s.id!==session.id);
@@ -3303,6 +3448,7 @@ async function loadHomeCalendarAgenda(){
 
   if(homeCalendarCache !== null){
     box.innerHTML = homeCalendarCache;
+    wireHomeCalendarButtons(box);
     return;
   }
 
@@ -3347,11 +3493,56 @@ async function loadHomeCalendarAgenda(){
   homeCalendarCache = Object.keys(byDate).sort().map(dateStr=>{
     const rows = byDate[dateStr].map(({ev,client})=>{
       const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
-      return `<div class="cal-day-event-row"><span class="cal-day-event-time">${timeLabel}</span><span class="cal-day-event-title">${escapeHtml(client.name)}</span></div>`;
+      return `<div class="cal-day-event-row" data-event-id="${ev.id}" data-event-date="${dateStr}">
+        <span class="cal-day-event-time">${timeLabel}</span>
+        <span class="cal-day-event-title">${escapeHtml(client.name)}</span>
+        <button class="cal-event-edit-btn" type="button" title="Yeniden planla">✏️</button>
+        <button class="cal-event-cancel-btn" type="button" title="İptal et">✕</button>
+      </div>`;
     }).join('');
     return `<div class="agenda-day-group"><div class="agenda-day-header">${turkishDayName(dateStr)}, ${formatShortDate(dateStr)}</div>${rows}</div>`;
   }).join('');
   box.innerHTML = homeCalendarCache;
+  wireHomeCalendarButtons(box);
+}
+
+function wireHomeCalendarButtons(box){
+  box.querySelectorAll('.cal-event-cancel-btn').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const row = ev.target.closest('.cal-day-event-row');
+      const eventId = row.getAttribute('data-event-id');
+      if(!confirm('Bu randevu iptal edilsin mi? Danışana bilgilendirme gider.')) return;
+      btn.disabled = true;
+      const ok = await cancelCalendarEvent(eventId);
+      if(ok){
+        homeCalendarCache = null;
+        loadHomeCalendarAgenda();
+      }else{
+        alert('Randevu iptal edilemedi.');
+        btn.disabled = false;
+      }
+    });
+  });
+  box.querySelectorAll('.cal-event-edit-btn').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const row = ev.target.closest('.cal-day-event-row');
+      const eventId = row.getAttribute('data-event-id');
+      const currentDate = row.getAttribute('data-event-date');
+      const newDate = prompt('Yeni tarih (YYYY-AA-GG):', currentDate);
+      if(!newDate) return;
+      const newTime = prompt('Yeni saat (SS:DD):', '10:00');
+      if(!newTime) return;
+      btn.disabled = true;
+      const ok = await rescheduleCalendarEvent(eventId, newDate, newTime);
+      if(ok){
+        homeCalendarCache = null;
+        loadHomeCalendarAgenda();
+      }else{
+        alert('Randevu güncellenemedi.');
+        btn.disabled = false;
+      }
+    });
+  });
 }
 
 function renderHome(){
