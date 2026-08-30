@@ -1872,7 +1872,10 @@ function exampleData(){
 function clientStatus(client){
   if(!client.sessions.length) return 'neutral';
   const noInvoice = !!(client.profile && client.profile.noInvoice);
-  for(const s of client.sessions){
+  const today = todayIso();
+  const pastSessions = client.sessions.filter(s => !s.date || s.date <= today);
+  if(!pastSessions.length) return 'neutral';
+  for(const s of pastSessions){
     const invoiceOk = noInvoice ? true : s.invoiceDone;
     if(!(s.paymentDone && invoiceOk && s.notesDone && s.nextDone)){
       return 'red';
@@ -1883,8 +1886,10 @@ function clientStatus(client){
 
 function pendingChecklistCount(client){
   const noInvoice = !!(client.profile && client.profile.noInvoice);
+  const today = todayIso();
   let count = 0;
   (client.sessions||[]).forEach(s=>{
+    if(s.date && s.date > today) return; // future session — not due yet, don't count as pending
     if(!s.paymentDone) count++;
     if(!noInvoice && !s.invoiceDone) count++;
     if(!s.notesDone) count++;
