@@ -1980,6 +1980,7 @@ function pendingTodoCount(client){
 function lastSessionDate(client){
   let max = null;
   client.sessions.forEach(s=>{
+    if(!isSessionDue(s)) return; // ignore sessions that haven't happened yet
     if(s.date && (!max || s.date > max)) max = s.date;
   });
   return max;
@@ -2511,6 +2512,25 @@ async function createGmailDraftWithAttachment(client, session, doc, filename){
   }
 }
 
+async function savePdfWithPicker(doc, filename){
+  if('showSaveFilePicker' in window){
+    try{
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description:'PDF dosyası', accept:{'application/pdf':['.pdf']} }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(doc.output('arraybuffer'));
+      await writable.close();
+      return;
+    }catch(e){
+      if(e && e.name === 'AbortError') return; // user cancelled the picker
+      console.error('Kaydetme penceresi başarısız, otomatik indirmeye geçiliyor', e);
+    }
+  }
+  doc.save(filename);
+}
+
 function invoiceFilename(client, session){
   const namePart = toAscii(client.name).replace(/\s+/g,'');
   let dd='00', mm='00', yy='00';
@@ -2520,7 +2540,7 @@ function invoiceFilename(client, session){
     mm = String(d.getMonth()+1).padStart(2,'0');
     yy = String(d.getFullYear()).slice(-2);
   }
-  return `Invoice-${namePart}${dd}.${mm}.${yy}.pdf`;
+  return `Invoice-${namePart}${yy}.${mm}.${dd}.pdf`;
 }
 
 function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber){
@@ -2616,7 +2636,7 @@ function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber){
   return doc;
 }
 
-function generateInvoiceForSession(client, session, action){
+async function generateInvoiceForSession(client, session, action){
   const ifhp = !!(client.profile && client.profile.ifhp);
   let rate;
   if(ifhp){
@@ -2649,7 +2669,7 @@ function generateInvoiceForSession(client, session, action){
   logAudit('fatura/makbuz oluşturuldu', `${client.name} - ${action} - CA$${rate.toFixed(2)}${ifhp ? ' - #'+invoiceNumber : ''}`);
 
   if(action === 'save'){
-    doc.save(filename);
+    await savePdfWithPicker(doc, filename);
   }else if(action === 'share'){
     shareInvoiceFile(doc, filename, client);
   }else if(action === 'email'){
@@ -3525,14 +3545,33 @@ document.getElementById('settingsNavBtn').addEventListener('click', ()=>{
   render();
 });
 
-function exportCurrentDataJson(){
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type:'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+async function exportCurrentDataJson(){
+  const jsonText = JSON.stringify(state, null, 2);
   const d = new Date();
   const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const filename = `danisan-takip-yedek-${stamp}.json`;
+
+  if('showSaveFilePicker' in window){
+    try{
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description:'JSON dosyası', accept:{'application/json':['.json']} }]
+      });
+      const writable = await handle.createWritable();
+      await writable.write(jsonText);
+      await writable.close();
+      return;
+    }catch(e){
+      if(e && e.name === 'AbortError') return; // user cancelled the picker
+      console.error('Kaydetme penceresi başarısız, otomatik indirmeye geçiliyor', e);
+    }
+  }
+
+  const blob = new Blob([jsonText], { type:'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
   a.href = url;
-  a.download = `danisan-takip-yedek-${stamp}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
