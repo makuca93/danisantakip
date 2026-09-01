@@ -1721,6 +1721,15 @@ function canonicalPersonId(email){
   return null;
 }
 
+function otherPersonEmail(){
+  if(!currentUser || !currentUser.email) return null;
+  const personId = canonicalPersonId(currentUser.email);
+  if(!personId) return null;
+  const emails = PERSON_EMAILS[personId] || [];
+  const other = emails.find(e => e.toLowerCase() !== currentUser.email.toLowerCase());
+  return other || null;
+}
+
 const ALLOWED_EMAILS = [
   'duygu.rp@gmail.com',
   'duygu@ikitherapy.ca',
@@ -2456,12 +2465,22 @@ async function fetchDayEvents(dateStr){
   if(!token) return null;
   const start = new Date(`${dateStr}T00:00:00`);
   const end = new Date(`${dateStr}T23:59:59`);
+  const calendarIds = ['primary'];
+  const other = otherPersonEmail();
+  if(other) calendarIds.push(other);
   try{
-    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}&singleEvents=true&orderBy=startTime`;
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-    if(!res.ok) return null;
-    const data = await res.json();
-    return data.items || [];
+    const results = await Promise.all(calendarIds.map(async (calId)=>{
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}&singleEvents=true&orderBy=startTime`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if(!res.ok) return [];
+      const data = await res.json();
+      return (data.items || []).map(ev => ({ ...ev, _calendarId: calId }));
+    }));
+    return results.flat().sort((a,b)=>{
+      const sa = (a.start && (a.start.dateTime || a.start.date)) || '';
+      const sb = (b.start && (b.start.dateTime || b.start.date)) || '';
+      return sa.localeCompare(sb);
+    });
   }catch(e){
     return null;
   }
@@ -2478,11 +2497,12 @@ function formatEventTime(iso){
   return `${hour}:${minute} ${meridiem}`;
 }
 
-async function cancelCalendarEvent(eventId){
+async function cancelCalendarEvent(eventId, calendarId){
   const token = await ensureGoogleAccessToken();
   if(!token) return false;
+  const calId = calendarId || 'primary';
   try{
-    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`, {
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${eventId}?sendUpdates=all`, {
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });
@@ -2520,11 +2540,12 @@ function promptForTime(defaultText){
   return parsed;
 }
 
-async function rescheduleCalendarEvent(eventId, dateStr, timeStr){
+async function rescheduleCalendarEvent(eventId, dateStr, timeStr, calendarId){
   const token = await ensureGoogleAccessToken();
   if(!token) return false;
+  const calId = calendarId || 'primary';
   try{
-    const getRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+    const getRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${eventId}`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     if(!getRes.ok) return false;
@@ -2534,7 +2555,7 @@ async function rescheduleCalendarEvent(eventId, dateStr, timeStr){
     const durationMs = oldEnd - oldStart;
     const newStart = new Date(`${dateStr}T${timeStr}:00`);
     const newEnd = new Date(newStart.getTime() + durationMs);
-    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}?sendUpdates=all`, {
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${eventId}?sendUpdates=all`, {
       method: 'PATCH',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3119,7 +3140,7 @@ async function loadCalendarDayEvents(panel, client){
   }
   box.innerHTML = events.map(ev=>{
     const timeLabel = ev.start && ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
-    return `<div class="cal-day-event-row" data-event-id="${ev.id}">
+    return `<div class="cal-day-event-row" data-event-id="${ev.id}" data-calendar-id="${escapeAttr(ev._calendarId||'primary')}">
       <span class="cal-day-event-time">${timeLabel}</span>
       <span class="cal-day-event-title">${escapeHtml(ev.summary||'(başlıksız)')}</span>
       <button class="cal-event-edit-btn" type="button" title="Yeniden planla">✏️</button>
@@ -3131,9 +3152,10 @@ async function loadCalendarDayEvents(panel, client){
     btn.addEventListener('click', async (ev)=>{
       const row = ev.target.closest('.cal-day-event-row');
       const eventId = row.getAttribute('data-event-id');
+      const calendarId = row.getAttribute('data-calendar-id') || 'primary';
       if(!confirm('Bu randevu iptal edilsin mi? Danışana bilgilendirme gider.')) return;
       btn.disabled = true;
-      const ok = await cancelCalendarEvent(eventId);
+      const ok = await cancelCalendarEvent(eventId, calendarId);
       if(ok){
         const sessionRemoved = removeSessionForCalendarEvent(client, eventId);
         if(sessionRemoved){ render(); }
@@ -3147,12 +3169,13 @@ async function loadCalendarDayEvents(panel, client){
     btn.addEventListener('click', async (ev)=>{
       const row = ev.target.closest('.cal-day-event-row');
       const eventId = row.getAttribute('data-event-id');
+      const calendarId = row.getAttribute('data-calendar-id') || 'primary';
       const newDate = prompt('Yeni tarih (YYYY-AA-GG):', dateStr);
       if(!newDate) return;
       const newTime = promptForTime('10:00 AM');
       if(!newTime) return;
       btn.disabled = true;
-      const ok = await rescheduleCalendarEvent(eventId, newDate, newTime);
+      const ok = await rescheduleCalendarEvent(eventId, newDate, newTime, calendarId);
       if(ok){
         const sessionUpdated = syncSessionDateForCalendarEvent(client, eventId, newDate);
         if(sessionUpdated){ render(); }
@@ -4270,12 +4293,22 @@ async function fetchUpcomingRangeEvents(days){
   const startOfToday = new Date();
   startOfToday.setHours(0,0,0,0);
   const future = new Date(startOfToday.getTime() + days*24*60*60*1000);
+  const calendarIds = ['primary'];
+  const other = otherPersonEmail();
+  if(other) calendarIds.push(other);
   try{
-    const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(startOfToday.toISOString())}&timeMax=${encodeURIComponent(future.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=100`;
-    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-    if(!res.ok) return null;
-    const data = await res.json();
-    return data.items || [];
+    const results = await Promise.all(calendarIds.map(async (calId)=>{
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?timeMin=${encodeURIComponent(startOfToday.toISOString())}&timeMax=${encodeURIComponent(future.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=100`;
+      const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+      if(!res.ok) return [];
+      const data = await res.json();
+      return (data.items || []).map(ev => ({ ...ev, _calendarId: calId }));
+    }));
+    return results.flat().sort((a,b)=>{
+      const sa = (a.start && (a.start.dateTime || a.start.date)) || '';
+      const sb = (b.start && (b.start.dateTime || b.start.date)) || '';
+      return sa.localeCompare(sb);
+    });
   }catch(e){
     return null;
   }
@@ -4334,7 +4367,7 @@ async function loadHomeCalendarAgenda(){
   homeCalendarCache = Object.keys(byDate).sort().map(dateStr=>{
     const rows = byDate[dateStr].map(({ev,client})=>{
       const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
-      return `<div class="cal-day-event-row" data-event-id="${ev.id}" data-event-date="${dateStr}" data-client-id="${client.id}">
+      return `<div class="cal-day-event-row" data-event-id="${ev.id}" data-event-date="${dateStr}" data-client-id="${client.id}" data-calendar-id="${escapeAttr(ev._calendarId||'primary')}">
         <span class="cal-day-event-time">${timeLabel}</span>
         <span class="cal-day-event-title">${escapeHtml(client.name)}</span>
         <button class="cal-event-edit-btn" type="button" title="Yeniden planla">✏️</button>
@@ -4353,9 +4386,10 @@ function wireHomeCalendarButtons(box){
       const row = ev.target.closest('.cal-day-event-row');
       const eventId = row.getAttribute('data-event-id');
       const clientId = row.getAttribute('data-client-id');
+      const calendarId = row.getAttribute('data-calendar-id') || 'primary';
       if(!confirm('Bu randevu iptal edilsin mi? Danışana bilgilendirme gider.')) return;
       btn.disabled = true;
-      const ok = await cancelCalendarEvent(eventId);
+      const ok = await cancelCalendarEvent(eventId, calendarId);
       if(ok){
         const client = state.clients.find(c=>c.id===clientId);
         if(client) removeSessionForCalendarEvent(client, eventId);
@@ -4372,13 +4406,14 @@ function wireHomeCalendarButtons(box){
       const row = ev.target.closest('.cal-day-event-row');
       const eventId = row.getAttribute('data-event-id');
       const clientId = row.getAttribute('data-client-id');
+      const calendarId = row.getAttribute('data-calendar-id') || 'primary';
       const currentDate = row.getAttribute('data-event-date');
       const newDate = prompt('Yeni tarih (YYYY-AA-GG):', currentDate);
       if(!newDate) return;
       const newTime = promptForTime('10:00 AM');
       if(!newTime) return;
       btn.disabled = true;
-      const ok = await rescheduleCalendarEvent(eventId, newDate, newTime);
+      const ok = await rescheduleCalendarEvent(eventId, newDate, newTime, calendarId);
       if(ok){
         const client = state.clients.find(c=>c.id===clientId);
         if(client) syncSessionDateForCalendarEvent(client, eventId, newDate);
