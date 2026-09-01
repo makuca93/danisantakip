@@ -685,6 +685,8 @@
   .cal-day-event-row:last-child{border-bottom:none;}
   .cal-day-event-time{font-weight:600; color:var(--ink); flex-shrink:0; width:48px;}
   .cal-day-event-title{color:var(--ink);}
+  .cal-client-link{cursor:pointer;}
+  .cal-client-link:hover{text-decoration:underline;}
   .cal-day-empty{font-style:italic; color:var(--green);}
   .todo-add-row{
     display:flex;
@@ -4416,7 +4418,7 @@ async function loadHomeCalendarAgenda(){
       const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
       return `<div class="cal-day-event-row" data-event-id="${ev.id}" data-event-date="${dateStr}" data-client-id="${client.id}" data-calendar-id="${escapeAttr(ev._calendarId||'primary')}">
         <span class="cal-day-event-time">${timeLabel}</span>
-        <span class="cal-day-event-title">${escapeHtml(client.name)}</span>
+        <span class="cal-day-event-title cal-client-link" data-client-id="${client.id}">${escapeHtml(client.name)}</span>
         <button class="cal-event-edit-btn" type="button" title="Yeniden planla">✏️</button>
         <button class="cal-event-cancel-btn" type="button" title="İptal et">✕</button>
       </div>`;
@@ -4428,6 +4430,16 @@ async function loadHomeCalendarAgenda(){
 }
 
 function wireHomeCalendarButtons(box){
+  box.querySelectorAll('.cal-client-link').forEach(link=>{
+    link.addEventListener('click', ()=>{
+      const clientId = link.getAttribute('data-client-id');
+      activeClientId = clientId;
+      mainView = 'client';
+      document.body.classList.add('mobile-detail');
+      render();
+    });
+  });
+
   box.querySelectorAll('.cal-event-cancel-btn').forEach(btn=>{
     btn.addEventListener('click', async (ev)=>{
       const row = ev.target.closest('.cal-day-event-row');
