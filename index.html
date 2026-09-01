@@ -4060,6 +4060,7 @@ async function exportCurrentDataJson(){
 let practiceState = null;
 let practiceStatsFilter = 'toplam';
 let practiceTaskAssigneeFilter = 'all';
+let practiceTaskSortMode = 'due';
 let practiceDoneCollapsed = true;
 let editingPracticeTaskId = null;
 let editingPracticeNoteId = null;
@@ -4286,7 +4287,10 @@ function renderPracticeContent(){
   const main = document.getElementById('main');
   const allTasks = practiceState.tasks || [];
   const filteredTasks = practiceTaskAssigneeFilter === 'all' ? allTasks : allTasks.filter(t=>t.assignedTo===practiceTaskAssigneeFilter);
-  const pendingTasks = filteredTasks.filter(t=>!t.done).sort((a,b)=>(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
+  const pendingTasks = filteredTasks.filter(t=>!t.done).sort((a,b)=>{
+    if(practiceTaskSortMode === 'importance') return (b.importance||0) - (a.importance||0);
+    return (a.dueDate||'9999').localeCompare(b.dueDate||'9999');
+  });
   const doneTasks = filteredTasks.filter(t=>t.done);
   const notesSorted = (practiceState.notes||[]).slice().sort((a,b)=>b.createdAt-a.createdAt);
 
@@ -4319,6 +4323,10 @@ function renderPracticeContent(){
           <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='all'?'active':''}" data-filter="all">Tümü</button>
           <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='kubilay'?'active':''}" data-filter="kubilay">Kubilay'a Atananlar</button>
           <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='duygu'?'active':''}" data-filter="duygu">Duygu'ya Atananlar</button>
+          <select class="practice-task-sort-select" style="margin-left:auto;">
+            <option value="due" ${practiceTaskSortMode==='due'?'selected':''}>Son tarihe göre</option>
+            <option value="importance" ${practiceTaskSortMode==='importance'?'selected':''}>Öneme göre</option>
+          </select>
         </div>
         <div id="practiceTaskList">
           ${pendingTasks.length ? pendingTasks.map(practiceTaskRowHtml).join('') : '<div class="todo-empty">Bekleyen iş yok.</div>'}
@@ -4408,6 +4416,11 @@ function wirePracticePage(){
       practiceTaskAssigneeFilter = btn.getAttribute('data-filter');
       renderPracticeContent();
     });
+  });
+
+  document.querySelector('.practice-task-sort-select').addEventListener('change', (ev)=>{
+    practiceTaskSortMode = ev.target.value;
+    renderPracticeContent();
   });
 
   const practiceDoneToggle = document.getElementById('practiceDoneToggle');
