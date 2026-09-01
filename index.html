@@ -934,6 +934,12 @@
     background:transparent;
     border-radius:5px;
     padding:2px 4px;
+    resize:none;
+    overflow:hidden;
+    white-space:normal;
+    word-wrap:break-word;
+    display:block;
+    line-height:1.4;
   }
   .home-task-text-input:hover, .home-task-text-input:focus{
     border-color:var(--card-line);
@@ -941,6 +947,55 @@
   }
   .home-task-row.done .home-task-text-input{text-decoration:line-through; color:var(--muted);}
   .home-task-meta{display:flex; align-items:center; gap:8px; margin-top:4px; flex-wrap:wrap;}
+  .task-extras-toggle{
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:10px;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .task-extras-toggle.has-content{background:var(--highlight); border-color:var(--highlight-line); color:var(--ink);}
+  .task-extras{
+    margin-top:8px;
+    padding-top:8px;
+    border-top:1px dashed var(--card-line);
+  }
+  .task-extras.collapsed{display:none;}
+  .task-note-input{
+    width:100%;
+    min-height:50px;
+    font-family:inherit;
+    font-size:13px;
+    color:var(--ink);
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    padding:7px 9px;
+    background:#fdfcfd;
+    resize:vertical;
+    margin-bottom:8px;
+  }
+  .task-subtasks{display:flex; flex-direction:column; gap:4px;}
+  .task-subtask-row{display:flex; align-items:center; gap:8px;}
+  .task-subtask-row input[type="checkbox"]{width:15px; height:15px; accent-color:var(--green); flex-shrink:0;}
+  .task-subtask-text{flex:1; font-size:13px; color:var(--ink);}
+  .task-subtask-text.done{text-decoration:line-through; color:var(--muted);}
+  .task-subtask-del{background:none; border:none; color:var(--muted); cursor:pointer; font-size:11px; flex-shrink:0;}
+  .task-subtask-del:hover{color:var(--red);}
+  .task-subtask-add-row{margin-top:2px;}
+  .task-subtask-add-input{
+    width:100%;
+    font-family:inherit;
+    font-size:13px;
+    padding:6px 8px;
+    border:1px solid transparent;
+    border-radius:6px;
+    background:transparent;
+    color:var(--muted);
+  }
+  .task-subtask-add-input:focus{border-color:var(--card-line); background:#fdfcfd; color:var(--ink);}
   .home-task-client{
     font-size:12px; font-weight:600; color:var(--ink);
     background:var(--highlight); padding:2px 9px; border-radius:10px; cursor:pointer;
@@ -3046,6 +3101,83 @@ function turkishDayName(iso){
   return days[d.getDay()];
 }
 
+/* ---------- Shared task notes + subtasks (used by client, home, and practice task lists) ---------- */
+let expandedTaskExtras = new Set();
+
+function taskExtrasToggleHtml(item){
+  const subtasks = item.subtasks || [];
+  const doneCount = subtasks.filter(s=>s.done).length;
+  const hasContent = (item.note && item.note.trim()) || subtasks.length;
+  return `<button class="task-extras-toggle ${hasContent ? 'has-content' : ''}" type="button" title="Not ve alt görevler">📝${subtasks.length ? ` ${doneCount}/${subtasks.length}` : ''}</button>`;
+}
+
+function taskExtrasBodyHtml(item){
+  const subtasks = item.subtasks || [];
+  const open = expandedTaskExtras.has(item.id);
+  return `
+  <div class="task-extras ${open ? '' : 'collapsed'}">
+    <textarea class="task-note-input" placeholder="Not ekle…">${escapeHtml(item.note||'')}</textarea>
+    <div class="task-subtasks">
+      ${subtasks.map(s => `
+        <div class="task-subtask-row" data-subtask-id="${s.id}">
+          <input type="checkbox" class="task-subtask-check" ${s.done?'checked':''}>
+          <span class="task-subtask-text ${s.done?'done':''}">${escapeHtml(s.text)}</span>
+          <button class="task-subtask-del" title="Sil">✕</button>
+        </div>`).join('')}
+      <div class="task-subtask-add-row">
+        <input type="text" class="task-subtask-add-input" placeholder="+ Alt görev ekle (Enter)…">
+      </div>
+    </div>
+  </div>`;
+}
+
+function wireTaskExtras(row, item, onSave, onRerender){
+  const toggle = row.querySelector('.task-extras-toggle');
+  if(toggle){
+    toggle.addEventListener('click', (ev)=>{
+      ev.stopPropagation();
+      if(expandedTaskExtras.has(item.id)) expandedTaskExtras.delete(item.id);
+      else expandedTaskExtras.add(item.id);
+      onRerender();
+    });
+  }
+  const noteInput = row.querySelector('.task-note-input');
+  if(noteInput){
+    noteInput.addEventListener('blur', (ev)=>{
+      item.note = ev.target.value;
+      onSave();
+    });
+  }
+  row.querySelectorAll('.task-subtask-check').forEach(cb=>{
+    cb.addEventListener('change', (ev)=>{
+      const id = ev.target.closest('[data-subtask-id]').getAttribute('data-subtask-id');
+      const st = (item.subtasks||[]).find(s=>s.id===id);
+      if(st){ st.done = ev.target.checked; onSave(); onRerender(); }
+    });
+  });
+  row.querySelectorAll('.task-subtask-del').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      const id = ev.target.closest('[data-subtask-id]').getAttribute('data-subtask-id');
+      item.subtasks = (item.subtasks||[]).filter(s=>s.id!==id);
+      onSave(); onRerender();
+    });
+  });
+  const addInput = row.querySelector('.task-subtask-add-input');
+  if(addInput){
+    addInput.addEventListener('keydown', (ev)=>{
+      if(ev.key === 'Enter'){
+        ev.preventDefault();
+        const text = addInput.value.trim();
+        if(text){
+          if(!item.subtasks) item.subtasks = [];
+          item.subtasks.push({ id: uid(), text, done:false });
+          onSave(); onRerender();
+        }
+      }
+    });
+  }
+}
+
 function stars(n){
   return '⭐'.repeat(n) + '☆'.repeat(3-n);
 }
@@ -3078,7 +3210,9 @@ function todoItemHtml(todo){
           <option value="3" ${todo.importance===3?'selected':''}>⭐⭐⭐ Yüksek</option>
         </select>
         <input type="date" class="todo-item-duedate-input ${overdue?'overdue':''}" value="${todo.dueDate||''}">
+        ${taskExtrasToggleHtml(todo)}
       </div>
+      ${taskExtrasBodyHtml(todo)}
     </div>
     <button class="todo-del" title="Sil">✕</button>
   </div>`;
@@ -3478,6 +3612,8 @@ function wireTodoPanel(client){
         document.getElementById('todoPanel').classList.add('open');
       }
     });
+    const todoItem = client.todos.find(t=>t.id===id);
+    wireTaskExtras(row, todoItem, saveState, refresh);
   });
 }
 
@@ -4080,7 +4216,9 @@ function practiceTaskRowHtml(t){
         <span class="home-task-client">${personLabel(t.assignedBy)} → ${personLabel(t.assignedTo)}</span>
         ${t.dueDate ? `<span>${formatShortDate(t.dueDate)}</span>` : ''}
         <span>${stars(t.importance)}</span>
+        ${taskExtrasToggleHtml(t)}
       </div>
+      ${taskExtrasBodyHtml(t)}
     </div>
     <button class="practice-task-edit-btn" title="Düzenle">✏️</button>
     <button class="home-task-del" title="Sil">✕</button>
@@ -4320,6 +4458,14 @@ function wirePracticePage(){
       await savePracticeShared();
       renderPracticeContent();
     });
+  });
+
+  document.querySelectorAll('#practiceTaskList .home-task-row, #practiceDoneTaskList .home-task-row').forEach(row=>{
+    const id = row.getAttribute('data-id');
+    const task = (practiceState.tasks||[]).find(t=>t.id===id);
+    if(task){
+      wireTaskExtras(row, task, savePracticeShared, renderPracticeContent);
+    }
   });
 
   document.querySelectorAll('.practice-task-edit-btn').forEach(btn=>{
@@ -4874,6 +5020,10 @@ function renderHome(){
       if(val){ todo.text = val; saveState(); }
       else{ ev.target.value = todo.text; }
     });
+    const taskTextEl = row.querySelector('.home-task-text-input');
+    const autoResize = ()=>{ taskTextEl.style.height = 'auto'; taskTextEl.style.height = taskTextEl.scrollHeight + 'px'; };
+    taskTextEl.addEventListener('input', autoResize);
+    autoResize();
     row.querySelector('.home-task-importance-select').addEventListener('change', (ev)=>{
       const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
       const todo = list.find(t=>t.id===todoId);
@@ -4888,6 +5038,11 @@ function renderHome(){
       saveState();
       renderHome();
     });
+    {
+      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const todo = list.find(t=>t.id===todoId);
+      wireTaskExtras(row, todo, saveState, renderHome);
+    }
     row.querySelector('.home-task-del').addEventListener('click', ()=>{
       if(!confirm('Bu iş silinsin mi?')) return;
       if(clientId){
@@ -4952,7 +5107,7 @@ function homeTaskRowHtml(clientId, clientName, todo){
   <div class="home-task-row ${todo.done?'done':''}" data-client-id="${clientId||''}" data-todo-id="${todo.id}">
     <input type="checkbox" class="home-task-check" ${todo.done?'checked':''}>
     <div class="home-task-main">
-      <input type="text" class="home-task-text-input" value="${escapeAttr(todo.text)}">
+      <textarea class="home-task-text-input" rows="1">${escapeHtml(todo.text)}</textarea>
       <div class="home-task-meta">
         ${clientName ? `<span class="home-task-client">${escapeHtml(clientName)}</span>` : `<span class="home-task-general">Genel</span>`}
         <select class="home-task-importance-select">
@@ -4961,7 +5116,9 @@ function homeTaskRowHtml(clientId, clientName, todo){
           <option value="3" ${todo.importance===3?'selected':''}>⭐⭐⭐ Yüksek</option>
         </select>
         <input type="date" class="home-task-duedate-input ${overdue?'overdue':''}" value="${todo.dueDate||''}">
+        ${taskExtrasToggleHtml(todo)}
       </div>
+      ${taskExtrasBodyHtml(todo)}
     </div>
     <button class="home-task-del" title="Sil">✕</button>
   </div>`;
