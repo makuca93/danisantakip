@@ -2699,27 +2699,30 @@ async function syncClientToGoogleContacts(client){
 let contactSyncTimers = {};
 
 function scheduleContactSync(client){
-  if(contactSyncTimers[client.id]){
-    clearTimeout(contactSyncTimers[client.id]);
+  const clientId = client.id;
+  if(contactSyncTimers[clientId]){
+    clearTimeout(contactSyncTimers[clientId]);
   }
-  contactSyncTimers[client.id] = setTimeout(()=>{
-    delete contactSyncTimers[client.id];
-    syncClientToGoogleContacts(client);
+  contactSyncTimers[clientId] = setTimeout(()=>{
+    delete contactSyncTimers[clientId];
+    const liveClient = state.clients.find(c => c.id === clientId);
+    if(liveClient) syncClientToGoogleContacts(liveClient);
   }, 1500);
 }
 
 let contactsSyncRunning = false;
 
 async function syncAllClientsToGoogleContacts(onProgress){
-  const candidates = state.clients.filter(c => c.profile && (c.profile.email || c.profile.phone));
+  const candidateIds = state.clients.filter(c => c.profile && (c.profile.email || c.profile.phone)).map(c=>c.id);
   let done = 0;
-  for(const client of candidates){
-    await syncClientToGoogleContacts(client);
+  for(const clientId of candidateIds){
+    const liveClient = state.clients.find(c=>c.id===clientId);
+    if(liveClient) await syncClientToGoogleContacts(liveClient);
     done++;
-    if(onProgress) onProgress(done, candidates.length);
+    if(onProgress) onProgress(done, candidateIds.length);
     await new Promise(r => setTimeout(r, 250)); // small pause to avoid rate limits
   }
-  return { total: candidates.length };
+  return { total: candidateIds.length };
 }
 
 async function createCalendarEvent(client, opts){
