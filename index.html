@@ -2546,7 +2546,7 @@ async function cancelCalendarEvent(eventId, calendarId){
 function timeOptions5MinHtml(){
   const opts = [];
   for(let h = 0; h < 24; h++){
-    for(let m = 0; m < 60; m += 5){
+    for(let m = 0; m < 60; m += 15){
       let hour12 = h % 12;
       if(hour12 === 0) hour12 = 12;
       const meridiem = h >= 12 ? 'PM' : 'AM';
@@ -2614,6 +2614,21 @@ async function rescheduleCalendarEvent(eventId, dateStr, timeStr, calendarId){
   }
 }
 
+async function findExistingGoogleContact(token, email){
+  if(!email) return null;
+  try{
+    const url = `https://people.googleapis.com/v1/people:searchContacts?query=${encodeURIComponent(email)}&readMask=names,emailAddresses,phoneNumbers`;
+    const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+    if(!res.ok) return null;
+    const data = await res.json();
+    const results = data.results || [];
+    const match = results.find(r => (r.person.emailAddresses||[]).some(e => e.value && e.value.toLowerCase() === email.toLowerCase()));
+    return match ? match.person.resourceName : null;
+  }catch(e){
+    return null;
+  }
+}
+
 async function syncClientToGoogleContacts(client){
   const email = client.profile && client.profile.email ? client.profile.email.trim() : '';
   const phone = client.profile && client.profile.phone ? client.profile.phone.trim() : '';
@@ -2647,6 +2662,12 @@ async function syncClientToGoogleContacts(client){
         console.error('Google Kişi güncellenemedi', await updateRes.text());
       }
     }else{
+      const foundResourceName = await findExistingGoogleContact(token, email);
+      if(foundResourceName){
+        client.googleContactResourceName = foundResourceName;
+        saveState();
+        return;
+      }
       const res = await fetch('https://people.googleapis.com/v1/people:createContact', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -2664,6 +2685,8 @@ async function syncClientToGoogleContacts(client){
     console.error('Google Kişiler senkron hatası', e);
   }
 }
+
+let contactsSyncRunning = false;
 
 async function syncAllClientsToGoogleContacts(onProgress){
   const candidates = state.clients.filter(c => c.profile && (c.profile.email || c.profile.phone));
@@ -4378,7 +4401,7 @@ function renderSettingsPage(){
     <div class="settings-section">
       <h3>📇 Google Kişiler</h3>
       <p>Email ya da telefonu olan tüm danışanları, şu an açık olan Google hesabının Kişiler'ine (rehberine) aktar. Zaten aktarılmış olanlar güncellenir, tekrar kopyalanmaz.</p>
-      <button class="settings-btn" id="settingsSyncContactsBtn">Tüm Danışanları Aktar</button>
+      <button class="settings-btn" id="settingsSyncContactsBtn" ${contactsSyncRunning ? 'disabled' : ''}>${contactsSyncRunning ? 'Aktarılıyor…' : 'Tüm Danışanları Aktar'}</button>
       <div id="contactsSyncStatus" style="margin-top:10px; font-size:12.5px; color:var(--muted);"></div>
     </div>
 
@@ -4404,19 +4427,24 @@ function renderSettingsPage(){
   document.getElementById('settingsSignOutBtn').addEventListener('click', signOutAccount);
 
   document.getElementById('settingsSyncContactsBtn').addEventListener('click', async ()=>{
-    const btn = document.getElementById('settingsSyncContactsBtn');
-    const status = document.getElementById('contactsSyncStatus');
-    btn.disabled = true;
-    status.textContent = 'Başlatılıyor…';
+    if(contactsSyncRunning) return;
+    contactsSyncRunning = true;
+    renderSettingsPage();
+    const status0 = document.getElementById('contactsSyncStatus');
+    if(status0) status0.textContent = 'Başlatılıyor…';
     try{
       const result = await syncAllClientsToGoogleContacts((done, total)=>{
-        status.textContent = `${done} / ${total} danışan aktarıldı…`;
+        const s = document.getElementById('contactsSyncStatus');
+        if(s) s.textContent = `${done} / ${total} danışan aktarıldı…`;
       });
-      status.textContent = `Tamamlandı — ${result.total} danışan kontrol edildi.`;
+      const s = document.getElementById('contactsSyncStatus');
+      if(s) s.textContent = `Tamamlandı — ${result.total} danışan kontrol edildi.`;
     }catch(e){
-      status.textContent = 'Bir hata oluştu, tekrar deneyebilirsin.';
+      const s = document.getElementById('contactsSyncStatus');
+      if(s) s.textContent = 'Bir hata oluştu, tekrar deneyebilirsin.';
     }
-    btn.disabled = false;
+    contactsSyncRunning = false;
+    renderSettingsPage();
   });
   document.getElementById('settingsResetBtn').addEventListener('click', resetAllData);
 }
