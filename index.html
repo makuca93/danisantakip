@@ -421,6 +421,43 @@
   }
   .practice-stats-filter-btn.active{background:var(--highlight); border-color:var(--highlight-line); color:var(--ink);}
   .practice-stats-note{font-size:12px; color:var(--muted); margin:0 0 10px; font-style:italic;}
+  .practice-task-edit-btn{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:2px 4px; flex-shrink:0;}
+  .practice-task-edit-btn:hover{color:var(--ink);}
+  .practice-task-editing{background:var(--paper); border-radius:8px; padding:10px;}
+  .practice-task-edit-form{width:100%; display:flex; flex-direction:column; gap:8px;}
+  .practice-task-edit-form input, .practice-task-edit-form select{
+    font-family:inherit;
+    font-size:13.5px;
+    padding:7px 9px;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    background:#fdfcfd;
+  }
+  .practice-task-edit-title{width:100%;}
+  .practice-task-edit-row{display:flex; gap:8px; flex-wrap:wrap;}
+  .practice-task-edit-row select, .practice-task-edit-row input{flex:1; min-width:100px;}
+  .practice-task-edit-actions{display:flex; gap:8px;}
+  .practice-task-save-btn{
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    font-family:inherit;
+    font-size:13px;
+    font-weight:600;
+    padding:7px 14px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .practice-task-cancel-btn{
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-family:inherit;
+    font-size:13px;
+    padding:7px 14px;
+    border-radius:6px;
+    cursor:pointer;
+  }
   .practice-stats-grid{
     display:grid;
     grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));
@@ -447,9 +484,33 @@
   .practice-note-meta{font-size:11px; color:var(--muted); white-space:nowrap; margin-top:2px;}
   .practice-note-del{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; flex-shrink:0;}
   .practice-note-del:hover{color:var(--red);}
-  .practice-activity-row{font-size:12.5px; color:var(--muted); padding:6px 0; border-bottom:1px dashed var(--card-line);}
+  .practice-activity-row{font-size:12.5px; color:var(--muted); padding:6px 0; border-bottom:1px dashed var(--card-line); display:flex; align-items:center; gap:8px;}
   .practice-activity-row:last-child{border-bottom:none;}
-  .practice-activity-time{font-weight:600; color:var(--ink);}
+  .practice-activity-time{font-weight:600; color:var(--ink); flex-shrink:0;}
+  .practice-activity-row > span + span, .practice-activity-row{flex-wrap:wrap;}
+  .practice-activity-del{
+    margin-left:auto;
+    background:none;
+    border:none;
+    color:var(--muted);
+    cursor:pointer;
+    font-size:11px;
+    padding:2px 4px;
+    flex-shrink:0;
+  }
+  .practice-activity-del:hover{color:var(--red);}
+  .practice-activity-clear-btn{
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-size:11.5px;
+    padding:4px 10px;
+    border-radius:6px;
+    cursor:pointer;
+    font-family:inherit;
+    font-weight:500;
+  }
+  .practice-activity-clear-btn:hover{color:var(--red); border-color:var(--red);}
   .settings-section .settings-btn.danger{background:var(--red-bg); border-color:var(--red); color:var(--red);}
   .settings-section label.settings-btn{display:inline-block;}
 
@@ -1587,7 +1648,8 @@ function trySilentGisRefresh(){
       }
     };
     try{
-      gisTokenClient.requestAccessToken({ prompt: '' });
+      const hint = currentUser && currentUser.email ? currentUser.email : undefined;
+      gisTokenClient.requestAccessToken({ prompt: '', login_hint: hint });
     }catch(e){ resolve(null); }
   });
 }
@@ -1637,14 +1699,33 @@ function tryInteractiveGisRequest(){
       }
     };
     try{
-      gisTokenClient.requestAccessToken({});
+      const hint = currentUser && currentUser.email ? currentUser.email : undefined;
+      gisTokenClient.requestAccessToken({ login_hint: hint });
     }catch(e){ resolve(null); }
   });
 }
 
+// Each real person may sign in with either of their email addresses;
+// both map to the same canonical data bucket so their data stays unified.
+const PERSON_EMAILS = {
+  kubilay: ['psk.kubilay@gmail.com', 'malik@ikitherapy.ca'],
+  duygu: ['duygu.rp@gmail.com', 'duygu@ikitherapy.ca']
+};
+
+function canonicalPersonId(email){
+  if(!email) return null;
+  const lower = email.trim().toLowerCase();
+  for(const personId in PERSON_EMAILS){
+    if(PERSON_EMAILS[personId].some(e => e.toLowerCase() === lower)) return personId;
+  }
+  return null;
+}
+
 const ALLOWED_EMAILS = [
   'duygu.rp@gmail.com',
-  'psk.kubilay@gmail.com'
+  'duygu@ikitherapy.ca',
+  'psk.kubilay@gmail.com',
+  'malik@ikitherapy.ca'
 ];
 
 function startAuthListener(){
@@ -1701,12 +1782,29 @@ function showSignInScreen(){
 }
 
 function subscribeToData(){
-  const ref = window.FB.doc(window.FB.db, 'users', currentUser.uid, 'appdata', 'main');
-  unsubscribeSnapshot = window.FB.onSnapshot(ref, (snap)=>{
+  const personId = canonicalPersonId(currentUser.email);
+  const ref = window.FB.doc(window.FB.db, 'users', personId, 'appdata', 'main');
+  unsubscribeSnapshot = window.FB.onSnapshot(ref, async (snap)=>{
     if(snap.exists()){
       state = snap.data();
     }else{
-      state = exampleData();
+      // No data yet under the new merged (per-person) path — check for legacy data
+      // under this specific account's old per-UID path and migrate it automatically.
+      let migrated = false;
+      try{
+        const legacyRef = window.FB.doc(window.FB.db, 'users', currentUser.uid, 'appdata', 'main');
+        const legacySnap = await window.FB.getDoc(legacyRef);
+        if(legacySnap.exists()){
+          state = legacySnap.data();
+          migrated = true;
+        }
+      }catch(e){ console.error('Eski veri kontrolü başarısız', e); }
+      if(!migrated){ state = exampleData(); }
+      if(!state.clients) state.clients = [];
+      if(!state.generalTodos) state.generalTodos = [];
+      if(migrated){
+        try{ await window.FB.setDoc(ref, JSON.parse(JSON.stringify(state))); }catch(e){ console.error('Taşıma kaydı başarısız', e); }
+      }
     }
     if(!state.clients) state.clients = [];
     if(!state.generalTodos) state.generalTodos = [];
@@ -1726,7 +1824,7 @@ function subscribeToData(){
 }
 
 function finishSetup(){
-  if(currentUser.email === 'duygu.rp@gmail.com' && !state.surpriseSeen){
+  if(canonicalPersonId(currentUser.email) === 'duygu' && !state.surpriseSeen){
     document.getElementById('fileSetup').style.display = 'none';
     showDaisySurprise();
     return;
@@ -1815,7 +1913,8 @@ async function saveState(){
   maybeSnapshotBackup();
   if(!currentUser) return;
   try{
-    const ref = window.FB.doc(window.FB.db, 'users', currentUser.uid, 'appdata', 'main');
+    const personId = canonicalPersonId(currentUser.email);
+    const ref = window.FB.doc(window.FB.db, 'users', personId, 'appdata', 'main');
     await window.FB.setDoc(ref, JSON.parse(JSON.stringify(state)));
   }catch(e){
     console.error('Kaydetme hatası', e);
@@ -1825,7 +1924,8 @@ async function saveState(){
 async function logAudit(action, details){
   if(!currentUser) return;
   try{
-    const ref = window.FB.collection(window.FB.db, 'users', currentUser.uid, 'auditLog');
+    const personId = canonicalPersonId(currentUser.email);
+    const ref = window.FB.collection(window.FB.db, 'users', personId, 'auditLog');
     await window.FB.addDoc(ref, {
       action,
       details: details || '',
@@ -3634,13 +3734,11 @@ async function exportCurrentDataJson(){
 /* ---------- Ortaklık (shared practice page) ---------- */
 let practiceState = null;
 let practiceStatsFilter = 'toplam';
+let editingPracticeTaskId = null;
 
 function currentPersonId(){
   if(!currentUser) return null;
-  const email = (currentUser.email||'').toLowerCase();
-  if(email.includes('kubilay')) return 'kubilay';
-  if(email.includes('duygu')) return 'duygu';
-  return null;
+  return canonicalPersonId(currentUser.email);
 }
 
 function personLabel(id){
@@ -3756,6 +3854,30 @@ function practiceStatsHtml(){
 }
 
 function practiceTaskRowHtml(t){
+  if(t.id === editingPracticeTaskId){
+    return `
+    <div class="home-task-row practice-task-editing" data-id="${t.id}">
+      <div class="practice-task-edit-form">
+        <input type="text" class="practice-task-edit-title" value="${escapeAttr(t.title)}">
+        <div class="practice-task-edit-row">
+          <select class="practice-task-edit-assignee">
+            <option value="kubilay" ${t.assignedTo==='kubilay'?'selected':''}>Kubilay'a ata</option>
+            <option value="duygu" ${t.assignedTo==='duygu'?'selected':''}>Duygu'ya ata</option>
+          </select>
+          <select class="practice-task-edit-importance">
+            <option value="1" ${t.importance===1?'selected':''}>⭐ Düşük</option>
+            <option value="2" ${t.importance===2?'selected':''}>⭐⭐ Orta</option>
+            <option value="3" ${t.importance===3?'selected':''}>⭐⭐⭐ Yüksek</option>
+          </select>
+          <input type="date" class="practice-task-edit-duedate" value="${t.dueDate||''}">
+        </div>
+        <div class="practice-task-edit-actions">
+          <button class="practice-task-save-btn" type="button">Kaydet</button>
+          <button class="practice-task-cancel-btn" type="button">Vazgeç</button>
+        </div>
+      </div>
+    </div>`;
+  }
   return `
   <div class="home-task-row ${t.done?'done':''}" data-id="${t.id}">
     <input type="checkbox" class="practice-task-check" ${t.done?'checked':''}>
@@ -3767,6 +3889,7 @@ function practiceTaskRowHtml(t){
         <span>${stars(t.importance)}</span>
       </div>
     </div>
+    <button class="practice-task-edit-btn" title="Düzenle">✏️</button>
     <button class="home-task-del" title="Sil">✕</button>
   </div>`;
 }
@@ -3781,15 +3904,16 @@ function practiceNoteRowHtml(n){
 }
 
 function practiceActivityRowHtml(a){
-  return `<div class="practice-activity-row"><span class="practice-activity-time">${formatBackupTime(a.at)}</span> — ${escapeHtml(a.text)}</div>`;
+  return `<div class="practice-activity-row" data-id="${a.id}"><span class="practice-activity-time">${formatBackupTime(a.at)}</span> — ${escapeHtml(a.text)}<button class="practice-activity-del" title="Sil">✕</button></div>`;
 }
 
 async function renderPracticePage(){
+  editingPracticeTaskId = null;
   const main = document.getElementById('main');
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader"><h2>🏢 Yönetim</h2></div>
-    <div id="clientSub">İkinizin de erişebildiği paylaşılan alan.</div>
+    <div id="clientSub">İki Therapy ekip yönetim alanı — görev takibi, ortak duyurular ve performans özeti.</div>
     <div id="practiceLoadingBox" class="settings-section">Yükleniyor…</div>
   `;
   document.getElementById('backToListBtn').addEventListener('click', ()=>{
@@ -3822,7 +3946,7 @@ function renderPracticeContent(){
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader"><h2>🏢 Yönetim</h2></div>
-    <div id="clientSub">İkinizin de erişebildiği paylaşılan alan.</div>
+    <div id="clientSub">İki Therapy ekip yönetim alanı — görev takibi, ortak duyurular ve performans özeti.</div>
 
     <div class="settings-section">
       <h3>📋 İşler</h3>
@@ -3871,7 +3995,10 @@ function renderPracticeContent(){
     </div>
 
     <div class="settings-section">
-      <h3>🕐 İşlem Geçmişi</h3>
+      <h3 style="display:flex; align-items:center; justify-content:space-between;">
+        <span>🕐 İşlem Geçmişi</span>
+        ${(practiceState.activity||[]).length ? `<button class="practice-activity-clear-btn" type="button">Tümünü Temizle</button>` : ''}
+      </h3>
       <div id="practiceActivityList">
         ${(practiceState.activity||[]).length ? practiceState.activity.map(practiceActivityRowHtml).join('') : '<div class="todo-empty">Henüz işlem yok.</div>'}
       </div>
@@ -3933,6 +4060,60 @@ function wirePracticePage(){
       renderPracticeContent();
     });
   });
+
+  document.querySelectorAll('.practice-task-edit-btn').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      editingPracticeTaskId = row.getAttribute('data-id');
+      renderPracticeContent();
+    });
+  });
+
+  document.querySelectorAll('.practice-task-cancel-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      editingPracticeTaskId = null;
+      renderPracticeContent();
+    });
+  });
+
+  document.querySelectorAll('.practice-task-save-btn').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      const id = row.getAttribute('data-id');
+      const task = (practiceState.tasks||[]).find(t=>t.id===id);
+      if(!task) return;
+      const newTitle = row.querySelector('.practice-task-edit-title').value.trim();
+      if(!newTitle) return;
+      task.title = newTitle;
+      task.assignedTo = row.querySelector('.practice-task-edit-assignee').value;
+      task.importance = Number(row.querySelector('.practice-task-edit-importance').value);
+      task.dueDate = row.querySelector('.practice-task-edit-duedate').value;
+      logPracticeActivity(`${personLabel(currentPersonId())}, "${task.title}" işini düzenledi.`);
+      editingPracticeTaskId = null;
+      await savePracticeShared();
+      renderPracticeContent();
+    });
+  });
+
+  document.querySelectorAll('.practice-activity-del').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      const id = row.getAttribute('data-id');
+      practiceState.activity = (practiceState.activity||[]).filter(a=>a.id!==id);
+      await savePracticeShared();
+      renderPracticeContent();
+    });
+  });
+
+  const clearBtn = document.querySelector('.practice-activity-clear-btn');
+  if(clearBtn){
+    clearBtn.addEventListener('click', async ()=>{
+      if(!confirm('İşlem geçmişindeki tüm kayıtlar silinsin mi?')) return;
+      practiceState.activity = [];
+      await savePracticeShared();
+      renderPracticeContent();
+    });
+  }
 
   document.querySelector('.practice-note-add-btn').addEventListener('click', async ()=>{
     const input = document.querySelector('.practice-note-text');
