@@ -2542,6 +2542,20 @@ async function cancelCalendarEvent(eventId, calendarId){
   }
 }
 
+function timeOptions5MinHtml(){
+  const opts = [];
+  for(let h = 0; h < 24; h++){
+    for(let m = 0; m < 60; m += 5){
+      let hour12 = h % 12;
+      if(hour12 === 0) hour12 = 12;
+      const meridiem = h >= 12 ? 'PM' : 'AM';
+      const label = `${hour12}:${String(m).padStart(2,'0')} ${meridiem}`;
+      opts.push(`<option value="${label}">`);
+    }
+  }
+  return opts.join('');
+}
+
 function parseAmPmTime(input){
   if(!input) return null;
   const match = input.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/);
@@ -2617,9 +2631,6 @@ async function createCalendarEvent(client, opts){
   }
   if(opts.inviteClient && client.profile && client.profile.email){
     event.attendees = [{ email: client.profile.email.trim() }];
-  }
-  if(opts.reminder24h){
-    event.reminders = { useDefault: false, overrides: [{ method: 'email', minutes: 24*60 }] };
   }
 
   try{
@@ -2992,7 +3003,8 @@ function calendarPanelHtml(client){
       </div>
       <div class="field-block">
         <label>Saat</label>
-        <input type="text" class="cal-time" placeholder="örn: 10:00 AM" value="10:00 AM">
+        <input type="text" class="cal-time" list="timeOptions5min" placeholder="örn: 10:00 AM" value="10:00 AM">
+        <datalist id="timeOptions5min">${timeOptions5MinHtml()}</datalist>
       </div>
       <div class="field-block">
         <label>Süre</label>
@@ -3005,7 +3017,6 @@ function calendarPanelHtml(client){
       <div class="field-block">
         <label>&nbsp;</label>
         <div class="tick-row"><input type="checkbox" class="cal-invite" ${client.profile && client.profile.email ? 'checked' : ''}><span>Danışanı davet et (${client.profile && client.profile.email ? escapeHtml(client.profile.email) : 'email yok'})</span></div>
-        <div class="tick-row" style="margin-top:6px;"><input type="checkbox" class="cal-reminder" checked><span>24 saat önce otomatik email hatırlatması gönder</span></div>
       </div>
     </div>
     <div class="cal-day-events-block">
@@ -3234,7 +3245,6 @@ function wireCalendarPanel(client){
     const timeStr = parseAmPmTime(timeRaw);
     const durationMinutes = Number(panel.querySelector('.cal-duration').value);
     const inviteClient = panel.querySelector('.cal-invite').checked;
-    const reminder24h = panel.querySelector('.cal-reminder').checked;
     if(!title || !dateStr || !timeRaw){
       alert('Başlık, tarih ve saat gerekli.');
       return;
@@ -3245,7 +3255,7 @@ function wireCalendarPanel(client){
     }
     const btn = panel.querySelector('.cal-create-btn');
     btn.disabled = true; btn.textContent = 'Oluşturuluyor…';
-    const ok = await createCalendarEvent(client, { title, dateStr, timeStr, durationMinutes, inviteClient, reminder24h });
+    const ok = await createCalendarEvent(client, { title, dateStr, timeStr, durationMinutes, inviteClient });
     btn.disabled = false; btn.textContent = 'Randevu Oluştur';
     if(ok){
       alert('Randevu Google Takvimine eklendi.');
