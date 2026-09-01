@@ -1441,6 +1441,7 @@
   const provider = new GoogleAuthProvider();
   provider.addScope('https://www.googleapis.com/auth/calendar.events');
   provider.addScope('https://www.googleapis.com/auth/gmail.compose');
+  provider.addScope('https://www.googleapis.com/auth/contacts');
 
   window.FB = {
     auth, db, provider, signInWithPopup, signInWithRedirect, getRedirectResult,
@@ -1630,7 +1631,7 @@ function init(){
 }
 
 const GIS_CLIENT_ID = '171012588947-kglaeca49vu35660rcd2lm66mhtnt3t3.apps.googleusercontent.com';
-const GOOGLE_API_SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.compose';
+const GOOGLE_API_SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/contacts';
 let gisTokenClient = null;
 
 function initGisTokenClient(){
@@ -2613,6 +2614,69 @@ async function rescheduleCalendarEvent(eventId, dateStr, timeStr, calendarId){
   }
 }
 
+async function syncClientToGoogleContacts(client){
+  const email = client.profile && client.profile.email ? client.profile.email.trim() : '';
+  const phone = client.profile && client.profile.phone ? client.profile.phone.trim() : '';
+  if(!email && !phone) return; // nothing to sync yet
+
+  const token = await ensureGoogleAccessToken();
+  if(!token) return;
+
+  const body = { names: [{ givenName: client.name }] };
+  if(email) body.emailAddresses = [{ value: email }];
+  if(phone) body.phoneNumbers = [{ value: phone }];
+
+  try{
+    if(client.googleContactResourceName){
+      // Already linked — fetch current etag, then update.
+      const getRes = await fetch(`https://people.googleapis.com/v1/${client.googleContactResourceName}?personFields=names,emailAddresses,phoneNumbers`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if(!getRes.ok){
+        console.error('Google Kişi bulunamadı, güncellenemedi', await getRes.text());
+        return;
+      }
+      const existing = await getRes.json();
+      body.etag = existing.etag;
+      const updateRes = await fetch(`https://people.googleapis.com/v1/${client.googleContactResourceName}:updateContact?updatePersonFields=names,emailAddresses,phoneNumbers`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if(!updateRes.ok){
+        console.error('Google Kişi güncellenemedi', await updateRes.text());
+      }
+    }else{
+      const res = await fetch('https://people.googleapis.com/v1/people:createContact', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if(res.ok){
+        const data = await res.json();
+        client.googleContactResourceName = data.resourceName;
+        saveState();
+      }else{
+        console.error('Google Kişiler\'e eklenemedi', await res.text());
+      }
+    }
+  }catch(e){
+    console.error('Google Kişiler senkron hatası', e);
+  }
+}
+
+async function syncAllClientsToGoogleContacts(onProgress){
+  const candidates = state.clients.filter(c => c.profile && (c.profile.email || c.profile.phone));
+  let done = 0;
+  for(const client of candidates){
+    await syncClientToGoogleContacts(client);
+    done++;
+    if(onProgress) onProgress(done, candidates.length);
+    await new Promise(r => setTimeout(r, 250)); // small pause to avoid rate limits
+  }
+  return { total: candidates.length };
+}
+
 async function createCalendarEvent(client, opts){
   const token = await ensureGoogleAccessToken();
   if(!token) return false;
@@ -3003,7 +3067,7 @@ function calendarPanelHtml(client){
       </div>
       <div class="field-block">
         <label>Saat</label>
-        <input type="text" class="cal-time" list="timeOptions5min" placeholder="örn: 10:00 AM" value="10:00 AM">
+        <input type="text" class="cal-time" list="timeOptions5min" placeholder="örn: 10:00 AM" value="">
         <datalist id="timeOptions5min">${timeOptions5MinHtml()}</datalist>
       </div>
       <div class="field-block">
@@ -3442,6 +3506,7 @@ function wireProfilePanel(client){
   phoneInput.addEventListener('blur', (ev)=>{
     client.profile.phone = ev.target.value;
     saveState();
+    syncClientToGoogleContacts(client);
   });
 
   const emailInput = panel.querySelector('.profile-email');
@@ -3457,6 +3522,7 @@ function wireProfilePanel(client){
   emailInput.addEventListener('blur', (ev)=>{
     client.profile.email = ev.target.value;
     saveState();
+    syncClientToGoogleContacts(client);
   });
 
   const ifhpCb = panel.querySelector('.profile-ifhp');
@@ -4310,6 +4376,13 @@ function renderSettingsPage(){
     </div>
 
     <div class="settings-section">
+      <h3>📇 Google Kişiler</h3>
+      <p>Email ya da telefonu olan tüm danışanları, şu an açık olan Google hesabının Kişiler'ine (rehberine) aktar. Zaten aktarılmış olanlar güncellenir, tekrar kopyalanmaz.</p>
+      <button class="settings-btn" id="settingsSyncContactsBtn">Tüm Danışanları Aktar</button>
+      <div id="contactsSyncStatus" style="margin-top:10px; font-size:12.5px; color:var(--muted);"></div>
+    </div>
+
+    <div class="settings-section">
       <h3>Hesap</h3>
       <p>Bu hesaptan çıkış yap.</p>
       <button class="settings-btn" id="settingsSignOutBtn">Çıkış Yap</button>
@@ -4329,6 +4402,22 @@ function renderSettingsPage(){
   document.getElementById('settingsExportBtn').addEventListener('click', exportCurrentDataJson);
   document.getElementById('settingsImportInput').addEventListener('change', handleImportJsonFile);
   document.getElementById('settingsSignOutBtn').addEventListener('click', signOutAccount);
+
+  document.getElementById('settingsSyncContactsBtn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('settingsSyncContactsBtn');
+    const status = document.getElementById('contactsSyncStatus');
+    btn.disabled = true;
+    status.textContent = 'Başlatılıyor…';
+    try{
+      const result = await syncAllClientsToGoogleContacts((done, total)=>{
+        status.textContent = `${done} / ${total} danışan aktarıldı…`;
+      });
+      status.textContent = `Tamamlandı — ${result.total} danışan kontrol edildi.`;
+    }catch(e){
+      status.textContent = 'Bir hata oluştu, tekrar deneyebilirsin.';
+    }
+    btn.disabled = false;
+  });
   document.getElementById('settingsResetBtn').addEventListener('click', resetAllData);
 }
 
