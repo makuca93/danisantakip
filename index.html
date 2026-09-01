@@ -417,8 +417,8 @@
   .settings-section .settings-btn:hover{filter:brightness(0.97);}
   .practice-task-title{font-size:14px; color:var(--ink); margin-bottom:2px;}
   .home-task-row.done .practice-task-title{text-decoration:line-through; color:var(--muted);}
-  .practice-stats-filter{display:flex; gap:8px; margin-bottom:14px;}
-  .practice-stats-filter-btn{
+  .practice-stats-filter{display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;}
+  .practice-stats-filter-btn, .practice-task-filter-btn{
     background:var(--card);
     border:1px solid var(--card-line);
     color:var(--muted);
@@ -429,7 +429,7 @@
     cursor:pointer;
     font-family:inherit;
   }
-  .practice-stats-filter-btn.active{background:var(--highlight); border-color:var(--highlight-line); color:var(--ink);}
+  .practice-stats-filter-btn.active, .practice-task-filter-btn.active{background:var(--highlight); border-color:var(--highlight-line); color:var(--ink);}
   .practice-stats-note{font-size:12px; color:var(--muted); margin:0 0 10px; font-style:italic;}
   .practice-task-edit-btn{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:2px 4px; flex-shrink:0;}
   .practice-task-edit-btn:hover{color:var(--ink);}
@@ -850,6 +850,7 @@
     user-select:none;
   }
   #homeDoneTaskList.collapsed{display:none;}
+  #practiceDoneTaskList.collapsed{display:none;}
 
   .nav-row{display:flex; gap:6px;}
   #homeNavBtn, #providerNavBtn, #practiceNavBtn{
@@ -3912,6 +3913,8 @@ async function exportCurrentDataJson(){
 /* ---------- Ortaklık (shared practice page) ---------- */
 let practiceState = null;
 let practiceStatsFilter = 'toplam';
+let practiceTaskAssigneeFilter = 'all';
+let practiceDoneCollapsed = true;
 let editingPracticeTaskId = null;
 let editingPracticeNoteId = null;
 let practiceSectionCollapsed = { tasks:false, notes:false, stats:false, activity:false };
@@ -4133,8 +4136,10 @@ async function renderPracticePage(){
 
 function renderPracticeContent(){
   const main = document.getElementById('main');
-  const pendingTasks = (practiceState.tasks||[]).filter(t=>!t.done).sort((a,b)=>(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
-  const doneTasks = (practiceState.tasks||[]).filter(t=>t.done);
+  const allTasks = practiceState.tasks || [];
+  const filteredTasks = practiceTaskAssigneeFilter === 'all' ? allTasks : allTasks.filter(t=>t.assignedTo===practiceTaskAssigneeFilter);
+  const pendingTasks = filteredTasks.filter(t=>!t.done).sort((a,b)=>(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
+  const doneTasks = filteredTasks.filter(t=>t.done);
   const notesSorted = (practiceState.notes||[]).slice().sort((a,b)=>b.createdAt-a.createdAt);
 
   main.innerHTML = `
@@ -4162,12 +4167,20 @@ function renderPracticeContent(){
           <input type="date" class="practice-task-duedate">
           <button class="practice-task-add-btn" type="button">Ekle</button>
         </div>
+        <div class="practice-stats-filter" style="margin-bottom:12px;">
+          <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='all'?'active':''}" data-filter="all">Tümü</button>
+          <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='kubilay'?'active':''}" data-filter="kubilay">Kubilay'a Atananlar</button>
+          <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='duygu'?'active':''}" data-filter="duygu">Duygu'ya Atananlar</button>
+        </div>
         <div id="practiceTaskList">
           ${pendingTasks.length ? pendingTasks.map(practiceTaskRowHtml).join('') : '<div class="todo-empty">Bekleyen iş yok.</div>'}
         </div>
         ${doneTasks.length ? `
-        <div class="todo-done-header">Tamamlananlar (${doneTasks.length})</div>
-        <div id="practiceDoneTaskList">${doneTasks.map(practiceTaskRowHtml).join('')}</div>` : ''}
+        <div class="todo-done-header home-done-toggle" id="practiceDoneToggle">
+          <span>Tamamlananlar (${doneTasks.length})</span>
+          <span class="practice-section-arrow">${practiceDoneCollapsed ? '▸' : '▾'}</span>
+        </div>
+        <div id="practiceDoneTaskList" class="${practiceDoneCollapsed ? 'collapsed' : ''}">${doneTasks.map(practiceTaskRowHtml).join('')}</div>` : ''}
       </div>
     </div>
 
@@ -4241,6 +4254,21 @@ function wirePracticePage(){
       renderPracticeContent();
     });
   });
+
+  document.querySelectorAll('.practice-task-filter-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      practiceTaskAssigneeFilter = btn.getAttribute('data-filter');
+      renderPracticeContent();
+    });
+  });
+
+  const practiceDoneToggle = document.getElementById('practiceDoneToggle');
+  if(practiceDoneToggle){
+    practiceDoneToggle.addEventListener('click', ()=>{
+      practiceDoneCollapsed = !practiceDoneCollapsed;
+      renderPracticeContent();
+    });
+  }
 
   document.querySelector('.practice-task-add-btn').addEventListener('click', async ()=>{
     const textInput = document.querySelector('.practice-task-text');
