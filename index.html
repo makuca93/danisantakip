@@ -842,6 +842,14 @@
     letter-spacing:0.3px;
     margin:14px 0 6px;
   }
+  .home-done-toggle{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    cursor:pointer;
+    user-select:none;
+  }
+  #homeDoneTaskList.collapsed{display:none;}
 
   .nav-row{display:flex; gap:6px;}
   #homeNavBtn, #providerNavBtn, #practiceNavBtn{
@@ -1624,6 +1632,7 @@ function restoreViewState(){
 }
 let homeSortMode = 'due';
 let homeMobileTab = 'tasks';
+let homeDoneCollapsed = true;
 
 function init(){
   window.addEventListener('fb-ready', startAuthListener);
@@ -4747,8 +4756,11 @@ function renderHome(){
           ${tasks.length ? tasks.map(({clientId,clientName,todo})=>homeTaskRowHtml(clientId,clientName,todo)).join('') : `<div class="todo-empty">Hiç bekleyen iş yok.</div>`}
         </div>
         ${doneTasks.length ? `
-        <div class="todo-done-header">Tamamlananlar (${doneTasks.length})</div>
-        <div id="homeDoneTaskList">
+        <div class="todo-done-header home-done-toggle" id="homeDoneToggle">
+          <span>Tamamlananlar (${doneTasks.length})</span>
+          <span class="practice-section-arrow">${homeDoneCollapsed ? '▸' : '▾'}</span>
+        </div>
+        <div id="homeDoneTaskList" class="${homeDoneCollapsed ? 'collapsed' : ''}">
           ${doneTasks.map(({clientId,clientName,todo})=>homeTaskRowHtml(clientId,clientName,todo)).join('')}
         </div>` : ''}
       </div>
@@ -4771,6 +4783,14 @@ function renderHome(){
   document.getElementById('backToListBtn').addEventListener('click', ()=>{
     document.body.classList.remove('mobile-detail');
   });
+
+  const homeDoneToggle = document.getElementById('homeDoneToggle');
+  if(homeDoneToggle){
+    homeDoneToggle.addEventListener('click', ()=>{
+      homeDoneCollapsed = !homeDoneCollapsed;
+      renderHome();
+    });
+  }
 
   document.getElementById('homeSortSelect').addEventListener('change', (ev)=>{
     homeSortMode = ev.target.value;
