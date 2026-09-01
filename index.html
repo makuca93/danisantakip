@@ -884,6 +884,8 @@
     border-radius:10px;
     margin-bottom:8px;
   }
+  .home-task-row.assigned-kubilay{background:#f2f6fc;}
+  .home-task-row.assigned-duygu{background:#fcf2f6;}
   .home-task-row input[type="checkbox"]{width:17px; height:17px; margin-top:2px; accent-color:var(--green); flex-shrink:0;}
   .home-task-main{flex:1; min-width:0;}
   .home-task-text-input{
@@ -3902,7 +3904,7 @@ function practiceTaskRowHtml(t){
     </div>`;
   }
   return `
-  <div class="home-task-row ${t.done?'done':''}" data-id="${t.id}">
+  <div class="home-task-row assigned-${t.assignedTo||''} ${t.done?'done':''}" data-id="${t.id}">
     <input type="checkbox" class="practice-task-check" ${t.done?'checked':''}>
     <div class="home-task-main">
       <div class="practice-task-title">${escapeHtml(t.title)}</div>
