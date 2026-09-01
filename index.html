@@ -407,6 +407,20 @@
   .settings-section .settings-btn:hover{filter:brightness(0.97);}
   .practice-task-title{font-size:14px; color:var(--ink); margin-bottom:2px;}
   .home-task-row.done .practice-task-title{text-decoration:line-through; color:var(--muted);}
+  .practice-stats-filter{display:flex; gap:8px; margin-bottom:14px;}
+  .practice-stats-filter-btn{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-size:13px;
+    font-weight:600;
+    padding:7px 14px;
+    border-radius:7px;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .practice-stats-filter-btn.active{background:var(--highlight); border-color:var(--highlight-line); color:var(--ink);}
+  .practice-stats-note{font-size:12px; color:var(--muted); margin:0 0 10px; font-style:italic;}
   .practice-stats-grid{
     display:grid;
     grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));
@@ -1360,7 +1374,7 @@
     <div class="nav-row">
       <button id="homeNavBtn" type="button" title="Ana Sayfa"><span class="nav-icon">🏠</span><span class="nav-label">Ana Sayfa</span></button>
       <button id="providerNavBtn" type="button" title="Uzman Bilgileri"><span class="nav-icon">🩺</span><span class="nav-label">Uzman</span></button>
-      <button id="practiceNavBtn" type="button" title="Ortaklık"><span class="nav-icon">🤝</span><span class="nav-label">Ortaklık</span></button>
+      <button id="practiceNavBtn" type="button" title="Yönetim"><span class="nav-icon">🏢</span><span class="nav-label">Yönetim</span></button>
     </div>
     <form id="addClientForm">
       <input id="newClientName" type="text" placeholder="Ara ya da yeni danışan adı…" autocomplete="off">
@@ -3619,6 +3633,7 @@ async function exportCurrentDataJson(){
 
 /* ---------- Ortaklık (shared practice page) ---------- */
 let practiceState = null;
+let practiceStatsFilter = 'toplam';
 
 function currentPersonId(){
   if(!currentUser) return null;
@@ -3639,9 +3654,9 @@ async function loadPracticeShared(){
     const snap = await window.FB.getDoc(ref);
     if(snap.exists()){
       const data = snap.data();
-      return { tasks: data.tasks||[], notes: data.notes||[], activity: data.activity||[] };
+      return { tasks: data.tasks||[], notes: data.notes||[], activity: data.activity||[], stats: data.stats||{} };
     }
-    return { tasks:[], notes:[], activity:[] };
+    return { tasks:[], notes:[], activity:[], stats:{} };
   }catch(e){
     console.error('Ortaklık verisi yüklenemedi', e);
     return null;
@@ -3679,7 +3694,7 @@ function computePersonalStats(){
       if(s.date.startsWith(thisMonthStr)){
         sessionsThisMonth++;
         if(s.paymentDone){
-          const rate = (c.profile && c.profile.ifhp) ? 205 : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+          const rate = (c.profile && c.profile.ifhp) ? (205 * 0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
           revenueThisMonth += rate;
         }
       }
@@ -3687,6 +3702,57 @@ function computePersonalStats(){
     });
   });
   return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth };
+}
+
+function practiceStatsHtml(){
+  const shared = (practiceState && practiceState.stats) || {};
+  const kubilay = shared.kubilay;
+  const duygu = shared.duygu;
+
+  function box(num, label){
+    return `<div class="practice-stat-box"><div class="practice-stat-num">${num}</div><div class="practice-stat-label">${label}</div></div>`;
+  }
+  function staleness(entry){
+    if(!entry || !entry.updatedAt) return '';
+    const days = Math.floor((Date.now() - entry.updatedAt) / (24*60*60*1000));
+    if(days <= 0) return '(bugün güncellendi)';
+    return `(${days} gün önce güncellendi)`;
+  }
+
+  if(practiceStatsFilter === 'kubilay'){
+    if(!kubilay) return `<div class="todo-empty">Kubilay henüz Yönetim sayfasını açıp veri paylaşmadı.</div>`;
+    return `<p class="practice-stats-note">Kubilay ${staleness(kubilay)}</p><div class="practice-stats-grid">
+      ${box(kubilay.activeClients,'Aktif danışan')}
+      ${box(kubilay.terminatedClients,'Sonlanmış danışan')}
+      ${box(kubilay.sessionsThisMonth,'Bu ay seans')}
+      ${box(kubilay.sessionsThisYear,'Bu yıl seans')}
+      ${box('CA$'+kubilay.revenueThisMonth.toFixed(0),'Bu ay tahsil edilen')}
+    </div>`;
+  }
+  if(practiceStatsFilter === 'duygu'){
+    if(!duygu) return `<div class="todo-empty">Duygu henüz Yönetim sayfasını açıp veri paylaşmadı.</div>`;
+    return `<p class="practice-stats-note">Duygu ${staleness(duygu)}</p><div class="practice-stats-grid">
+      ${box(duygu.activeClients,'Aktif danışan')}
+      ${box(duygu.terminatedClients,'Sonlanmış danışan')}
+      ${box(duygu.sessionsThisMonth,'Bu ay seans')}
+      ${box(duygu.sessionsThisYear,'Bu yıl seans')}
+      ${box('CA$'+duygu.revenueThisMonth.toFixed(0),'Bu ay tahsil edilen')}
+    </div>`;
+  }
+  // toplam
+  if(!kubilay && !duygu){
+    return `<div class="todo-empty">Henüz hiçbir hesap veri paylaşmadı.</div>`;
+  }
+  const k = kubilay || { activeClients:0, terminatedClients:0, sessionsThisMonth:0, sessionsThisYear:0, revenueThisMonth:0 };
+  const d = duygu || { activeClients:0, terminatedClients:0, sessionsThisMonth:0, sessionsThisYear:0, revenueThisMonth:0 };
+  const missingNote = (!kubilay || !duygu) ? `<p class="practice-stats-note">${!kubilay?'Kubilay':'Duygu'} henüz veri paylaşmadı, toplam eksik olabilir.</p>` : '';
+  return `${missingNote}<div class="practice-stats-grid">
+    ${box(k.activeClients + d.activeClients,'Aktif danışan')}
+    ${box(k.terminatedClients + d.terminatedClients,'Sonlanmış danışan')}
+    ${box(k.sessionsThisMonth + d.sessionsThisMonth,'Bu ay seans')}
+    ${box(k.sessionsThisYear + d.sessionsThisYear,'Bu yıl seans')}
+    ${box('CA$'+(k.revenueThisMonth + d.revenueThisMonth).toFixed(0),'Bu ay tahsil edilen')}
+  </div>`;
 }
 
 function practiceTaskRowHtml(t){
@@ -3722,7 +3788,7 @@ async function renderPracticePage(){
   const main = document.getElementById('main');
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
-    <div id="clientHeader"><h2>🤝 Ortaklık</h2></div>
+    <div id="clientHeader"><h2>🏢 Yönetim</h2></div>
     <div id="clientSub">İkinizin de erişebildiği paylaşılan alan.</div>
     <div id="practiceLoadingBox" class="settings-section">Yükleniyor…</div>
   `;
@@ -3738,20 +3804,24 @@ async function renderPracticePage(){
     return;
   }
   practiceState = loaded;
+  const me = currentPersonId();
+  if(me){
+    if(!practiceState.stats) practiceState.stats = {};
+    practiceState.stats[me] = { ...computePersonalStats(), updatedAt: Date.now() };
+    savePracticeShared();
+  }
   renderPracticeContent();
 }
 
 function renderPracticeContent(){
   const main = document.getElementById('main');
-  const me = currentPersonId();
-  const stats = computePersonalStats();
   const pendingTasks = (practiceState.tasks||[]).filter(t=>!t.done).sort((a,b)=>(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
   const doneTasks = (practiceState.tasks||[]).filter(t=>t.done);
   const notesSorted = (practiceState.notes||[]).slice().sort((a,b)=>b.createdAt-a.createdAt);
 
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
-    <div id="clientHeader"><h2>🤝 Ortaklık</h2></div>
+    <div id="clientHeader"><h2>🏢 Yönetim</h2></div>
     <div id="clientSub">İkinizin de erişebildiği paylaşılan alan.</div>
 
     <div class="settings-section">
@@ -3790,15 +3860,14 @@ function renderPracticeContent(){
     </div>
 
     <div class="settings-section">
-      <h3>📊 Senin İstatistiklerin</h3>
-      <p style="font-size:12.5px; color:var(--muted); margin:-6px 0 14px; line-height:1.5;">Bu sayılar sadece kendi hesabındaki danışan verilerinden hesaplanıyor — gizlilik gereği ${me==='kubilay'?'Duygu':'Kubilay'}'nun danışan bilgileri burada görünmüyor.</p>
-      <div class="practice-stats-grid">
-        <div class="practice-stat-box"><div class="practice-stat-num">${stats.activeClients}</div><div class="practice-stat-label">Aktif danışan</div></div>
-        <div class="practice-stat-box"><div class="practice-stat-num">${stats.terminatedClients}</div><div class="practice-stat-label">Sonlanmış danışan</div></div>
-        <div class="practice-stat-box"><div class="practice-stat-num">${stats.sessionsThisMonth}</div><div class="practice-stat-label">Bu ay seans</div></div>
-        <div class="practice-stat-box"><div class="practice-stat-num">${stats.sessionsThisYear}</div><div class="practice-stat-label">Bu yıl seans</div></div>
-        <div class="practice-stat-box"><div class="practice-stat-num">CA$${stats.revenueThisMonth.toFixed(0)}</div><div class="practice-stat-label">Bu ay tahsil edilen</div></div>
+      <h3>📊 İstatistikler</h3>
+      <p style="font-size:12.5px; color:var(--muted); margin:-6px 0 14px; line-height:1.5;">Her hesap kendi danışan verisinden özet sayılar hesaplayıp buraya paylaşır — ham danışan kayıtları birbirinize açılmıyor, sadece bu özet rakamlar.</p>
+      <div class="practice-stats-filter">
+        <button class="practice-stats-filter-btn ${practiceStatsFilter==='toplam'?'active':''}" data-filter="toplam">Toplam</button>
+        <button class="practice-stats-filter-btn ${practiceStatsFilter==='kubilay'?'active':''}" data-filter="kubilay">Kubilay</button>
+        <button class="practice-stats-filter-btn ${practiceStatsFilter==='duygu'?'active':''}" data-filter="duygu">Duygu</button>
       </div>
+      ${practiceStatsHtml()}
     </div>
 
     <div class="settings-section">
@@ -3814,6 +3883,13 @@ function renderPracticeContent(){
 function wirePracticePage(){
   document.getElementById('backToListBtn').addEventListener('click', ()=>{
     document.body.classList.remove('mobile-detail');
+  });
+
+  document.querySelectorAll('.practice-stats-filter-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      practiceStatsFilter = btn.getAttribute('data-filter');
+      renderPracticeContent();
+    });
   });
 
   document.querySelector('.practice-task-add-btn').addEventListener('click', async ()=>{
