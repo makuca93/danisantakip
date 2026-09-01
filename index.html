@@ -2696,20 +2696,6 @@ async function syncClientToGoogleContacts(client){
   }
 }
 
-let contactSyncTimers = {};
-
-function scheduleContactSync(client){
-  const clientId = client.id;
-  if(contactSyncTimers[clientId]){
-    clearTimeout(contactSyncTimers[clientId]);
-  }
-  contactSyncTimers[clientId] = setTimeout(()=>{
-    delete contactSyncTimers[clientId];
-    const liveClient = state.clients.find(c => c.id === clientId);
-    if(liveClient) syncClientToGoogleContacts(liveClient);
-  }, 1500);
-}
-
 let contactsSyncRunning = false;
 
 async function syncAllClientsToGoogleContacts(onProgress){
@@ -3187,6 +3173,7 @@ async function loadNextAppointmentInfo(client){
     const start = ev.start.dateTime || ev.start.date;
     const dateOnly = start.slice(0,10);
     const endTime = ev.end && ev.end.dateTime ? ev.end.dateTime : null;
+    const calId = ev._calendarId || 'primary';
     let session = client.sessions.find(s => s.calendarEventId === ev.id);
     if(session){
       if(session.date !== dateOnly){
@@ -3197,6 +3184,10 @@ async function loadNextAppointmentInfo(client){
         session.calendarEndTime = endTime;
         changed = true;
       }
+      if(session.calendarId !== calId){
+        session.calendarId = calId;
+        changed = true;
+      }
     }else{
       client.sessions.push({
         id: uid(),
@@ -3205,7 +3196,8 @@ async function loadNextAppointmentInfo(client){
         nextNote:'', nextDone:false,
         adminNote:'',
         calendarEventId: ev.id,
-        calendarEndTime: endTime
+        calendarEndTime: endTime,
+        calendarId: calId
       });
       changed = true;
     }
@@ -3518,6 +3510,10 @@ function profilePanelHtml(client){
         </div>
       </div>
       <div class="field-block full">
+        <button class="settings-btn profile-contact-sync-btn" type="button" style="width:auto;">📇 ${client.googleContactResourceName ? 'Google Kişiler\'de Güncelle' : 'Google Kişiler\'e Ekle'}</button>
+        <span class="profile-contact-sync-status" style="font-size:12px; color:var(--muted); margin-left:10px;"></span>
+      </div>
+      <div class="field-block full">
         <label>Faturalama</label>
         <div class="tick-row"><input type="checkbox" class="profile-ifhp" ${p.ifhp?'checked':''}><span>IFHP danışanı (seans ücreti sabit CA$205)</span></div>
         <input type="number" class="profile-rate" placeholder="Seans ücreti (CA$)" value="${p.rate!=null?p.rate:''}" ${p.ifhp?'disabled':''} style="margin-top:8px; max-width:180px;">
@@ -3554,7 +3550,6 @@ function wireProfilePanel(client){
   phoneInput.addEventListener('blur', (ev)=>{
     client.profile.phone = ev.target.value;
     saveState();
-    scheduleContactSync(client);
   });
 
   const emailInput = panel.querySelector('.profile-email');
@@ -3570,7 +3565,19 @@ function wireProfilePanel(client){
   emailInput.addEventListener('blur', (ev)=>{
     client.profile.email = ev.target.value;
     saveState();
-    scheduleContactSync(client);
+  });
+
+  const contactSyncBtn = panel.querySelector('.profile-contact-sync-btn');
+  contactSyncBtn.addEventListener('click', async ()=>{
+    if(contactSyncBtn.disabled) return;
+    const statusEl = panel.querySelector('.profile-contact-sync-status');
+    contactSyncBtn.disabled = true;
+    statusEl.textContent = 'Gönderiliyor…';
+    const liveClient = state.clients.find(c => c.id === client.id) || client;
+    await syncClientToGoogleContacts(liveClient);
+    statusEl.textContent = '✅ Tamamlandı';
+    contactSyncBtn.disabled = false;
+    contactSyncBtn.textContent = `📇 ${liveClient.googleContactResourceName ? 'Google Kişiler\'de Güncelle' : 'Google Kişiler\'e Ekle'}`;
   });
 
   const ifhpCb = panel.querySelector('.profile-ifhp');
@@ -3738,7 +3745,7 @@ function renderSessionCard(client, session, index){
       if(!newDate) return;
       const newTime = promptForTime('10:00 AM');
       if(!newTime) return;
-      const ok = await rescheduleCalendarEvent(session.calendarEventId, newDate, newTime);
+      const ok = await rescheduleCalendarEvent(session.calendarEventId, newDate, newTime, session.calendarId || 'primary');
       if(ok){
         session.date = newDate;
         saveState();
@@ -3749,7 +3756,7 @@ function renderSessionCard(client, session, index){
     });
     div.querySelector('.future-cancel-btn').addEventListener('click', async ()=>{
       if(!confirm('Bu randevu Takvim\'den iptal edilsin ve bu kayıt silinsin mi? Danışana bilgilendirme gider.')) return;
-      const ok = await cancelCalendarEvent(session.calendarEventId);
+      const ok = await cancelCalendarEvent(session.calendarEventId, session.calendarId || 'primary');
       if(ok){
         client.sessions = client.sessions.filter(s=>s.id!==session.id);
         saveState();
