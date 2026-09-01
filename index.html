@@ -405,6 +405,37 @@
     font-family:inherit;
   }
   .settings-section .settings-btn:hover{filter:brightness(0.97);}
+  .practice-task-title{font-size:14px; color:var(--ink); margin-bottom:2px;}
+  .home-task-row.done .practice-task-title{text-decoration:line-through; color:var(--muted);}
+  .practice-stats-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));
+    gap:12px;
+  }
+  .practice-stat-box{
+    background:var(--paper);
+    border:1px solid var(--card-line);
+    border-radius:10px;
+    padding:14px;
+    text-align:center;
+  }
+  .practice-stat-num{font-size:22px; font-weight:700; color:var(--ink); font-family:'Fraunces',serif;}
+  .practice-stat-label{font-size:11.5px; color:var(--muted); margin-top:4px;}
+  .practice-note-row{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    padding:10px 0;
+    border-bottom:1px dashed var(--card-line);
+  }
+  .practice-note-row:last-child{border-bottom:none;}
+  .practice-note-text{flex:1; font-size:13.5px; color:var(--ink); line-height:1.5;}
+  .practice-note-meta{font-size:11px; color:var(--muted); white-space:nowrap; margin-top:2px;}
+  .practice-note-del{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; flex-shrink:0;}
+  .practice-note-del:hover{color:var(--red);}
+  .practice-activity-row{font-size:12.5px; color:var(--muted); padding:6px 0; border-bottom:1px dashed var(--card-line);}
+  .practice-activity-row:last-child{border-bottom:none;}
+  .practice-activity-time{font-weight:600; color:var(--ink);}
   .settings-section .settings-btn.danger{background:var(--red-bg); border-color:var(--red); color:var(--red);}
   .settings-section label.settings-btn{display:inline-block;}
 
@@ -710,7 +741,7 @@
   }
 
   .nav-row{display:flex; gap:6px;}
-  #homeNavBtn, #providerNavBtn{
+  #homeNavBtn, #providerNavBtn, #practiceNavBtn{
     flex:1;
     display:flex;
     flex-direction:column;
@@ -725,8 +756,8 @@
     cursor:pointer;
     min-width:0;
   }
-  #homeNavBtn .nav-icon, #providerNavBtn .nav-icon{font-size:15px; line-height:1;}
-  #homeNavBtn .nav-label, #providerNavBtn .nav-label{
+  #homeNavBtn .nav-icon, #providerNavBtn .nav-icon, #practiceNavBtn .nav-icon{font-size:15px; line-height:1;}
+  #homeNavBtn .nav-label, #providerNavBtn .nav-label, #practiceNavBtn .nav-label{
     font-size:9.5px;
     font-weight:600;
     color:var(--ink);
@@ -735,8 +766,8 @@
     text-overflow:ellipsis;
     max-width:100%;
   }
-  #homeNavBtn:hover, #providerNavBtn:hover{background:rgba(255,255,255,0.55);}
-  #homeNavBtn.active, #providerNavBtn.active{background:var(--highlight); border-color:var(--highlight-line);}
+  #homeNavBtn:hover, #providerNavBtn:hover, #practiceNavBtn:hover{background:rgba(255,255,255,0.55);}
+  #homeNavBtn.active, #providerNavBtn.active, #practiceNavBtn.active{background:var(--highlight); border-color:var(--highlight-line);}
 
   .home-sort-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:18px;}
   .home-columns{display:flex; gap:28px; align-items:flex-start;}
@@ -1287,7 +1318,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut }
     from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, onSnapshot, collection, addDoc, serverTimestamp }
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp }
     from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -1308,7 +1339,7 @@
 
   window.FB = {
     auth, db, provider, signInWithPopup, signInWithRedirect, getRedirectResult,
-    onAuthStateChanged, signOut, doc, setDoc, onSnapshot, collection, addDoc, serverTimestamp,
+    onAuthStateChanged, signOut, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp,
     credentialFromResult: GoogleAuthProvider.credentialFromResult
   };
   window.dispatchEvent(new Event('fb-ready'));
@@ -1329,6 +1360,7 @@
     <div class="nav-row">
       <button id="homeNavBtn" type="button" title="Ana Sayfa"><span class="nav-icon">🏠</span><span class="nav-label">Ana Sayfa</span></button>
       <button id="providerNavBtn" type="button" title="Uzman Bilgileri"><span class="nav-icon">🩺</span><span class="nav-label">Uzman</span></button>
+      <button id="practiceNavBtn" type="button" title="Ortaklık"><span class="nav-icon">🤝</span><span class="nav-label">Ortaklık</span></button>
     </div>
     <form id="addClientForm">
       <input id="newClientName" type="text" placeholder="Ara ya da yeni danışan adı…" autocomplete="off">
@@ -1475,7 +1507,7 @@ function restoreViewState(){
       }
       return false;
     }
-    if(['home','provider','settings'].includes(saved.mainView)){
+    if(['home','provider','settings','practice'].includes(saved.mainView)){
       mainView = saved.mainView;
       return true;
     }
@@ -1598,9 +1630,7 @@ function tryInteractiveGisRequest(){
 
 const ALLOWED_EMAILS = [
   'duygu.rp@gmail.com',
-  'psikologduygucankaya@gmail.com',
-  'psk.kubilay@gmail.com',
-  'kubilaycadircioglu@gmail.com'
+  'psk.kubilay@gmail.com'
 ];
 
 function startAuthListener(){
@@ -2021,6 +2051,8 @@ function render(){
     renderProviderPage();
   }else if(mainView === 'settings'){
     renderSettingsPage();
+  }else if(mainView === 'practice'){
+    renderPracticePage();
   }else{
     renderMain();
   }
@@ -2029,6 +2061,7 @@ function render(){
 function renderSidebar(){
   document.getElementById('homeNavBtn').classList.toggle('active', mainView==='home');
   document.getElementById('providerNavBtn').classList.toggle('active', mainView==='provider');
+  document.getElementById('practiceNavBtn').classList.toggle('active', mainView==='practice');
   const list = document.getElementById('clientList');
   list.innerHTML = '';
   const clients = getSortedClients();
@@ -3539,6 +3572,12 @@ document.getElementById('providerNavBtn').addEventListener('click', ()=>{
   render();
 });
 
+document.getElementById('practiceNavBtn').addEventListener('click', ()=>{
+  mainView = 'practice';
+  document.body.classList.add('mobile-detail');
+  render();
+});
+
 document.getElementById('settingsNavBtn').addEventListener('click', ()=>{
   mainView = 'settings';
   document.body.classList.add('mobile-detail');
@@ -3576,6 +3615,271 @@ async function exportCurrentDataJson(){
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/* ---------- Ortaklık (shared practice page) ---------- */
+let practiceState = null;
+
+function currentPersonId(){
+  if(!currentUser) return null;
+  const email = (currentUser.email||'').toLowerCase();
+  if(email.includes('kubilay')) return 'kubilay';
+  if(email.includes('duygu')) return 'duygu';
+  return null;
+}
+
+function personLabel(id){
+  return id === 'kubilay' ? 'Kubilay' : id === 'duygu' ? 'Duygu' : '?';
+}
+
+async function loadPracticeShared(){
+  if(!currentUser) return null;
+  try{
+    const ref = window.FB.doc(window.FB.db, 'practiceShared', 'main');
+    const snap = await window.FB.getDoc(ref);
+    if(snap.exists()){
+      const data = snap.data();
+      return { tasks: data.tasks||[], notes: data.notes||[], activity: data.activity||[] };
+    }
+    return { tasks:[], notes:[], activity:[] };
+  }catch(e){
+    console.error('Ortaklık verisi yüklenemedi', e);
+    return null;
+  }
+}
+
+async function savePracticeShared(){
+  if(!currentUser || !practiceState) return;
+  try{
+    const ref = window.FB.doc(window.FB.db, 'practiceShared', 'main');
+    await window.FB.setDoc(ref, JSON.parse(JSON.stringify(practiceState)));
+  }catch(e){
+    console.error('Ortaklık verisi kaydedilemedi', e);
+    alert('Kaydedilemedi — Firestore kurallarına "practiceShared" izni eklenmiş mi kontrol et.');
+  }
+}
+
+function logPracticeActivity(text){
+  if(!practiceState) return;
+  if(!practiceState.activity) practiceState.activity = [];
+  practiceState.activity.unshift({ id: uid(), text, at: Date.now() });
+  if(practiceState.activity.length > 50) practiceState.activity = practiceState.activity.slice(0, 50);
+}
+
+function computePersonalStats(){
+  const now = new Date();
+  const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const thisYearStr = String(now.getFullYear());
+  let activeClients = 0, terminatedClients = 0;
+  let sessionsThisMonth = 0, sessionsThisYear = 0, revenueThisMonth = 0;
+  (state.clients||[]).forEach(c=>{
+    if(c.profile && c.profile.terminated) terminatedClients++; else activeClients++;
+    (c.sessions||[]).forEach(s=>{
+      if(!s.date || !isSessionDue(s)) return;
+      if(s.date.startsWith(thisMonthStr)){
+        sessionsThisMonth++;
+        if(s.paymentDone){
+          const rate = (c.profile && c.profile.ifhp) ? 205 : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+          revenueThisMonth += rate;
+        }
+      }
+      if(s.date.startsWith(thisYearStr)) sessionsThisYear++;
+    });
+  });
+  return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth };
+}
+
+function practiceTaskRowHtml(t){
+  return `
+  <div class="home-task-row ${t.done?'done':''}" data-id="${t.id}">
+    <input type="checkbox" class="practice-task-check" ${t.done?'checked':''}>
+    <div class="home-task-main">
+      <div class="practice-task-title">${escapeHtml(t.title)}</div>
+      <div class="home-task-meta">
+        <span class="home-task-client">${personLabel(t.assignedBy)} → ${personLabel(t.assignedTo)}</span>
+        ${t.dueDate ? `<span>${formatShortDate(t.dueDate)}</span>` : ''}
+        <span>${stars(t.importance)}</span>
+      </div>
+    </div>
+    <button class="home-task-del" title="Sil">✕</button>
+  </div>`;
+}
+
+function practiceNoteRowHtml(n){
+  return `
+  <div class="practice-note-row" data-id="${n.id}">
+    <div class="practice-note-text">${escapeHtml(n.text)}</div>
+    <div class="practice-note-meta">${personLabel(n.author)} · ${formatBackupTime(n.createdAt)}</div>
+    <button class="practice-note-del" title="Sil">✕</button>
+  </div>`;
+}
+
+function practiceActivityRowHtml(a){
+  return `<div class="practice-activity-row"><span class="practice-activity-time">${formatBackupTime(a.at)}</span> — ${escapeHtml(a.text)}</div>`;
+}
+
+async function renderPracticePage(){
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
+    <div id="clientHeader"><h2>🤝 Ortaklık</h2></div>
+    <div id="clientSub">İkinizin de erişebildiği paylaşılan alan.</div>
+    <div id="practiceLoadingBox" class="settings-section">Yükleniyor…</div>
+  `;
+  document.getElementById('backToListBtn').addEventListener('click', ()=>{
+    document.body.classList.remove('mobile-detail');
+  });
+
+  const loaded = await loadPracticeShared();
+  if(mainView !== 'practice') return; // navigated away while loading
+  if(loaded === null){
+    const box = document.getElementById('practiceLoadingBox');
+    if(box) box.textContent = 'Ortaklık verisi yüklenemedi — Google bağlantını ve Firestore izinlerini kontrol et.';
+    return;
+  }
+  practiceState = loaded;
+  renderPracticeContent();
+}
+
+function renderPracticeContent(){
+  const main = document.getElementById('main');
+  const me = currentPersonId();
+  const stats = computePersonalStats();
+  const pendingTasks = (practiceState.tasks||[]).filter(t=>!t.done).sort((a,b)=>(a.dueDate||'9999').localeCompare(b.dueDate||'9999'));
+  const doneTasks = (practiceState.tasks||[]).filter(t=>t.done);
+  const notesSorted = (practiceState.notes||[]).slice().sort((a,b)=>b.createdAt-a.createdAt);
+
+  main.innerHTML = `
+    <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
+    <div id="clientHeader"><h2>🤝 Ortaklık</h2></div>
+    <div id="clientSub">İkinizin de erişebildiği paylaşılan alan.</div>
+
+    <div class="settings-section">
+      <h3>📋 İşler</h3>
+      <div class="todo-add-row">
+        <input type="text" class="practice-task-text" placeholder="İş tanımı…" style="flex:2; min-width:140px;">
+        <select class="practice-task-assignee">
+          <option value="kubilay">Kubilay'a ata</option>
+          <option value="duygu">Duygu'ya ata</option>
+        </select>
+        <select class="practice-task-importance">
+          <option value="1">⭐ Düşük</option>
+          <option value="2" selected>⭐⭐ Orta</option>
+          <option value="3">⭐⭐⭐ Yüksek</option>
+        </select>
+        <input type="date" class="practice-task-duedate">
+        <button class="practice-task-add-btn" type="button">Ekle</button>
+      </div>
+      <div id="practiceTaskList">
+        ${pendingTasks.length ? pendingTasks.map(practiceTaskRowHtml).join('') : '<div class="todo-empty">Bekleyen iş yok.</div>'}
+      </div>
+      ${doneTasks.length ? `
+      <div class="todo-done-header">Tamamlananlar (${doneTasks.length})</div>
+      <div id="practiceDoneTaskList">${doneTasks.map(practiceTaskRowHtml).join('')}</div>` : ''}
+    </div>
+
+    <div class="settings-section">
+      <h3>📌 Ortak Pano</h3>
+      <div class="todo-add-row">
+        <input type="text" class="practice-note-text" placeholder="Not / duyuru ekle…" style="flex:1 1 100%;">
+        <button class="practice-note-add-btn" type="button">Ekle</button>
+      </div>
+      <div id="practiceNoteList">
+        ${notesSorted.length ? notesSorted.map(practiceNoteRowHtml).join('') : '<div class="todo-empty">Henüz not yok.</div>'}
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>📊 Senin İstatistiklerin</h3>
+      <p style="font-size:12.5px; color:var(--muted); margin:-6px 0 14px; line-height:1.5;">Bu sayılar sadece kendi hesabındaki danışan verilerinden hesaplanıyor — gizlilik gereği ${me==='kubilay'?'Duygu':'Kubilay'}'nun danışan bilgileri burada görünmüyor.</p>
+      <div class="practice-stats-grid">
+        <div class="practice-stat-box"><div class="practice-stat-num">${stats.activeClients}</div><div class="practice-stat-label">Aktif danışan</div></div>
+        <div class="practice-stat-box"><div class="practice-stat-num">${stats.terminatedClients}</div><div class="practice-stat-label">Sonlanmış danışan</div></div>
+        <div class="practice-stat-box"><div class="practice-stat-num">${stats.sessionsThisMonth}</div><div class="practice-stat-label">Bu ay seans</div></div>
+        <div class="practice-stat-box"><div class="practice-stat-num">${stats.sessionsThisYear}</div><div class="practice-stat-label">Bu yıl seans</div></div>
+        <div class="practice-stat-box"><div class="practice-stat-num">CA$${stats.revenueThisMonth.toFixed(0)}</div><div class="practice-stat-label">Bu ay tahsil edilen</div></div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>🕐 İşlem Geçmişi</h3>
+      <div id="practiceActivityList">
+        ${(practiceState.activity||[]).length ? practiceState.activity.map(practiceActivityRowHtml).join('') : '<div class="todo-empty">Henüz işlem yok.</div>'}
+      </div>
+    </div>
+  `;
+  wirePracticePage();
+}
+
+function wirePracticePage(){
+  document.getElementById('backToListBtn').addEventListener('click', ()=>{
+    document.body.classList.remove('mobile-detail');
+  });
+
+  document.querySelector('.practice-task-add-btn').addEventListener('click', async ()=>{
+    const textInput = document.querySelector('.practice-task-text');
+    const title = textInput.value.trim();
+    if(!title) return;
+    const assignedTo = document.querySelector('.practice-task-assignee').value;
+    const importance = Number(document.querySelector('.practice-task-importance').value);
+    const dueDate = document.querySelector('.practice-task-duedate').value;
+    const me = currentPersonId();
+    if(!practiceState.tasks) practiceState.tasks = [];
+    practiceState.tasks.push({ id: uid(), title, assignedTo, assignedBy: me, importance, dueDate, done:false, createdAt: Date.now() });
+    logPracticeActivity(`${personLabel(me)}, ${personLabel(assignedTo)}'a bir iş atadı: "${title}"`);
+    await savePracticeShared();
+    renderPracticeContent();
+  });
+
+  document.querySelectorAll('.practice-task-check').forEach(cb=>{
+    cb.addEventListener('change', async (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      const id = row.getAttribute('data-id');
+      const task = (practiceState.tasks||[]).find(t=>t.id===id);
+      if(!task) return;
+      task.done = ev.target.checked;
+      task.doneAt = task.done ? Date.now() : null;
+      if(task.done) logPracticeActivity(`${personLabel(currentPersonId())}, "${task.title}" işini tamamladı.`);
+      await savePracticeShared();
+      renderPracticeContent();
+    });
+  });
+
+  document.querySelectorAll('#practiceTaskList .home-task-del, #practiceDoneTaskList .home-task-del').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      const id = row.getAttribute('data-id');
+      if(!confirm('Bu iş silinsin mi?')) return;
+      const task = (practiceState.tasks||[]).find(t=>t.id===id);
+      practiceState.tasks = (practiceState.tasks||[]).filter(t=>t.id!==id);
+      if(task) logPracticeActivity(`${personLabel(currentPersonId())}, "${task.title}" işini sildi.`);
+      await savePracticeShared();
+      renderPracticeContent();
+    });
+  });
+
+  document.querySelector('.practice-note-add-btn').addEventListener('click', async ()=>{
+    const input = document.querySelector('.practice-note-text');
+    const text = input.value.trim();
+    if(!text) return;
+    const me = currentPersonId();
+    if(!practiceState.notes) practiceState.notes = [];
+    practiceState.notes.push({ id: uid(), text, author: me, createdAt: Date.now() });
+    logPracticeActivity(`${personLabel(me)} panoya bir not ekledi.`);
+    await savePracticeShared();
+    renderPracticeContent();
+  });
+
+  document.querySelectorAll('.practice-note-del').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      const id = row.getAttribute('data-id');
+      if(!confirm('Bu not silinsin mi?')) return;
+      practiceState.notes = (practiceState.notes||[]).filter(n=>n.id!==id);
+      await savePracticeShared();
+      renderPracticeContent();
+    });
+  });
 }
 
 function renderSettingsPage(){
