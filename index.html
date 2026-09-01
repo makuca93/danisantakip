@@ -494,6 +494,22 @@
   .practice-note-meta{font-size:11px; color:var(--muted); white-space:nowrap; margin-top:2px;}
   .practice-note-del{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; flex-shrink:0;}
   .practice-note-del:hover{color:var(--red);}
+  .practice-note-edit-btn{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; flex-shrink:0;}
+  .practice-note-edit-btn:hover{color:var(--ink);}
+  .practice-note-editing{background:var(--paper); border-radius:8px; padding:10px;}
+  .practice-note-edit-form{width:100%; display:flex; flex-direction:column; gap:8px;}
+  .practice-note-edit-text{
+    width:100%;
+    min-height:70px;
+    font-family:inherit;
+    font-size:13.5px;
+    padding:9px 10px;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    background:#fdfcfd;
+    color:var(--ink);
+    resize:vertical;
+  }
   .practice-activity-row{font-size:12.5px; color:var(--muted); padding:6px 0; border-bottom:1px dashed var(--card-line); display:flex; align-items:center; gap:8px;}
   .practice-activity-row:last-child{border-bottom:none;}
   .practice-activity-time{font-weight:600; color:var(--ink); flex-shrink:0;}
@@ -3777,6 +3793,7 @@ async function exportCurrentDataJson(){
 let practiceState = null;
 let practiceStatsFilter = 'toplam';
 let editingPracticeTaskId = null;
+let editingPracticeNoteId = null;
 let practiceSectionCollapsed = { tasks:false, notes:false, stats:false, activity:false };
 
 function currentPersonId(){
@@ -3938,10 +3955,23 @@ function practiceTaskRowHtml(t){
 }
 
 function practiceNoteRowHtml(n){
+  if(n.id === editingPracticeNoteId){
+    return `
+    <div class="practice-note-row practice-note-editing" data-id="${n.id}">
+      <div class="practice-note-edit-form">
+        <textarea class="practice-note-edit-text">${escapeHtml(n.text)}</textarea>
+        <div class="practice-task-edit-actions">
+          <button class="practice-note-save-btn" type="button">Kaydet</button>
+          <button class="practice-note-cancel-btn" type="button">Vazgeç</button>
+        </div>
+      </div>
+    </div>`;
+  }
   return `
   <div class="practice-note-row" data-id="${n.id}">
     <div class="practice-note-text">${escapeHtml(n.text)}</div>
     <div class="practice-note-meta">${personLabel(n.author)} · ${formatBackupTime(n.createdAt)}</div>
+    <button class="practice-note-edit-btn" title="Düzenle">✏️</button>
     <button class="practice-note-del" title="Sil">✕</button>
   </div>`;
 }
@@ -3952,6 +3982,7 @@ function practiceActivityRowHtml(a){
 
 async function renderPracticePage(){
   editingPracticeTaskId = null;
+  editingPracticeNoteId = null;
   const main = document.getElementById('main');
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
@@ -4205,6 +4236,37 @@ function wirePracticePage(){
       const id = row.getAttribute('data-id');
       if(!confirm('Bu not silinsin mi?')) return;
       practiceState.notes = (practiceState.notes||[]).filter(n=>n.id!==id);
+      await savePracticeShared();
+      renderPracticeContent();
+    });
+  });
+
+  document.querySelectorAll('.practice-note-edit-btn').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      editingPracticeNoteId = row.getAttribute('data-id');
+      renderPracticeContent();
+    });
+  });
+
+  document.querySelectorAll('.practice-note-cancel-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      editingPracticeNoteId = null;
+      renderPracticeContent();
+    });
+  });
+
+  document.querySelectorAll('.practice-note-save-btn').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      const id = row.getAttribute('data-id');
+      const note = (practiceState.notes||[]).find(n=>n.id===id);
+      if(!note) return;
+      const newText = row.querySelector('.practice-note-edit-text').value.trim();
+      if(!newText) return;
+      note.text = newText;
+      logPracticeActivity(`${personLabel(currentPersonId())} bir notu düzenledi.`);
+      editingPracticeNoteId = null;
       await savePracticeShared();
       renderPracticeContent();
     });
