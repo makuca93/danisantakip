@@ -392,6 +392,16 @@
     margin-bottom:16px;
   }
   .settings-section h3{margin:0 0 6px; font-size:15px;}
+  .practice-section-toggle{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    cursor:pointer;
+    user-select:none;
+  }
+  .practice-section-header-right{display:flex; align-items:center; gap:10px;}
+  .practice-section-arrow{color:var(--muted); font-size:15px; flex-shrink:0;}
+  .practice-section-body.collapsed{display:none;}
   .settings-section p{margin:0 0 12px; font-size:13px; color:var(--muted); line-height:1.5;}
   .settings-section .settings-btn{
     background:var(--highlight);
@@ -2590,6 +2600,9 @@ async function createCalendarEvent(client, opts){
   if(opts.inviteClient && client.profile && client.profile.email){
     event.attendees = [{ email: client.profile.email.trim() }];
   }
+  if(opts.reminder24h){
+    event.reminders = { useDefault: false, overrides: [{ method: 'email', minutes: 24*60 }] };
+  }
 
   try{
     const res = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?sendUpdates=all', {
@@ -2974,6 +2987,7 @@ function calendarPanelHtml(client){
       <div class="field-block">
         <label>&nbsp;</label>
         <div class="tick-row"><input type="checkbox" class="cal-invite" ${client.profile && client.profile.email ? 'checked' : ''}><span>Danışanı davet et (${client.profile && client.profile.email ? escapeHtml(client.profile.email) : 'email yok'})</span></div>
+        <div class="tick-row" style="margin-top:6px;"><input type="checkbox" class="cal-reminder" checked><span>24 saat önce otomatik email hatırlatması gönder</span></div>
       </div>
     </div>
     <div class="cal-day-events-block">
@@ -3202,6 +3216,7 @@ function wireCalendarPanel(client){
     const timeStr = parseAmPmTime(timeRaw);
     const durationMinutes = Number(panel.querySelector('.cal-duration').value);
     const inviteClient = panel.querySelector('.cal-invite').checked;
+    const reminder24h = panel.querySelector('.cal-reminder').checked;
     if(!title || !dateStr || !timeRaw){
       alert('Başlık, tarih ve saat gerekli.');
       return;
@@ -3212,7 +3227,7 @@ function wireCalendarPanel(client){
     }
     const btn = panel.querySelector('.cal-create-btn');
     btn.disabled = true; btn.textContent = 'Oluşturuluyor…';
-    const ok = await createCalendarEvent(client, { title, dateStr, timeStr, durationMinutes, inviteClient });
+    const ok = await createCalendarEvent(client, { title, dateStr, timeStr, durationMinutes, inviteClient, reminder24h });
     btn.disabled = false; btn.textContent = 'Randevu Oluştur';
     if(ok){
       alert('Randevu Google Takvimine eklendi.');
@@ -3760,6 +3775,7 @@ async function exportCurrentDataJson(){
 let practiceState = null;
 let practiceStatsFilter = 'toplam';
 let editingPracticeTaskId = null;
+let practiceSectionCollapsed = { tasks:false, notes:false, stats:false, activity:false };
 
 function currentPersonId(){
   if(!currentUser) return null;
@@ -3974,58 +3990,78 @@ function renderPracticeContent(){
     <div id="clientSub">İki Therapy ekip yönetim alanı — görev takibi, ortak duyurular ve performans özeti.</div>
 
     <div class="settings-section">
-      <h3>📋 İşler</h3>
-      <div class="todo-add-row">
-        <input type="text" class="practice-task-text" placeholder="İş tanımı…" style="flex:2; min-width:140px;">
-        <select class="practice-task-assignee">
-          <option value="kubilay">Kubilay'a ata</option>
-          <option value="duygu">Duygu'ya ata</option>
-        </select>
-        <select class="practice-task-importance">
-          <option value="1">⭐ Düşük</option>
-          <option value="2" selected>⭐⭐ Orta</option>
-          <option value="3">⭐⭐⭐ Yüksek</option>
-        </select>
-        <input type="date" class="practice-task-duedate">
-        <button class="practice-task-add-btn" type="button">Ekle</button>
-      </div>
-      <div id="practiceTaskList">
-        ${pendingTasks.length ? pendingTasks.map(practiceTaskRowHtml).join('') : '<div class="todo-empty">Bekleyen iş yok.</div>'}
-      </div>
-      ${doneTasks.length ? `
-      <div class="todo-done-header">Tamamlananlar (${doneTasks.length})</div>
-      <div id="practiceDoneTaskList">${doneTasks.map(practiceTaskRowHtml).join('')}</div>` : ''}
-    </div>
-
-    <div class="settings-section">
-      <h3>📌 Ortak Pano</h3>
-      <div class="todo-add-row">
-        <input type="text" class="practice-note-text" placeholder="Not / duyuru ekle…" style="flex:1 1 100%;">
-        <button class="practice-note-add-btn" type="button">Ekle</button>
-      </div>
-      <div id="practiceNoteList">
-        ${notesSorted.length ? notesSorted.map(practiceNoteRowHtml).join('') : '<div class="todo-empty">Henüz not yok.</div>'}
-      </div>
-    </div>
-
-    <div class="settings-section">
-      <h3>📊 İstatistikler</h3>
-      <p style="font-size:12.5px; color:var(--muted); margin:-6px 0 14px; line-height:1.5;">Her hesap kendi danışan verisinden özet sayılar hesaplayıp buraya paylaşır — ham danışan kayıtları birbirinize açılmıyor, sadece bu özet rakamlar.</p>
-      <div class="practice-stats-filter">
-        <button class="practice-stats-filter-btn ${practiceStatsFilter==='toplam'?'active':''}" data-filter="toplam">Toplam</button>
-        <button class="practice-stats-filter-btn ${practiceStatsFilter==='kubilay'?'active':''}" data-filter="kubilay">Kubilay</button>
-        <button class="practice-stats-filter-btn ${practiceStatsFilter==='duygu'?'active':''}" data-filter="duygu">Duygu</button>
-      </div>
-      ${practiceStatsHtml()}
-    </div>
-
-    <div class="settings-section">
-      <h3 style="display:flex; align-items:center; justify-content:space-between;">
-        <span>🕐 İşlem Geçmişi</span>
-        ${(practiceState.activity||[]).length ? `<button class="practice-activity-clear-btn" type="button">Tümünü Temizle</button>` : ''}
+      <h3 class="practice-section-toggle" data-section="tasks">
+        <span>📋 İşler</span>
+        <span class="practice-section-arrow">${practiceSectionCollapsed.tasks ? '▸' : '▾'}</span>
       </h3>
-      <div id="practiceActivityList">
-        ${(practiceState.activity||[]).length ? practiceState.activity.map(practiceActivityRowHtml).join('') : '<div class="todo-empty">Henüz işlem yok.</div>'}
+      <div class="practice-section-body ${practiceSectionCollapsed.tasks ? 'collapsed' : ''}">
+        <div class="todo-add-row">
+          <input type="text" class="practice-task-text" placeholder="İş tanımı…" style="flex:2; min-width:140px;">
+          <select class="practice-task-assignee">
+            <option value="kubilay">Kubilay'a ata</option>
+            <option value="duygu">Duygu'ya ata</option>
+          </select>
+          <select class="practice-task-importance">
+            <option value="1">⭐ Düşük</option>
+            <option value="2" selected>⭐⭐ Orta</option>
+            <option value="3">⭐⭐⭐ Yüksek</option>
+          </select>
+          <input type="date" class="practice-task-duedate">
+          <button class="practice-task-add-btn" type="button">Ekle</button>
+        </div>
+        <div id="practiceTaskList">
+          ${pendingTasks.length ? pendingTasks.map(practiceTaskRowHtml).join('') : '<div class="todo-empty">Bekleyen iş yok.</div>'}
+        </div>
+        ${doneTasks.length ? `
+        <div class="todo-done-header">Tamamlananlar (${doneTasks.length})</div>
+        <div id="practiceDoneTaskList">${doneTasks.map(practiceTaskRowHtml).join('')}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3 class="practice-section-toggle" data-section="notes">
+        <span>📌 Ortak Pano</span>
+        <span class="practice-section-arrow">${practiceSectionCollapsed.notes ? '▸' : '▾'}</span>
+      </h3>
+      <div class="practice-section-body ${practiceSectionCollapsed.notes ? 'collapsed' : ''}">
+        <div class="todo-add-row">
+          <input type="text" class="practice-note-text" placeholder="Not / duyuru ekle…" style="flex:1 1 100%;">
+          <button class="practice-note-add-btn" type="button">Ekle</button>
+        </div>
+        <div id="practiceNoteList">
+          ${notesSorted.length ? notesSorted.map(practiceNoteRowHtml).join('') : '<div class="todo-empty">Henüz not yok.</div>'}
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3 class="practice-section-toggle" data-section="stats">
+        <span>📊 İstatistikler</span>
+        <span class="practice-section-arrow">${practiceSectionCollapsed.stats ? '▸' : '▾'}</span>
+      </h3>
+      <div class="practice-section-body ${practiceSectionCollapsed.stats ? 'collapsed' : ''}">
+        <p style="font-size:12.5px; color:var(--muted); margin:-6px 0 14px; line-height:1.5;">Her hesap kendi danışan verisinden özet sayılar hesaplayıp buraya paylaşır — ham danışan kayıtları birbirinize açılmıyor, sadece bu özet rakamlar.</p>
+        <div class="practice-stats-filter">
+          <button class="practice-stats-filter-btn ${practiceStatsFilter==='toplam'?'active':''}" data-filter="toplam">Toplam</button>
+          <button class="practice-stats-filter-btn ${practiceStatsFilter==='kubilay'?'active':''}" data-filter="kubilay">Kubilay</button>
+          <button class="practice-stats-filter-btn ${practiceStatsFilter==='duygu'?'active':''}" data-filter="duygu">Duygu</button>
+        </div>
+        ${practiceStatsHtml()}
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3 class="practice-section-toggle" data-section="activity">
+        <span>🕐 İşlem Geçmişi</span>
+        <span class="practice-section-header-right">
+          ${(practiceState.activity||[]).length ? `<button class="practice-activity-clear-btn" type="button">Tümünü Temizle</button>` : ''}
+          <span class="practice-section-arrow">${practiceSectionCollapsed.activity ? '▸' : '▾'}</span>
+        </span>
+      </h3>
+      <div class="practice-section-body ${practiceSectionCollapsed.activity ? 'collapsed' : ''}">
+        <div id="practiceActivityList">
+          ${(practiceState.activity||[]).length ? practiceState.activity.map(practiceActivityRowHtml).join('') : '<div class="todo-empty">Henüz işlem yok.</div>'}
+        </div>
       </div>
     </div>
   `;
@@ -4035,6 +4071,15 @@ function renderPracticeContent(){
 function wirePracticePage(){
   document.getElementById('backToListBtn').addEventListener('click', ()=>{
     document.body.classList.remove('mobile-detail');
+  });
+
+  document.querySelectorAll('.practice-section-toggle').forEach(header=>{
+    header.addEventListener('click', (ev)=>{
+      if(ev.target.closest('.practice-activity-clear-btn')) return; // don't toggle when clicking the clear button
+      const section = header.getAttribute('data-section');
+      practiceSectionCollapsed[section] = !practiceSectionCollapsed[section];
+      renderPracticeContent();
+    });
   });
 
   document.querySelectorAll('.practice-stats-filter-btn').forEach(btn=>{
