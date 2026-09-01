@@ -2686,6 +2686,18 @@ async function syncClientToGoogleContacts(client){
   }
 }
 
+let contactSyncTimers = {};
+
+function scheduleContactSync(client){
+  if(contactSyncTimers[client.id]){
+    clearTimeout(contactSyncTimers[client.id]);
+  }
+  contactSyncTimers[client.id] = setTimeout(()=>{
+    delete contactSyncTimers[client.id];
+    syncClientToGoogleContacts(client);
+  }, 1500);
+}
+
 let contactsSyncRunning = false;
 
 async function syncAllClientsToGoogleContacts(onProgress){
@@ -3529,7 +3541,7 @@ function wireProfilePanel(client){
   phoneInput.addEventListener('blur', (ev)=>{
     client.profile.phone = ev.target.value;
     saveState();
-    syncClientToGoogleContacts(client);
+    scheduleContactSync(client);
   });
 
   const emailInput = panel.querySelector('.profile-email');
@@ -3545,7 +3557,7 @@ function wireProfilePanel(client){
   emailInput.addEventListener('blur', (ev)=>{
     client.profile.email = ev.target.value;
     saveState();
-    syncClientToGoogleContacts(client);
+    scheduleContactSync(client);
   });
 
   const ifhpCb = panel.querySelector('.profile-ifhp');
