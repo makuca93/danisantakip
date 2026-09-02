@@ -853,7 +853,7 @@
   #practiceDoneTaskList.collapsed{display:none;}
 
   .nav-row{display:flex; gap:6px;}
-  #homeNavBtn, #providerNavBtn, #practiceNavBtn{
+  #homeNavBtn, #providerNavBtn, #practiceNavBtn, #invoicesNavBtn{
     flex:1;
     display:flex;
     flex-direction:column;
@@ -868,8 +868,8 @@
     cursor:pointer;
     min-width:0;
   }
-  #homeNavBtn .nav-icon, #providerNavBtn .nav-icon, #practiceNavBtn .nav-icon{font-size:15px; line-height:1;}
-  #homeNavBtn .nav-label, #providerNavBtn .nav-label, #practiceNavBtn .nav-label{
+  #homeNavBtn .nav-icon, #providerNavBtn .nav-icon, #practiceNavBtn .nav-icon, #invoicesNavBtn .nav-icon{font-size:15px; line-height:1;}
+  #homeNavBtn .nav-label, #providerNavBtn .nav-label, #practiceNavBtn .nav-label, #invoicesNavBtn .nav-label{
     font-size:9.5px;
     font-weight:600;
     color:var(--ink);
@@ -878,15 +878,87 @@
     text-overflow:ellipsis;
     max-width:100%;
   }
-  #homeNavBtn:hover, #providerNavBtn:hover, #practiceNavBtn:hover{background:rgba(255,255,255,0.55);}
-  #homeNavBtn.active, #providerNavBtn.active, #practiceNavBtn.active{background:var(--highlight); border-color:var(--highlight-line);}
+  #homeNavBtn:hover, #providerNavBtn:hover, #practiceNavBtn:hover, #invoicesNavBtn:hover{background:rgba(255,255,255,0.55);}
+  #homeNavBtn.active, #providerNavBtn.active, #practiceNavBtn.active, #invoicesNavBtn.active{background:var(--highlight); border-color:var(--highlight-line);}
 
   .home-sort-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:18px;}
-  .home-columns{display:flex; gap:28px; align-items:flex-start;}
+  .home-columns{display:flex; gap:24px; align-items:flex-start;}
   .home-mobile-tabs{display:none;}
-  .home-tasks-col{flex:1.3; min-width:0;}
+  .home-tasks-col{flex:1.2; min-width:0;}
   .home-calendar-col{flex:1; min-width:0; position:sticky; top:0;}
+  .home-debts-col{flex:0.9; min-width:0; position:sticky; top:0;}
   .home-col-title{font-size:16px; margin:0 0 12px;}
+  .owed-total{font-size:13.5px; color:var(--ink); margin-bottom:12px; padding:10px 14px; background:var(--highlight); border:1px solid var(--highlight-line); border-radius:8px;}
+  .owed-list{display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto;}
+  .owed-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:10px;
+    padding:10px 14px;
+  }
+  .owed-row-main{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .owed-client-name{font-size:14px; font-weight:600; color:var(--ink);}
+  .owed-count{font-size:11.5px; color:var(--muted);}
+  .owed-amount{font-size:15px; font-weight:700; color:var(--red); flex-shrink:0; font-family:'Fraunces',serif;}
+  .invoices-filters{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  .invoices-filters select, .invoices-filters input{
+    font-family:inherit;
+    font-size:13.5px;
+    padding:8px 10px;
+    border:1px solid var(--card-line);
+    border-radius:7px;
+    background:#fdfcfd;
+    color:var(--ink);
+  }
+  .invoices-filters input{flex:1; min-width:140px;}
+  .invoices-list{display:flex; flex-direction:column; gap:8px;}
+  .invoice-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:10px;
+    padding:10px 14px;
+    flex-wrap:wrap;
+  }
+  .invoice-row-main{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .invoice-client-name{font-size:14px; font-weight:600; color:var(--ink); cursor:pointer;}
+  .invoice-client-name:hover{text-decoration:underline;}
+  .invoice-date{font-size:12px; color:var(--muted);}
+  .invoice-row-actions{display:flex; align-items:center; gap:12px;}
+  .invoice-amount{font-size:14px; font-weight:700; color:var(--ink); font-family:'Fraunces',serif;}
+  .invoice-redownload-btn{
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    font-family:inherit;
+    font-size:12px;
+    font-weight:600;
+    padding:6px 12px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .birthday-banner{
+    background:#fdf3e0;
+    border:1px solid #f0dfb8;
+    color:var(--ink);
+    font-size:13px;
+    padding:9px 14px;
+    border-radius:8px;
+    margin:-16px 0 20px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:12px;
+  }
+  .birthday-item{cursor:pointer; font-weight:600;}
+  .birthday-item:hover{text-decoration:underline;}
+  .birthday-when{font-weight:400; color:var(--muted);}
   .home-calendar-list{
     background:var(--card);
     border:1px solid var(--card-line);
@@ -1135,6 +1207,7 @@
     padding:18px 20px;
     margin-bottom:14px;
   }
+  .session-card.noshow{background:#fdf0f0; border-color:#e8c5c5;}
   .session-card-top{
     display:flex;
     align-items:center;
@@ -1143,6 +1216,28 @@
     cursor:pointer;
   }
   .session-card-top .session-date-input{flex:1;}
+  .session-noshow-btn{
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-family:inherit;
+    font-size:11.5px;
+    padding:5px 10px;
+    border-radius:6px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .session-noshow-btn.active{background:var(--red); border-color:var(--red); color:#fff;}
+  .noshow-summary{
+    font-size:13.5px;
+    color:var(--ink);
+    padding:9px 11px;
+    background:var(--neutral-bg);
+    border:1px solid var(--card-line);
+    border-radius:7px;
+  }
+  .revenue-chart-block{margin-top:18px; padding-top:16px; border-top:1px dashed var(--card-line);}
+  .revenue-chart-title{font-size:13.5px; margin:0 0 10px; color:var(--ink);}
   .session-collapse-toggle{
     background:none;
     border:none;
@@ -1397,11 +1492,13 @@
       color:var(--ink);
     }
     .home-columns{ display:block; }
-    .home-tasks-col, .home-calendar-col{ display:none; }
+    .home-tasks-col, .home-calendar-col, .home-debts-col{ display:none; }
     .home-mobile-tab-tasks .home-tasks-col{ display:block; }
     .home-mobile-tab-calendar .home-calendar-col{ display:block; }
-    .home-calendar-col{ position:static; }
+    .home-mobile-tab-debts .home-debts-col{ display:block; }
+    .home-calendar-col, .home-debts-col{ position:static; }
     .home-calendar-list{ max-height:none; }
+    .owed-list{ max-height:none; }
   }
 
   .surprise-overlay{
@@ -1531,6 +1628,7 @@
       <button id="homeNavBtn" type="button" title="Ana Sayfa"><span class="nav-icon">🏠</span><span class="nav-label">Ana Sayfa</span></button>
       <button id="providerNavBtn" type="button" title="Uzman Bilgileri"><span class="nav-icon">🩺</span><span class="nav-label">Uzman</span></button>
       <button id="practiceNavBtn" type="button" title="Yönetim"><span class="nav-icon">🏢</span><span class="nav-label">Yönetim</span></button>
+      <button id="invoicesNavBtn" type="button" title="Faturalar"><span class="nav-icon">🧾</span><span class="nav-label">Faturalar</span></button>
     </div>
     <form id="addClientForm">
       <input id="newClientName" type="text" placeholder="Ara ya da yeni danışan adı…" autocomplete="off">
@@ -1677,7 +1775,7 @@ function restoreViewState(){
       }
       return false;
     }
-    if(['home','provider','settings','practice'].includes(saved.mainView)){
+    if(['home','provider','settings','practice','invoices'].includes(saved.mainView)){
       mainView = saved.mainView;
       return true;
     }
@@ -2272,6 +2370,8 @@ function render(){
     renderSettingsPage();
   }else if(mainView === 'practice'){
     renderPracticePage();
+  }else if(mainView === 'invoices'){
+    renderInvoicesPage();
   }else{
     renderMain();
   }
@@ -2281,6 +2381,7 @@ function renderSidebar(){
   document.getElementById('homeNavBtn').classList.toggle('active', mainView==='home');
   document.getElementById('providerNavBtn').classList.toggle('active', mainView==='provider');
   document.getElementById('practiceNavBtn').classList.toggle('active', mainView==='practice');
+  document.getElementById('invoicesNavBtn').classList.toggle('active', mainView==='invoices');
   const list = document.getElementById('clientList');
   list.innerHTML = '';
   const clients = getSortedClients();
@@ -3250,6 +3351,13 @@ function calendarPanelHtml(client){
         <label>&nbsp;</label>
         <div class="tick-row"><input type="checkbox" class="cal-invite" ${client.profile && client.profile.email ? 'checked' : ''}><span>Danışanı davet et (${client.profile && client.profile.email ? escapeHtml(client.profile.email) : 'email yok'})</span></div>
       </div>
+      <div class="field-block full">
+        <div class="tick-row"><input type="checkbox" class="cal-repeat"><span>Her hafta aynı gün/saatte tekrarla</span></div>
+        <div class="cal-repeat-options" style="display:none; margin-top:8px;">
+          <label>Kaç hafta boyunca?</label>
+          <input type="number" class="cal-repeat-weeks" min="2" max="52" value="8" style="max-width:100px;">
+        </div>
+      </div>
     </div>
     <div class="cal-day-events-block">
       <label class="item-label">Bu güne ait mevcut randevular</label>
@@ -3476,6 +3584,10 @@ function wireCalendarPanel(client){
   panel.querySelector('.cal-date').addEventListener('change', ()=>loadCalendarDayEvents(panel, client));
   if(panel.classList.contains('open')) loadCalendarDayEvents(panel, client);
 
+  panel.querySelector('.cal-repeat').addEventListener('change', (ev)=>{
+    panel.querySelector('.cal-repeat-options').style.display = ev.target.checked ? 'block' : 'none';
+  });
+
   panel.querySelector('.cal-create-btn').addEventListener('click', async ()=>{
     const title = panel.querySelector('.cal-title').value.trim();
     const dateStr = panel.querySelector('.cal-date').value;
@@ -3483,6 +3595,8 @@ function wireCalendarPanel(client){
     const timeStr = parseAmPmTime(timeRaw);
     const durationMinutes = Number(panel.querySelector('.cal-duration').value);
     const inviteClient = panel.querySelector('.cal-invite').checked;
+    const repeatWeekly = panel.querySelector('.cal-repeat').checked;
+    const repeatWeeks = Math.max(2, Math.min(52, Number(panel.querySelector('.cal-repeat-weeks').value) || 8));
     if(!title || !dateStr || !timeRaw){
       alert('Başlık, tarih ve saat gerekli.');
       return;
@@ -3492,7 +3606,28 @@ function wireCalendarPanel(client){
       return;
     }
     const btn = panel.querySelector('.cal-create-btn');
-    btn.disabled = true; btn.textContent = 'Oluşturuluyor…';
+    btn.disabled = true;
+
+    if(repeatWeekly){
+      const baseDate = new Date(dateStr + 'T00:00:00');
+      let successCount = 0;
+      for(let i = 0; i < repeatWeeks; i++){
+        btn.textContent = `Oluşturuluyor… (${i+1}/${repeatWeeks})`;
+        const d = new Date(baseDate.getTime() + i*7*24*60*60*1000);
+        const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        const ok = await createCalendarEvent(client, { title, dateStr: dStr, timeStr, durationMinutes, inviteClient });
+        if(ok) successCount++;
+        await new Promise(r => setTimeout(r, 300));
+      }
+      btn.disabled = false; btn.textContent = 'Randevu Oluştur';
+      alert(`${successCount} / ${repeatWeeks} randevu Google Takvimine eklendi.`);
+      calendarCheckedClientIds.delete(client.id);
+      panel.classList.remove('open');
+      loadNextAppointmentInfo(client);
+      return;
+    }
+
+    btn.textContent = 'Oluşturuluyor…';
     const ok = await createCalendarEvent(client, { title, dateStr, timeStr, durationMinutes, inviteClient });
     btn.disabled = false; btn.textContent = 'Randevu Oluştur';
     if(ok){
@@ -3617,6 +3752,16 @@ function wireTodoPanel(client){
   });
 }
 
+function noShowSummaryText(client){
+  const sessions = (client.sessions||[]).filter(s=>isSessionDue(s));
+  const total = sessions.length;
+  const noShowCount = sessions.filter(s=>s.noShow).length;
+  if(total === 0) return 'Henüz seans yok.';
+  if(noShowCount === 0) return `0 gelmedi (${total} seans)`;
+  const pct = Math.round((noShowCount/total)*100);
+  return `${noShowCount} gelmedi / ${total} seans (%${pct})`;
+}
+
 function profilePanelHtml(client){
   const p = client.profile || {};
   return `
@@ -3624,7 +3769,15 @@ function profilePanelHtml(client){
     <div class="form-grid">
       <div class="field-block full">
         <label>Kişisel bilgiler</label>
-        <textarea class="profile-info" placeholder="Doğum tarihi, meslek, aile durumu vb....">${escapeHtml(p.info||'')}</textarea>
+        <textarea class="profile-info" placeholder="Meslek, aile durumu vb....">${escapeHtml(p.info||'')}</textarea>
+      </div>
+      <div class="field-block">
+        <label>Doğum Tarihi</label>
+        <input type="date" class="profile-birthdate" value="${escapeAttr(p.birthDate||'')}">
+      </div>
+      <div class="field-block">
+        <label>Gelmedi (No-show)</label>
+        <div class="noshow-summary">${noShowSummaryText(client)}</div>
       </div>
       <div class="field-block full">
         <label>Adres</label>
@@ -3669,6 +3822,10 @@ function wireProfilePanel(client){
 
   panel.querySelector('.profile-info').addEventListener('blur', (ev)=>{
     client.profile.info = ev.target.value;
+    saveState();
+  });
+  panel.querySelector('.profile-birthdate').addEventListener('change', (ev)=>{
+    client.profile.birthDate = ev.target.value;
     saveState();
   });
   panel.querySelector('.profile-address').addEventListener('blur', (ev)=>{
@@ -3804,7 +3961,7 @@ function isSessionCollapsed(session, index){
 
 function renderSessionCard(client, session, index){
   const div = document.createElement('div');
-  div.className = 'session-card';
+  div.className = `session-card ${session.noShow ? 'noshow' : ''}`;
   const noInvoice = !!(client.profile && client.profile.noInvoice);
   const collapsed = isSessionCollapsed(session, index);
   const isFuture = !isSessionDue(session);
@@ -3814,6 +3971,7 @@ function renderSessionCard(client, session, index){
     <div class="session-card-top">
       <button class="session-collapse-toggle" type="button" title="Daralt/Genişlet">${collapsed ? '▸' : '▾'}</button>
       <input type="date" class="session-date-input" value="${session.date||''}">
+      <button class="session-noshow-btn ${session.noShow?'active':''}" type="button" title="Danışan gelmedi olarak işaretle">🚫 ${session.noShow?'Gelmedi':'Gelmedi mi?'}</button>
       <button class="session-del">Sil</button>
     </div>
     ${isFuture ? `
@@ -3918,6 +4076,11 @@ function renderSessionCard(client, session, index){
     session.date = ev.target.value;
     saveState();
   });
+  div.querySelector('.session-noshow-btn').addEventListener('click', ()=>{
+    session.noShow = !session.noShow;
+    saveState();
+    render();
+  });
   div.querySelector('.admin-note-input').addEventListener('blur', (ev)=>{
     session.adminNote = ev.target.value;
     saveState();
@@ -4013,6 +4176,12 @@ document.getElementById('providerNavBtn').addEventListener('click', ()=>{
 
 document.getElementById('practiceNavBtn').addEventListener('click', ()=>{
   mainView = 'practice';
+  document.body.classList.add('mobile-detail');
+  render();
+});
+
+document.getElementById('invoicesNavBtn').addEventListener('click', ()=>{
+  mainView = 'invoices';
   document.body.classList.add('mobile-detail');
   render();
 });
@@ -4130,6 +4299,46 @@ function computePersonalStats(){
     });
   });
   return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth };
+}
+
+function computeMonthlyRevenue(monthsBack){
+  const now = new Date();
+  const buckets = [];
+  const monthNames = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  for(let i = monthsBack-1; i >= 0; i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    buckets.push({ key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: monthNames[d.getMonth()], total: 0 });
+  }
+  const bucketMap = {};
+  buckets.forEach(b=>bucketMap[b.key]=b);
+  (state.clients||[]).forEach(c=>{
+    (c.sessions||[]).forEach(s=>{
+      if(!s.date || !isSessionDue(s) || !s.paymentDone) return;
+      const key = s.date.slice(0,7);
+      if(bucketMap[key]){
+        const rate = (c.profile && c.profile.ifhp) ? (205*0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+        bucketMap[key].total += rate;
+      }
+    });
+  });
+  return buckets;
+}
+
+function revenueChartSvg(){
+  const buckets = computeMonthlyRevenue(12);
+  const max = Math.max(...buckets.map(b=>b.total), 1);
+  const width = 600, height = 170, barGap = 6;
+  const chartHeight = 130;
+  const barWidth = (width - barGap*(buckets.length-1)) / buckets.length;
+  const bars = buckets.map((b,i)=>{
+    const barHeight = b.total > 0 ? Math.max(3, (b.total/max) * chartHeight) : 0;
+    const x = i * (barWidth + barGap);
+    const y = chartHeight - barHeight + 10;
+    return `
+      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barHeight.toFixed(1)}" rx="3" fill="#c7d4ea"><title>${b.label}: CA$${b.total.toFixed(0)}</title></rect>
+      <text x="${(x+barWidth/2).toFixed(1)}" y="${height-8}" font-size="10" fill="#6b6f78" text-anchor="middle">${b.label}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${width} ${height}" style="width:100%; height:auto; display:block;">${bars}</svg>`;
 }
 
 function practiceStatsHtml(){
@@ -4369,6 +4578,10 @@ function renderPracticeContent(){
           <button class="practice-stats-filter-btn ${practiceStatsFilter==='duygu'?'active':''}" data-filter="duygu">Duygu</button>
         </div>
         ${practiceStatsHtml()}
+        <div class="revenue-chart-block">
+          <h4 class="revenue-chart-title">📈 Son 12 Ay Gelir (senin hesabın)</h4>
+          ${revenueChartSvg()}
+        </div>
       </div>
     </div>
 
@@ -4590,6 +4803,123 @@ function wirePracticePage(){
   });
 }
 
+/* ---------- Faturalar arşivi (also covers year-end CSV export) ---------- */
+let invoicesYearFilter = 'all';
+let invoicesSearchQuery = '';
+
+function collectInvoicedSessions(){
+  const rows = [];
+  (state.clients||[]).forEach(c=>{
+    if(c.profile && c.profile.noInvoice) return;
+    (c.sessions||[]).forEach(s=>{
+      if(!s.invoiceDone) return;
+      const rate = (c.profile && c.profile.ifhp) ? 205 : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+      rows.push({ clientId: c.id, clientName: c.name, session: s, date: s.date, ifhp: !!(c.profile && c.profile.ifhp), rate });
+    });
+  });
+  rows.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  return rows;
+}
+
+function downloadInvoicesCsv(rows){
+  const header = ['Tarih','Danışan','Tutar (CAD)','IFHP'];
+  const lines = [header.join(',')];
+  rows.forEach(r=>{
+    lines.push([r.date||'', `"${(r.clientName||'').replace(/"/g,'""')}"`, r.rate.toFixed(2), r.ifhp ? 'Evet' : 'Hayır'].join(','));
+  });
+  const csv = lines.join('\n');
+  const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const yearLabel = invoicesYearFilter === 'all' ? 'tum-yillar' : invoicesYearFilter;
+  a.href = url;
+  a.download = `faturalar-${yearLabel}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function renderInvoicesPage(){
+  const main = document.getElementById('main');
+  const allRows = collectInvoicedSessions();
+  const years = [...new Set(allRows.map(r=>r.date ? r.date.slice(0,4) : '').filter(Boolean))].sort().reverse();
+  let rows = allRows;
+  if(invoicesYearFilter !== 'all') rows = rows.filter(r=>r.date && r.date.startsWith(invoicesYearFilter));
+  if(invoicesSearchQuery.trim()){
+    const q = normalizeForSearch(invoicesSearchQuery);
+    rows = rows.filter(r=>normalizeForSearch(r.clientName).includes(q));
+  }
+  const grandTotal = rows.reduce((sum,r)=>sum+r.rate, 0);
+
+  main.innerHTML = `
+    <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
+    <div id="clientHeader"><h2>🧾 Faturalar</h2></div>
+    <div id="clientSub">Şimdiye kadar oluşturulan tüm fatura/makbuzların arşivi.</div>
+    <div class="settings-section">
+      <div class="invoices-filters">
+        <select id="invoicesYearSelect">
+          <option value="all">Tüm yıllar</option>
+          ${years.map(y=>`<option value="${y}" ${invoicesYearFilter===y?'selected':''}>${y}</option>`).join('')}
+        </select>
+        <input type="text" id="invoicesSearchInput" placeholder="Danışan ara…" value="${escapeAttr(invoicesSearchQuery)}">
+        <button class="settings-btn" id="invoicesCsvBtn" style="width:auto;">📊 CSV İndir</button>
+      </div>
+      <div class="owed-total" style="margin-top:14px;">Toplam (${rows.length} fatura): <strong>CA$${grandTotal.toFixed(0)}</strong></div>
+      <div class="invoices-list" style="margin-top:14px;">
+        ${rows.length ? rows.map(r => `
+          <div class="invoice-row" data-client-id="${r.clientId}" data-session-id="${r.session.id}">
+            <div class="invoice-row-main">
+              <span class="invoice-client-name cal-client-link" data-client-id="${r.clientId}">${escapeHtml(r.clientName)}</span>
+              <span class="invoice-date">${formatShortDate(r.date)}</span>
+              ${r.ifhp ? '<span class="home-task-general">IFHP</span>' : ''}
+            </div>
+            <div class="invoice-row-actions">
+              <span class="invoice-amount">CA$${r.rate.toFixed(0)}</span>
+              <button class="invoice-redownload-btn" type="button">📄 İndir</button>
+            </div>
+          </div>`).join('') : '<div class="todo-empty">Kayıt yok.</div>'}
+      </div>
+    </div>
+  `;
+  wireInvoicesPage(rows);
+}
+
+function wireInvoicesPage(rows){
+  document.getElementById('backToListBtn').addEventListener('click', ()=>{
+    document.body.classList.remove('mobile-detail');
+  });
+  document.getElementById('invoicesYearSelect').addEventListener('change', (ev)=>{
+    invoicesYearFilter = ev.target.value;
+    renderInvoicesPage();
+  });
+  document.getElementById('invoicesSearchInput').addEventListener('input', (ev)=>{
+    invoicesSearchQuery = ev.target.value;
+    renderInvoicesPage();
+  });
+  document.querySelectorAll('.invoice-client-name.cal-client-link').forEach(link=>{
+    link.addEventListener('click', ()=>{
+      activeClientId = link.getAttribute('data-client-id');
+      mainView = 'client';
+      document.body.classList.add('mobile-detail');
+      render();
+    });
+  });
+  document.querySelectorAll('.invoice-redownload-btn').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      const row = ev.target.closest('[data-client-id]');
+      const clientId = row.getAttribute('data-client-id');
+      const sessionId = row.getAttribute('data-session-id');
+      const client = state.clients.find(c=>c.id===clientId);
+      const session = client && client.sessions.find(s=>s.id===sessionId);
+      if(client && session) generateInvoiceForSession(client, session, 'save');
+    });
+  });
+  document.getElementById('invoicesCsvBtn').addEventListener('click', ()=>{
+    downloadInvoicesCsv(rows);
+  });
+}
+
 function renderSettingsPage(){
   const main = document.getElementById('main');
   main.innerHTML = `
@@ -4772,6 +5102,74 @@ async function fetchUpcomingRangeEvents(days){
 
 let homeCalendarCache = null;
 
+function computeUpcomingBirthdays(){
+  const today = new Date();
+  const results = [];
+  (state.clients||[]).forEach(c=>{
+    if(!c.profile || !c.profile.birthDate) return;
+    if(c.profile.terminated) return;
+    const bd = new Date(c.profile.birthDate + 'T00:00:00');
+    const occurrenceThisYear = new Date(today.getFullYear(), bd.getMonth(), bd.getDate());
+    const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    let diffDays = Math.round((occurrenceThisYear - todayMidnight) / (24*60*60*1000));
+    if(diffDays < 0){
+      const occurrenceNextYear = new Date(today.getFullYear()+1, bd.getMonth(), bd.getDate());
+      diffDays = Math.round((occurrenceNextYear - todayMidnight) / (24*60*60*1000));
+    }
+    if(diffDays <= 7){
+      results.push({ id: c.id, name: c.name, diffDays });
+    }
+  });
+  results.sort((a,b)=>a.diffDays-b.diffDays);
+  return results;
+}
+
+function birthdayBannerHtml(){
+  const upcoming = computeUpcomingBirthdays();
+  if(!upcoming.length) return '';
+  const items = upcoming.map(b=>{
+    const label = b.diffDays === 0 ? '🎂 bugün' : b.diffDays === 1 ? 'yarın' : `${b.diffDays} gün sonra`;
+    return `<span class="birthday-item cal-client-link" data-client-id="${b.id}">${escapeHtml(b.name)} <span class="birthday-when">(${label})</span></span>`;
+  }).join('');
+  return `<div class="birthday-banner">🎉 ${items}</div>`;
+}
+
+function computeOwedList(){
+  const rows = [];
+  (state.clients||[]).forEach(c=>{
+    if(c.profile && c.profile.terminated) return;
+    if(c.profile && c.profile.noInvoice) return;
+    let unpaidCount = 0;
+    (c.sessions||[]).forEach(s=>{
+      if(!isSessionDue(s)) return;
+      if(!s.paymentDone) unpaidCount++;
+    });
+    if(unpaidCount === 0) return;
+    const rate = (c.profile && c.profile.ifhp) ? 205 : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+    rows.push({ id: c.id, name: c.name, unpaidCount, total: unpaidCount * rate });
+  });
+  rows.sort((a,b)=> b.total - a.total);
+  return rows;
+}
+
+function owedListHtml(){
+  const rows = computeOwedList();
+  if(!rows.length) return `<div class="todo-empty">Bekleyen ödeme yok. 🎉</div>`;
+  const grandTotal = rows.reduce((sum,r)=>sum+r.total, 0);
+  return `
+    <div class="owed-total">Toplam: <strong>CA$${grandTotal.toFixed(0)}</strong></div>
+    <div class="owed-list">
+      ${rows.map(r => `
+        <div class="owed-row" data-client-id="${r.id}">
+          <div class="owed-row-main">
+            <span class="owed-client-name cal-client-link" data-client-id="${r.id}">${escapeHtml(r.name)}</span>
+            <span class="owed-count">${r.unpaidCount} ödenmemiş seans</span>
+          </div>
+          <div class="owed-amount">CA$${r.total.toFixed(0)}</div>
+        </div>`).join('')}
+    </div>`;
+}
+
 async function loadHomeCalendarAgenda(){
   const box = document.getElementById('homeCalendarList');
   if(!box) return;
@@ -4921,9 +5319,11 @@ function renderHome(){
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader"><h2>Ana Sayfa</h2></div>
     <div id="clientSub">${tasks.length} bekleyen iş • sağda danışan randevuları</div>
+    ${birthdayBannerHtml()}
     <div class="home-mobile-tabs">
       <button class="home-tab-btn ${homeMobileTab==='tasks'?'active':''}" data-tab="tasks">✅ Görevler</button>
       <button class="home-tab-btn ${homeMobileTab==='calendar'?'active':''}" data-tab="calendar">📅 Takvim</button>
+      <button class="home-tab-btn ${homeMobileTab==='debts'?'active':''}" data-tab="debts">💰 Borçlar</button>
     </div>
     <div class="home-columns home-mobile-tab-${homeMobileTab}">
       <div class="home-tasks-col">
@@ -4965,10 +5365,34 @@ function renderHome(){
         <h3 class="home-col-title">📅 Danışan Randevuları</h3>
         <div id="homeCalendarList" class="home-calendar-list">Yükleniyor…</div>
       </div>
+      <div class="home-debts-col">
+        <h3 class="home-col-title">💰 Borçlar</h3>
+        ${owedListHtml()}
+      </div>
     </div>
   `;
 
   loadHomeCalendarAgenda();
+
+  document.querySelectorAll('.owed-client-name.cal-client-link').forEach(link=>{
+    link.addEventListener('click', ()=>{
+      const clientId = link.getAttribute('data-client-id');
+      activeClientId = clientId;
+      mainView = 'client';
+      document.body.classList.add('mobile-detail');
+      render();
+    });
+  });
+
+  document.querySelectorAll('.birthday-item.cal-client-link').forEach(link=>{
+    link.addEventListener('click', ()=>{
+      const clientId = link.getAttribute('data-client-id');
+      activeClientId = clientId;
+      mainView = 'client';
+      document.body.classList.add('mobile-detail');
+      render();
+    });
+  });
 
   document.querySelectorAll('.home-tab-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
