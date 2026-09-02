@@ -5364,7 +5364,8 @@ function owedListHtml(){
     </div>`;
 }
 
-async function loadHomeCalendarAgenda(){
+async function loadHomeCalendarAgenda(retryCount){
+  retryCount = retryCount || 0;
   const box = document.getElementById('homeCalendarList');
   if(!box) return;
 
@@ -5384,6 +5385,12 @@ async function loadHomeCalendarAgenda(){
   const events = await fetchUpcomingRangeEvents(30);
   if(!document.getElementById('homeCalendarList')) return; // view changed while loading
   if(events === null){
+    if(retryCount < 3){
+      // Right after login the Google access token may not be captured yet — retry silently a few times.
+      await new Promise(r => setTimeout(r, 1500));
+      if(!document.getElementById('homeCalendarList')) return;
+      return loadHomeCalendarAgenda(retryCount + 1);
+    }
     box.innerHTML = `<div class="cal-day-empty" style="color:var(--muted);">Randevular yüklenemedi (Google bağlantısı gerekebilir).</div>`;
     return; // don't cache a failure, allow retry on next tab/view
   }
