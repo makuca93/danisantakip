@@ -1603,6 +1603,7 @@
   provider.addScope('https://www.googleapis.com/auth/calendar.events');
   provider.addScope('https://www.googleapis.com/auth/gmail.compose');
   provider.addScope('https://www.googleapis.com/auth/contacts');
+  provider.addScope('https://www.googleapis.com/auth/drive.file');
 
   window.FB = {
     auth, db, provider, signInWithPopup, signInWithRedirect, getRedirectResult,
@@ -1794,7 +1795,7 @@ function init(){
 }
 
 const GIS_CLIENT_ID = '171012588947-kglaeca49vu35660rcd2lm66mhtnt3t3.apps.googleusercontent.com';
-const GOOGLE_API_SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/contacts';
+const GOOGLE_API_SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/contacts https://www.googleapis.com/auth/drive.file';
 let gisTokenClient = null;
 
 function initGisTokenClient(){
@@ -2112,8 +2113,80 @@ function maybeSnapshotBackup(){
   }
 }
 
+const GOOGLE_DRIVE_BACKUP_FILENAME = 'danisan-takip-yedek.json';
+let driveBackupFileId = null;
+let lastDriveBackupAt = 0;
+const DRIVE_BACKUP_MIN_INTERVAL_MS = 3*60*1000;
+let driveBackupStatus = 'idle'; // idle | saving | success | error
+
+async function findOrCreateDriveBackupFileId(token){
+  if(driveBackupFileId) return driveBackupFileId;
+  try{
+    const q = `name='${GOOGLE_DRIVE_BACKUP_FILENAME}' and trashed=false`;
+    const listRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&spaces=drive&fields=files(id,name)`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if(listRes.ok){
+      const data = await listRes.json();
+      if(data.files && data.files.length){
+        driveBackupFileId = data.files[0].id;
+      }
+    }
+  }catch(e){ console.error('Drive dosyası aranamadı', e); }
+  return driveBackupFileId;
+}
+
+async function uploadDriveBackup(interactive){
+  if(!currentUser) return false;
+  const token = interactive ? await ensureGoogleAccessToken() : await getTokenSilentOnly();
+  if(!token) return false;
+  const jsonText = JSON.stringify(state, null, 2);
+  try{
+    const existingId = await findOrCreateDriveBackupFileId(token);
+    if(existingId){
+      const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=media`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: jsonText
+      });
+      return res.ok;
+    }else{
+      const metadata = { name: GOOGLE_DRIVE_BACKUP_FILENAME, mimeType: 'application/json' };
+      const boundary = 'danisantakipboundary';
+      const body =
+        `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+        `--${boundary}\r\nContent-Type: application/json\r\n\r\n${jsonText}\r\n` +
+        `--${boundary}--`;
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+        body
+      });
+      if(res.ok){
+        const data = await res.json();
+        driveBackupFileId = data.id;
+        return true;
+      }
+      return false;
+    }
+  }catch(e){
+    console.error('Drive yedeği yüklenemedi', e);
+    return false;
+  }
+}
+
+async function maybeDriveBackup(){
+  const now = Date.now();
+  if(now - lastDriveBackupAt < DRIVE_BACKUP_MIN_INTERVAL_MS) return;
+  lastDriveBackupAt = now;
+  driveBackupStatus = 'saving';
+  const ok = await uploadDriveBackup(false); // silent only — never interrupts with a popup
+  driveBackupStatus = ok ? 'success' : 'error';
+}
+
 async function saveState(){
   maybeSnapshotBackup();
+  maybeDriveBackup();
   if(!currentUser) return;
   try{
     const personId = canonicalPersonId(currentUser.email);
@@ -4920,6 +4993,13 @@ function wireInvoicesPage(rows){
   });
 }
 
+function driveBackupStatusText(){
+  if(driveBackupStatus === 'saving') return 'Yedekleniyor…';
+  if(driveBackupStatus === 'success') return `✅ En son ${formatBackupTime(lastDriveBackupAt)} tarihinde yedeklendi.`;
+  if(driveBackupStatus === 'error') return '⚠️ Son yedekleme denemesi başarısız oldu — "Şimdi Yedekle" ile tekrar dene.';
+  return 'Henüz bu oturumda yedeklenmedi.';
+}
+
 function renderSettingsPage(){
   const main = document.getElementById('main');
   main.innerHTML = `
@@ -4931,6 +5011,13 @@ function renderSettingsPage(){
       <h3>🕐 Yedekler</h3>
       <p>Bu tarayıcıda otomatik alınan son 30 yedeği görüntüle ve gerekirse geri yükle.</p>
       <button class="settings-btn" id="settingsBackupsBtn">Yedekleri Görüntüle</button>
+    </div>
+
+    <div class="settings-section">
+      <h3>☁️ Google Drive Yedeği</h3>
+      <p>Veriler her kaydedildiğinde (en fazla 3 dakikada bir), Google Drive'ında "${GOOGLE_DRIVE_BACKUP_FILENAME}" adlı bir dosyaya otomatik olarak da yedeklenir — sadece bu uygulamanın oluşturduğu dosyalara erişimi vardır, Drive'ının geri kalanına dokunmaz.</p>
+      <div id="driveBackupStatusText" style="font-size:12.5px; color:var(--muted); margin-bottom:10px;">${driveBackupStatusText()}</div>
+      <button class="settings-btn" id="settingsDriveBackupBtn">Şimdi Yedekle</button>
     </div>
 
     <div class="settings-section">
@@ -4970,6 +5057,19 @@ function renderSettingsPage(){
     document.body.classList.remove('mobile-detail');
   });
   document.getElementById('settingsBackupsBtn').addEventListener('click', openBackupsModal);
+
+  document.getElementById('settingsDriveBackupBtn').addEventListener('click', async ()=>{
+    const btn = document.getElementById('settingsDriveBackupBtn');
+    const statusEl = document.getElementById('driveBackupStatusText');
+    btn.disabled = true;
+    driveBackupStatus = 'saving';
+    if(statusEl) statusEl.textContent = driveBackupStatusText();
+    const ok = await uploadDriveBackup(true);
+    lastDriveBackupAt = Date.now();
+    driveBackupStatus = ok ? 'success' : 'error';
+    if(statusEl) statusEl.textContent = driveBackupStatusText();
+    btn.disabled = false;
+  });
   document.getElementById('settingsExportBtn').addEventListener('click', exportCurrentDataJson);
   document.getElementById('settingsImportInput').addEventListener('change', handleImportJsonFile);
   document.getElementById('settingsSignOutBtn').addEventListener('click', signOutAccount);
