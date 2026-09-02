@@ -2148,7 +2148,10 @@ async function findOrCreateDriveBackupFileId(token){
 async function uploadDriveBackup(interactive){
   if(!currentUser) return false;
   const token = interactive ? await ensureGoogleAccessToken() : await getTokenSilentOnly();
-  if(!token) return false;
+  if(!token){
+    console.error('Drive yedeği: geçerli bir Google erişim jetonu alınamadı (izin verilmemiş olabilir).');
+    return false;
+  }
   const jsonText = JSON.stringify(state, null, 2);
   try{
     const existingId = await findOrCreateDriveBackupFileId(token);
@@ -2158,6 +2161,9 @@ async function uploadDriveBackup(interactive){
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: jsonText
       });
+      if(!res.ok){
+        console.error('Drive yedeği güncellenemedi. HTTP', res.status, await res.text());
+      }
       return res.ok;
     }else{
       const metadata = { name: GOOGLE_DRIVE_BACKUP_FILENAME, mimeType: 'application/json' };
@@ -2176,6 +2182,7 @@ async function uploadDriveBackup(interactive){
         driveBackupFileId = data.id;
         return true;
       }
+      console.error('Drive yedeği oluşturulamadı. HTTP', res.status, await res.text());
       return false;
     }
   }catch(e){
@@ -4409,15 +4416,18 @@ function computeMonthlyRevenue(monthsBack){
 function revenueChartSvg(){
   const buckets = computeMonthlyRevenue(12);
   const max = Math.max(...buckets.map(b=>b.total), 1);
-  const width = 600, height = 170, barGap = 6;
+  const width = 600, height = 190, barGap = 6;
   const chartHeight = 130;
+  const topPad = 24;
   const barWidth = (width - barGap*(buckets.length-1)) / buckets.length;
   const bars = buckets.map((b,i)=>{
     const barHeight = b.total > 0 ? Math.max(3, (b.total/max) * chartHeight) : 0;
     const x = i * (barWidth + barGap);
-    const y = chartHeight - barHeight + 10;
+    const y = chartHeight - barHeight + topPad;
+    const label = b.total > 0 ? `<text x="${(x+barWidth/2).toFixed(1)}" y="${(y-6).toFixed(1)}" font-size="10" font-weight="600" fill="#2b2d33" text-anchor="middle">${Math.round(b.total)}</text>` : '';
     return `
       <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barHeight.toFixed(1)}" rx="3" fill="#c7d4ea"><title>${b.label}: CA$${b.total.toFixed(0)}</title></rect>
+      ${label}
       <text x="${(x+barWidth/2).toFixed(1)}" y="${height-8}" font-size="10" fill="#6b6f78" text-anchor="middle">${b.label}</text>`;
   }).join('');
   return `<svg viewBox="0 0 ${width} ${height}" style="width:100%; height:auto; display:block;">${bars}</svg>`;
