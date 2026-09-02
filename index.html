@@ -884,9 +884,8 @@
   .home-sort-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:18px;}
   .home-columns{display:flex; gap:24px; align-items:flex-start;}
   .home-mobile-tabs{display:none;}
-  .home-tasks-col{flex:1.2; min-width:0;}
+  .home-tasks-col{flex:1.3; min-width:0;}
   .home-calendar-col{flex:1; min-width:0; position:sticky; top:0;}
-  .home-debts-col{flex:0.9; min-width:0; position:sticky; top:0;}
   .home-col-title{font-size:16px; margin:0 0 12px;}
   .owed-total{font-size:13.5px; color:var(--ink); margin-bottom:12px; padding:10px 14px; background:var(--highlight); border:1px solid var(--highlight-line); border-radius:8px;}
   .owed-list{display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto;}
@@ -925,6 +924,17 @@
     border:1px solid var(--card-line);
     border-radius:10px;
     padding:10px 14px;
+    flex-wrap:wrap;
+  }
+  .invoice-select-check{width:16px; height:16px; accent-color:var(--green); flex-shrink:0;}
+  .invoices-bulk-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-top:12px;
+    padding-top:12px;
+    border-top:1px dashed var(--card-line);
     flex-wrap:wrap;
   }
   .invoice-row-main{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
@@ -1492,11 +1502,10 @@
       color:var(--ink);
     }
     .home-columns{ display:block; }
-    .home-tasks-col, .home-calendar-col, .home-debts-col{ display:none; }
+    .home-tasks-col, .home-calendar-col{ display:none; }
     .home-mobile-tab-tasks .home-tasks-col{ display:block; }
     .home-mobile-tab-calendar .home-calendar-col{ display:block; }
-    .home-mobile-tab-debts .home-debts-col{ display:block; }
-    .home-calendar-col, .home-debts-col{ position:static; }
+    .home-calendar-col{ position:static; }
     .home-calendar-list{ max-height:none; }
     .owed-list{ max-height:none; }
   }
@@ -4306,7 +4315,7 @@ let practiceTaskSortMode = 'due';
 let practiceDoneCollapsed = true;
 let editingPracticeTaskId = null;
 let editingPracticeNoteId = null;
-let practiceSectionCollapsed = { tasks:false, notes:false, stats:false, activity:false };
+let practiceSectionCollapsed = { tasks:false, notes:false, stats:false, activity:false, owed:false };
 
 function currentPersonId(){
   if(!currentUser) return null;
@@ -4929,6 +4938,17 @@ function renderInvoicesPage(){
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader"><h2>🧾 Faturalar</h2></div>
     <div id="clientSub">Şimdiye kadar oluşturulan tüm fatura/makbuzların arşivi.</div>
+
+    <div class="settings-section">
+      <h3 class="practice-section-toggle" data-section="owed">
+        <span>💰 Kim Borçlu</span>
+        <span class="practice-section-arrow">${practiceSectionCollapsed.owed ? '▸' : '▾'}</span>
+      </h3>
+      <div class="practice-section-body ${practiceSectionCollapsed.owed ? 'collapsed' : ''}">
+        ${owedListHtml()}
+      </div>
+    </div>
+
     <div class="settings-section">
       <div class="invoices-filters">
         <select id="invoicesYearSelect">
@@ -4939,9 +4959,14 @@ function renderInvoicesPage(){
         <button class="settings-btn" id="invoicesCsvBtn" style="width:auto;">📊 CSV İndir</button>
       </div>
       <div class="owed-total" style="margin-top:14px;">Toplam (${rows.length} fatura): <strong>CA$${grandTotal.toFixed(0)}</strong></div>
-      <div class="invoices-list" style="margin-top:14px;">
+      <div class="invoices-bulk-row">
+        <label class="tick-row"><input type="checkbox" id="invoicesSelectAll"><span>Tümünü seç</span></label>
+        <button class="settings-btn" id="invoicesBulkDownloadBtn" style="width:auto;" disabled>📄 Seçilenleri İndir (<span id="invoicesSelectedCount">0</span>)</button>
+      </div>
+      <div class="invoices-list" style="margin-top:10px;">
         ${rows.length ? rows.map(r => `
           <div class="invoice-row" data-client-id="${r.clientId}" data-session-id="${r.session.id}">
+            <input type="checkbox" class="invoice-select-check">
             <div class="invoice-row-main">
               <span class="invoice-client-name cal-client-link" data-client-id="${r.clientId}">${escapeHtml(r.clientName)}</span>
               <span class="invoice-date">${formatShortDate(r.date)}</span>
@@ -4962,6 +4987,24 @@ function wireInvoicesPage(rows){
   document.getElementById('backToListBtn').addEventListener('click', ()=>{
     document.body.classList.remove('mobile-detail');
   });
+
+  document.querySelectorAll('.practice-section-toggle').forEach(header=>{
+    header.addEventListener('click', ()=>{
+      const section = header.getAttribute('data-section');
+      practiceSectionCollapsed[section] = !practiceSectionCollapsed[section];
+      renderInvoicesPage();
+    });
+  });
+
+  document.querySelectorAll('.owed-client-name.cal-client-link').forEach(link=>{
+    link.addEventListener('click', ()=>{
+      activeClientId = link.getAttribute('data-client-id');
+      mainView = 'client';
+      document.body.classList.add('mobile-detail');
+      render();
+    });
+  });
+
   document.getElementById('invoicesYearSelect').addEventListener('change', (ev)=>{
     invoicesYearFilter = ev.target.value;
     renderInvoicesPage();
@@ -4991,6 +5034,50 @@ function wireInvoicesPage(rows){
   document.getElementById('invoicesCsvBtn').addEventListener('click', ()=>{
     downloadInvoicesCsv(rows);
   });
+
+  function updateInvoiceSelectionUI(){
+    const checked = document.querySelectorAll('.invoice-select-check:checked');
+    const countEl = document.getElementById('invoicesSelectedCount');
+    const bulkBtn = document.getElementById('invoicesBulkDownloadBtn');
+    if(countEl) countEl.textContent = checked.length;
+    if(bulkBtn) bulkBtn.disabled = checked.length === 0;
+  }
+
+  document.querySelectorAll('.invoice-select-check').forEach(cb=>{
+    cb.addEventListener('change', updateInvoiceSelectionUI);
+  });
+
+  const selectAllCb = document.getElementById('invoicesSelectAll');
+  if(selectAllCb){
+    selectAllCb.addEventListener('change', (ev)=>{
+      document.querySelectorAll('.invoice-select-check').forEach(cb=>{ cb.checked = ev.target.checked; });
+      updateInvoiceSelectionUI();
+    });
+  }
+
+  const bulkBtn = document.getElementById('invoicesBulkDownloadBtn');
+  if(bulkBtn){
+    bulkBtn.addEventListener('click', async ()=>{
+      const checkedRows = Array.from(document.querySelectorAll('.invoice-select-check:checked')).map(cb=>cb.closest('.invoice-row'));
+      if(!checkedRows.length) return;
+      bulkBtn.disabled = true;
+      const originalText = bulkBtn.innerHTML;
+      for(let i=0; i<checkedRows.length; i++){
+        bulkBtn.textContent = `İndiriliyor… (${i+1}/${checkedRows.length})`;
+        const row = checkedRows[i];
+        const clientId = row.getAttribute('data-client-id');
+        const sessionId = row.getAttribute('data-session-id');
+        const client = state.clients.find(c=>c.id===clientId);
+        const session = client && client.sessions.find(s=>s.id===sessionId);
+        if(client && session){
+          await generateInvoiceForSession(client, session, 'save');
+          await new Promise(r=>setTimeout(r, 400));
+        }
+      }
+      bulkBtn.innerHTML = originalText;
+      bulkBtn.disabled = false;
+    });
+  }
 }
 
 function driveBackupStatusText(){
@@ -5238,7 +5325,6 @@ function computeOwedList(){
   const rows = [];
   (state.clients||[]).forEach(c=>{
     if(c.profile && c.profile.terminated) return;
-    if(c.profile && c.profile.noInvoice) return;
     let unpaidCount = 0;
     (c.sessions||[]).forEach(s=>{
       if(!isSessionDue(s)) return;
@@ -5423,7 +5509,6 @@ function renderHome(){
     <div class="home-mobile-tabs">
       <button class="home-tab-btn ${homeMobileTab==='tasks'?'active':''}" data-tab="tasks">✅ Görevler</button>
       <button class="home-tab-btn ${homeMobileTab==='calendar'?'active':''}" data-tab="calendar">📅 Takvim</button>
-      <button class="home-tab-btn ${homeMobileTab==='debts'?'active':''}" data-tab="debts">💰 Borçlar</button>
     </div>
     <div class="home-columns home-mobile-tab-${homeMobileTab}">
       <div class="home-tasks-col">
@@ -5464,10 +5549,6 @@ function renderHome(){
       <div class="home-calendar-col">
         <h3 class="home-col-title">📅 Danışan Randevuları</h3>
         <div id="homeCalendarList" class="home-calendar-list">Yükleniyor…</div>
-      </div>
-      <div class="home-debts-col">
-        <h3 class="home-col-title">💰 Borçlar</h3>
-        ${owedListHtml()}
       </div>
     </div>
   `;
