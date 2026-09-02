@@ -1770,29 +1770,6 @@ function saveViewState(){
   }catch(e){ /* sessionStorage unavailable, ignore */ }
 }
 
-function restoreViewState(){
-  try{
-    const raw = sessionStorage.getItem('viewState');
-    if(!raw) return false;
-    const saved = JSON.parse(raw);
-    if(saved.mainView === 'client' && saved.activeClientId){
-      const exists = state.clients.some(c => c.id === saved.activeClientId);
-      if(exists){
-        mainView = 'client';
-        activeClientId = saved.activeClientId;
-        return true;
-      }
-      return false;
-    }
-    if(['home','settings','practice','invoices'].includes(saved.mainView)){
-      mainView = saved.mainView;
-      return true;
-    }
-    return false;
-  }catch(e){
-    return false;
-  }
-}
 let homeSortMode = 'due';
 let homeMobileTab = 'tasks';
 let homeDoneCollapsed = true;
@@ -2048,8 +2025,7 @@ function proceedToApp(){
   document.getElementById('fileSetup').style.display = 'none';
   document.getElementById('appShell').classList.add('visible');
   document.getElementById('fileStatus').innerHTML = `<span class="dot"></span>${escapeHtml(currentUser.email || currentUser.displayName || 'Google hesabı')}`;
-  const restored = restoreViewState();
-  if(!restored && !activeClientId && state.clients.length){ activeClientId = state.clients[0].id; }
+  mainView = 'home';
   lastBackupTime = Date.now();
   saveBackupSnapshot(state);
   resetInactivityTimer();
