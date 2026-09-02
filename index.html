@@ -853,7 +853,7 @@
   #practiceDoneTaskList.collapsed{display:none;}
 
   .nav-row{display:flex; gap:6px;}
-  #homeNavBtn, #providerNavBtn, #practiceNavBtn, #invoicesNavBtn{
+  #homeNavBtn, #practiceNavBtn, #invoicesNavBtn{
     flex:1;
     display:flex;
     flex-direction:column;
@@ -868,8 +868,8 @@
     cursor:pointer;
     min-width:0;
   }
-  #homeNavBtn .nav-icon, #providerNavBtn .nav-icon, #practiceNavBtn .nav-icon, #invoicesNavBtn .nav-icon{font-size:15px; line-height:1;}
-  #homeNavBtn .nav-label, #providerNavBtn .nav-label, #practiceNavBtn .nav-label, #invoicesNavBtn .nav-label{
+  #homeNavBtn .nav-icon, #practiceNavBtn .nav-icon, #invoicesNavBtn .nav-icon{font-size:15px; line-height:1;}
+  #homeNavBtn .nav-label, #practiceNavBtn .nav-label, #invoicesNavBtn .nav-label{
     font-size:9.5px;
     font-weight:600;
     color:var(--ink);
@@ -878,8 +878,8 @@
     text-overflow:ellipsis;
     max-width:100%;
   }
-  #homeNavBtn:hover, #providerNavBtn:hover, #practiceNavBtn:hover, #invoicesNavBtn:hover{background:rgba(255,255,255,0.55);}
-  #homeNavBtn.active, #providerNavBtn.active, #practiceNavBtn.active, #invoicesNavBtn.active{background:var(--highlight); border-color:var(--highlight-line);}
+  #homeNavBtn:hover, #practiceNavBtn:hover, #invoicesNavBtn:hover{background:rgba(255,255,255,0.55);}
+  #homeNavBtn.active, #practiceNavBtn.active, #invoicesNavBtn.active{background:var(--highlight); border-color:var(--highlight-line);}
 
   .home-sort-row{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); margin-bottom:18px;}
   .home-columns{display:flex; gap:24px; align-items:flex-start;}
@@ -1636,7 +1636,6 @@
     </div>
     <div class="nav-row">
       <button id="homeNavBtn" type="button" title="Ana Sayfa"><span class="nav-icon">🏠</span><span class="nav-label">Ana Sayfa</span></button>
-      <button id="providerNavBtn" type="button" title="Uzman Bilgileri"><span class="nav-icon">🩺</span><span class="nav-label">Uzman</span></button>
       <button id="practiceNavBtn" type="button" title="Yönetim"><span class="nav-icon">🏢</span><span class="nav-label">Yönetim</span></button>
       <button id="invoicesNavBtn" type="button" title="Faturalar"><span class="nav-icon">🧾</span><span class="nav-label">Faturalar</span></button>
     </div>
@@ -1785,7 +1784,7 @@ function restoreViewState(){
       }
       return false;
     }
-    if(['home','provider','settings','practice','invoices'].includes(saved.mainView)){
+    if(['home','settings','practice','invoices'].includes(saved.mainView)){
       mainView = saved.mainView;
       return true;
     }
@@ -2453,8 +2452,6 @@ function render(){
   renderSidebar();
   if(mainView === 'home'){
     renderHome();
-  }else if(mainView === 'provider'){
-    renderProviderPage();
   }else if(mainView === 'settings'){
     renderSettingsPage();
   }else if(mainView === 'practice'){
@@ -2468,7 +2465,6 @@ function render(){
 
 function renderSidebar(){
   document.getElementById('homeNavBtn').classList.toggle('active', mainView==='home');
-  document.getElementById('providerNavBtn').classList.toggle('active', mainView==='provider');
   document.getElementById('practiceNavBtn').classList.toggle('active', mainView==='practice');
   document.getElementById('invoicesNavBtn').classList.toggle('active', mainView==='invoices');
   const list = document.getElementById('clientList');
@@ -4257,12 +4253,6 @@ document.getElementById('homeNavBtn').addEventListener('click', ()=>{
   render();
 });
 
-document.getElementById('providerNavBtn').addEventListener('click', ()=>{
-  mainView = 'provider';
-  document.body.classList.add('mobile-detail');
-  render();
-});
-
 document.getElementById('practiceNavBtn').addEventListener('click', ()=>{
   mainView = 'practice';
   document.body.classList.add('mobile-detail');
@@ -4322,7 +4312,7 @@ let practiceTaskSortMode = 'due';
 let practiceDoneCollapsed = true;
 let editingPracticeTaskId = null;
 let editingPracticeNoteId = null;
-let practiceSectionCollapsed = { tasks:false, notes:false, stats:false, activity:false, owed:false };
+let practiceSectionCollapsed = { tasks:false, notes:false, stats:false, activity:false, owed:false, provider:false };
 
 function currentPersonId(){
   if(!currentUser) return null;
@@ -5099,10 +5089,61 @@ function driveBackupStatusText(){
 
 function renderSettingsPage(){
   const main = document.getElementById('main');
+  const p = getProvider();
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader"><h2>Ayarlar</h2></div>
     <div id="clientSub">${escapeHtml(currentUser.email || '')}</div>
+
+    <div class="settings-section">
+      <h3 class="practice-section-toggle" data-section="provider">
+        <span>🩺 Uzman Bilgileri</span>
+        <span class="practice-section-arrow">${practiceSectionCollapsed.provider ? '▸' : '▾'}</span>
+      </h3>
+      <div class="practice-section-body ${practiceSectionCollapsed.provider ? 'collapsed' : ''}">
+        <p style="font-size:12.5px; color:var(--muted); margin:-6px 0 14px; line-height:1.5;">Bu bilgiler, senin bu hesaptan oluşturduğun faturalarda ve maillerde kullanılır. Her Google hesabı kendi bilgilerini ayrı ayrı saklar.</p>
+        <div id="providerForm">
+          <div class="form-grid">
+            <div class="field-block">
+              <label>Ad Soyad</label>
+              <input type="text" class="provider-name" value="${escapeAttr(p.name||'')}">
+            </div>
+            <div class="field-block">
+              <label>Unvan / Derece</label>
+              <input type="text" class="provider-credential" placeholder="örn. M.A." value="${escapeAttr(p.credential||'')}">
+            </div>
+            <div class="field-block full">
+              <label>Görev</label>
+              <input type="text" class="provider-title" placeholder="örn. Registered Psychotherapist" value="${escapeAttr(p.title||'')}">
+            </div>
+            <div class="field-block full">
+              <label>Kayıtlı Olduğu Kurum</label>
+              <input type="text" class="provider-college" placeholder="örn. College of Registered Psychotherapists of Ontario" value="${escapeAttr(p.college||'')}">
+            </div>
+            <div class="field-block">
+              <label>Kayıt Numarası</label>
+              <input type="text" class="provider-regnumber" value="${escapeAttr(p.regNumber||'')}">
+            </div>
+            <div class="field-block">
+              <label>Telefon</label>
+              <input type="text" class="provider-phone" value="${escapeAttr(p.phone||'')}">
+            </div>
+            <div class="field-block full">
+              <label>Email</label>
+              <input type="text" class="provider-email" value="${escapeAttr(p.email||'')}">
+            </div>
+            <div class="field-block full">
+              <label>Adres (her satır ayrı satırda faturada görünür)</label>
+              <textarea class="provider-address" style="min-height:70px;">${escapeHtml(p.address||'')}</textarea>
+            </div>
+            <div class="field-block full">
+              <label>Psychology Today Bekleme Odası Linki</label>
+              <input type="text" class="provider-sessionlink" placeholder="örn. https://sessions.psychologytoday.com/..." value="${escapeAttr(p.sessionLink||'')}">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="settings-section">
       <h3>🕐 Yedekler</h3>
@@ -5153,6 +5194,31 @@ function renderSettingsPage(){
   document.getElementById('backToListBtn').addEventListener('click', ()=>{
     document.body.classList.remove('mobile-detail');
   });
+
+  document.querySelectorAll('.practice-section-toggle').forEach(header=>{
+    header.addEventListener('click', ()=>{
+      const section = header.getAttribute('data-section');
+      practiceSectionCollapsed[section] = !practiceSectionCollapsed[section];
+      renderSettingsPage();
+    });
+  });
+
+  const providerFields = [
+    ['provider-name','name'], ['provider-credential','credential'], ['provider-title','title'],
+    ['provider-college','college'], ['provider-regnumber','regNumber'], ['provider-phone','phone'],
+    ['provider-email','email'], ['provider-address','address'], ['provider-sessionlink','sessionLink']
+  ];
+  providerFields.forEach(([cls,key])=>{
+    const el = document.querySelector('.'+cls);
+    if(el){
+      el.addEventListener('blur', (ev)=>{
+        if(!state.providerProfile) state.providerProfile = { ...DEFAULT_PROVIDER };
+        state.providerProfile[key] = ev.target.value;
+        saveState();
+      });
+    }
+  });
+
   document.getElementById('settingsBackupsBtn').addEventListener('click', openBackupsModal);
 
   document.getElementById('settingsDriveBackupBtn').addEventListener('click', async ()=>{
@@ -5192,73 +5258,6 @@ function renderSettingsPage(){
     renderSettingsPage();
   });
   document.getElementById('settingsResetBtn').addEventListener('click', resetAllData);
-}
-
-function renderProviderPage(){
-  const main = document.getElementById('main');
-  const p = getProvider();
-  main.innerHTML = `
-    <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
-    <div id="clientHeader"><h2>Uzman Bilgileri</h2></div>
-    <div id="clientSub">Bu bilgiler, senin bu hesaptan oluşturduğun faturalarda ve maillerde kullanılır. Her Google hesabı kendi bilgilerini ayrı ayrı saklar.</div>
-    <div id="providerForm">
-      <div class="form-grid">
-        <div class="field-block">
-          <label>Ad Soyad</label>
-          <input type="text" class="provider-name" value="${escapeAttr(p.name||'')}">
-        </div>
-        <div class="field-block">
-          <label>Unvan / Derece</label>
-          <input type="text" class="provider-credential" placeholder="örn. M.A." value="${escapeAttr(p.credential||'')}">
-        </div>
-        <div class="field-block full">
-          <label>Görev</label>
-          <input type="text" class="provider-title" placeholder="örn. Registered Psychotherapist" value="${escapeAttr(p.title||'')}">
-        </div>
-        <div class="field-block full">
-          <label>Kayıtlı Olduğu Kurum</label>
-          <input type="text" class="provider-college" placeholder="örn. College of Registered Psychotherapists of Ontario" value="${escapeAttr(p.college||'')}">
-        </div>
-        <div class="field-block">
-          <label>Kayıt Numarası</label>
-          <input type="text" class="provider-regnumber" value="${escapeAttr(p.regNumber||'')}">
-        </div>
-        <div class="field-block">
-          <label>Telefon</label>
-          <input type="text" class="provider-phone" value="${escapeAttr(p.phone||'')}">
-        </div>
-        <div class="field-block full">
-          <label>Email</label>
-          <input type="text" class="provider-email" value="${escapeAttr(p.email||'')}">
-        </div>
-        <div class="field-block full">
-          <label>Adres (her satır ayrı satırda faturada görünür)</label>
-          <textarea class="provider-address" style="min-height:70px;">${escapeHtml(p.address||'')}</textarea>
-        </div>
-        <div class="field-block full">
-          <label>Psychology Today Bekleme Odası Linki</label>
-          <input type="text" class="provider-sessionlink" placeholder="örn. https://sessions.psychologytoday.com/..." value="${escapeAttr(p.sessionLink||'')}">
-        </div>
-      </div>
-    </div>
-  `;
-
-  document.getElementById('backToListBtn').addEventListener('click', ()=>{
-    document.body.classList.remove('mobile-detail');
-  });
-
-  const fields = [
-    ['provider-name','name'], ['provider-credential','credential'], ['provider-title','title'],
-    ['provider-college','college'], ['provider-regnumber','regNumber'], ['provider-phone','phone'],
-    ['provider-email','email'], ['provider-address','address'], ['provider-sessionlink','sessionLink']
-  ];
-  fields.forEach(([cls,key])=>{
-    document.querySelector('.'+cls).addEventListener('blur', (ev)=>{
-      if(!state.providerProfile) state.providerProfile = { ...DEFAULT_PROVIDER };
-      state.providerProfile[key] = ev.target.value;
-      saveState();
-    });
-  });
 }
 
 function getKnownClientEmails(){
