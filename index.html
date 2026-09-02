@@ -4377,7 +4377,7 @@ function computePersonalStats(){
       if(s.date.startsWith(thisYearStr)) sessionsThisYear++;
     });
   });
-  return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth };
+  return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth, monthlyRevenue: computeMonthlyRevenue(12) };
 }
 
 function computeMonthlyRevenue(monthsBack){
@@ -4403,8 +4403,31 @@ function computeMonthlyRevenue(monthsBack){
   return buckets;
 }
 
-function revenueChartSvg(){
-  const buckets = computeMonthlyRevenue(12);
+function getFilteredMonthlyRevenue(filter){
+  const shared = (practiceState && practiceState.stats) || {};
+  const me = currentPersonId();
+  // Whichever bucket represents "my own" data is always computed live from local state (freshest);
+  // the other person's data comes from what they last published to the shared doc.
+  const myBuckets = computeMonthlyRevenue(12);
+  const kubilayBuckets = (me === 'kubilay') ? myBuckets : (shared.kubilay && shared.kubilay.monthlyRevenue);
+  const duyguBuckets = (me === 'duygu') ? myBuckets : (shared.duygu && shared.duygu.monthlyRevenue);
+
+  if(filter === 'kubilay') return kubilayBuckets || null;
+  if(filter === 'duygu') return duyguBuckets || null;
+  // toplam
+  if(!kubilayBuckets && !duyguBuckets) return null;
+  const base = kubilayBuckets || duyguBuckets;
+  return base.map((b,i)=>({
+    key: b.key, label: b.label,
+    total: (kubilayBuckets ? kubilayBuckets[i].total : 0) + (duyguBuckets ? duyguBuckets[i].total : 0)
+  }));
+}
+
+function revenueChartSvg(filter){
+  const buckets = getFilteredMonthlyRevenue(filter);
+  if(!buckets){
+    return `<div class="todo-empty">${filter==='kubilay'?'Kubilay':'Duygu'} henüz veri paylaşmadı.</div>`;
+  }
   const max = Math.max(...buckets.map(b=>b.total), 1);
   const width = 600, height = 190, barGap = 6;
   const chartHeight = 130;
@@ -4661,8 +4684,8 @@ function renderPracticeContent(){
         </div>
         ${practiceStatsHtml()}
         <div class="revenue-chart-block">
-          <h4 class="revenue-chart-title">📈 Son 12 Ay Gelir (senin hesabın)</h4>
-          ${revenueChartSvg()}
+          <h4 class="revenue-chart-title">📈 Son 12 Ay Gelir (${practiceStatsFilter==='toplam'?'toplam':practiceStatsFilter==='kubilay'?'Kubilay':'Duygu'})</h4>
+          ${revenueChartSvg(practiceStatsFilter)}
         </div>
       </div>
     </div>
