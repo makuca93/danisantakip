@@ -1666,6 +1666,119 @@
   }
   .surprise-continue-btn:hover{filter:brightness(0.97);}
 
+  /* Reschedule popover — mini month calendar + 15min time dropdown */
+  .reschedule-overlay{
+    position:fixed; inset:0;
+    background:rgba(43,45,51,0.35);
+    display:flex; align-items:center; justify-content:center;
+    z-index:200;
+    padding:20px;
+  }
+  .reschedule-popover{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:14px;
+    padding:20px 22px;
+    width:100%;
+    max-width:300px;
+    box-shadow:0 10px 30px rgba(0,0,0,0.18);
+  }
+  .reschedule-popover h3{
+    margin:0 0 14px;
+    font-size:16px;
+    font-family:'Fraunces', serif;
+    color:var(--ink);
+  }
+  .mini-cal-header{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:8px;
+  }
+  .mini-cal-title{
+    font-weight:600; font-size:13.5px; color:var(--ink);
+  }
+  .mini-cal-nav{
+    background:var(--neutral-bg);
+    border:1px solid var(--card-line);
+    color:var(--ink);
+    width:26px; height:26px;
+    border-radius:7px;
+    cursor:pointer;
+    font-size:14px;
+    line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    padding:0;
+  }
+  .mini-cal-nav:hover{background:var(--highlight);}
+  .mini-cal-weekdays{
+    display:grid;
+    grid-template-columns:repeat(7, 1fr);
+    margin-bottom:2px;
+  }
+  .mini-cal-weekdays span{
+    text-align:center;
+    font-size:11px;
+    color:var(--muted);
+    padding:4px 0;
+  }
+  .mini-cal-grid{
+    display:grid;
+    grid-template-columns:repeat(7, 1fr);
+    gap:2px;
+  }
+  .mini-cal-cell{
+    aspect-ratio:1/1;
+    display:flex; align-items:center; justify-content:center;
+    border:none;
+    background:none;
+    border-radius:7px;
+    font-family:inherit;
+    font-size:12.5px;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .mini-cal-cell.empty{cursor:default;}
+  .mini-cal-cell:not(.empty):hover{background:var(--neutral-bg);}
+  .mini-cal-cell.today{font-weight:700; color:var(--red);}
+  .mini-cal-cell.selected{background:var(--highlight); border:1px solid var(--highlight-line); font-weight:600;}
+  .reschedule-time-select{
+    width:100%;
+    padding:8px 10px;
+    border-radius:8px;
+    border:1px solid var(--card-line);
+    font-family:inherit;
+    font-size:13.5px;
+    color:var(--ink);
+    background:var(--card);
+  }
+  .reschedule-popover .form-actions{
+    display:flex; justify-content:flex-end; gap:8px;
+    margin-top:16px;
+  }
+  .reschedule-confirm-btn{
+    background:var(--highlight);
+    border:1px solid var(--highlight-line);
+    color:var(--ink);
+    padding:8px 16px;
+    border-radius:8px;
+    font-family:inherit;
+    font-weight:600;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .reschedule-confirm-btn:hover{filter:brightness(0.97);}
+  .reschedule-cancel-btn{
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    padding:8px 16px;
+    border-radius:8px;
+    font-family:inherit;
+    font-weight:600;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .reschedule-cancel-btn:hover{background:var(--neutral-bg);}
+
   /* Isolated to installed Home Screen apps only — never affects the normal Safari tab,
      where the layout already renders correctly edge to edge. */
 </style>
@@ -3016,6 +3129,125 @@ function promptForTime(defaultText){
     parsed = parseAmPmTime(attempt);
   }
   return parsed;
+}
+
+function pad2(n){ return String(n).padStart(2,'0'); }
+
+// Builds the <option> list for a 15-minute-interval time dropdown (12h AM/PM labels).
+function timeSelectOptionsHtml(selectedLabel){
+  const opts = [];
+  for(let h = 0; h < 24; h++){
+    for(let m = 0; m < 60; m += 15){
+      let hour12 = h % 12;
+      if(hour12 === 0) hour12 = 12;
+      const meridiem = h >= 12 ? 'PM' : 'AM';
+      const label = `${hour12}:${pad2(m)} ${meridiem}`;
+      opts.push(`<option value="${label}" ${label===selectedLabel?'selected':''}>${label}</option>`);
+    }
+  }
+  return opts.join('');
+}
+
+// Rounds an "H:MM AM/PM" label to the nearest 15-minute mark so it lines up with the dropdown.
+function nearestQuarterHourLabel(label){
+  const parsed = parseAmPmTime(label);
+  if(!parsed) return '10:00 AM';
+  let [h, m] = parsed.split(':').map(Number);
+  m = Math.round(m / 15) * 15;
+  if(m === 60){ m = 0; h = (h + 1) % 24; }
+  let hour12 = h % 12;
+  if(hour12 === 0) hour12 = 12;
+  const meridiem = h >= 12 ? 'PM' : 'AM';
+  return `${hour12}:${pad2(m)} ${meridiem}`;
+}
+
+// Renders a single month grid (Monday-first) for the mini date picker.
+function miniCalendarMonthHtml(year, month, selectedIso){
+  const monthNames = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  const dayNames = ['Pt','Sa','Ça','Pe','Cu','Ct','Pz'];
+  const firstOfMonth = new Date(year, month, 1);
+  let startOffset = firstOfMonth.getDay() - 1;
+  if(startOffset < 0) startOffset = 6;
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const todayStr = todayIso();
+  let cells = '';
+  for(let i=0; i<startOffset; i++){ cells += `<div class="mini-cal-cell empty"></div>`; }
+  for(let d=1; d<=daysInMonth; d++){
+    const iso = `${year}-${pad2(month+1)}-${pad2(d)}`;
+    const cls = ['mini-cal-cell'];
+    if(iso === selectedIso) cls.push('selected');
+    if(iso === todayStr) cls.push('today');
+    cells += `<button type="button" class="${cls.join(' ')}" data-date="${iso}">${d}</button>`;
+  }
+  return `
+    <div class="mini-cal-header">
+      <button type="button" class="mini-cal-nav" data-nav="-1" title="Önceki ay">‹</button>
+      <span class="mini-cal-title">${monthNames[month]} ${year}</span>
+      <button type="button" class="mini-cal-nav" data-nav="1" title="Sonraki ay">›</button>
+    </div>
+    <div class="mini-cal-weekdays">${dayNames.map(d=>`<span>${d}</span>`).join('')}</div>
+    <div class="mini-cal-grid">${cells}</div>
+  `;
+}
+
+// Opens a small popover with a mini month calendar (date) + 15-minute dropdown (time)
+// to replace the old prompt()-based reschedule flow.
+function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm }){
+  const overlay = document.createElement('div');
+  overlay.className = 'reschedule-overlay';
+
+  let selectedIso = initialDate || todayIso();
+  let viewDate = new Date(`${selectedIso}T00:00:00`);
+  if(isNaN(viewDate)) viewDate = new Date();
+  const initialTime = nearestQuarterHourLabel(initialTimeLabel || '10:00 AM');
+
+  function renderPopover(){
+    overlay.innerHTML = `
+      <div class="reschedule-popover">
+        <h3>Randevuyu Yeniden Planla</h3>
+        <div class="mini-cal">${miniCalendarMonthHtml(viewDate.getFullYear(), viewDate.getMonth(), selectedIso)}</div>
+        <div class="field-block" style="margin-top:12px;">
+          <label>Saat</label>
+          <select class="reschedule-time-select">${timeSelectOptionsHtml(initialTime)}</select>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="reschedule-cancel-btn">Vazgeç</button>
+          <button type="button" class="reschedule-confirm-btn">Kaydet</button>
+        </div>
+      </div>`;
+    wirePopover();
+  }
+
+  function wirePopover(){
+    overlay.querySelectorAll('.mini-cal-nav').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const dir = parseInt(btn.getAttribute('data-nav'), 10);
+        viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth()+dir, 1);
+        renderPopover();
+      });
+    });
+    overlay.querySelectorAll('.mini-cal-cell[data-date]').forEach(cell=>{
+      cell.addEventListener('click', ()=>{
+        selectedIso = cell.getAttribute('data-date');
+        renderPopover();
+      });
+    });
+    overlay.querySelector('.reschedule-cancel-btn').addEventListener('click', ()=>{
+      overlay.remove();
+    });
+    overlay.querySelector('.reschedule-confirm-btn').addEventListener('click', ()=>{
+      const timeLabel = overlay.querySelector('.reschedule-time-select').value;
+      overlay.remove();
+      onConfirm(selectedIso, timeLabel);
+    });
+  }
+
+  overlay.addEventListener('click', (ev)=>{
+    if(ev.target === overlay) overlay.remove();
+  });
+
+  renderPopover();
+  document.body.appendChild(overlay);
 }
 
 async function rescheduleCalendarEvent(eventId, dateStr, timeStr, calendarId){
@@ -5714,27 +5946,34 @@ function wireHomeCalendarButtons(box){
     });
   });
   box.querySelectorAll('.cal-event-edit-btn').forEach(btn=>{
-    btn.addEventListener('click', async (ev)=>{
+    btn.addEventListener('click', (ev)=>{
       const row = ev.target.closest('.cal-day-event-row');
       const eventId = row.getAttribute('data-event-id');
       const clientId = row.getAttribute('data-client-id');
       const calendarId = row.getAttribute('data-calendar-id') || 'primary';
       const currentDate = row.getAttribute('data-event-date');
-      const newDate = prompt('Yeni tarih (YYYY-AA-GG):', currentDate);
-      if(!newDate) return;
-      const newTime = promptForTime('10:00 AM');
-      if(!newTime) return;
-      btn.disabled = true;
-      const ok = await rescheduleCalendarEvent(eventId, newDate, newTime, calendarId);
-      if(ok){
-        const client = state.clients.find(c=>c.id===clientId);
-        if(client) syncSessionDateForCalendarEvent(client, eventId, newDate);
-        homeCalendarCache = null;
-        loadHomeCalendarAgenda();
-      }else{
-        alert('Randevu güncellenemedi.');
-        btn.disabled = false;
-      }
+      const timeEl = row.querySelector('.cal-day-event-time');
+      const currentTimeLabel = (timeEl && timeEl.textContent !== 'Tüm gün') ? timeEl.textContent : '10:00 AM';
+
+      openReschedulePopover({
+        initialDate: currentDate,
+        initialTimeLabel: currentTimeLabel,
+        onConfirm: async (newDate, newTimeLabel)=>{
+          const newTime = parseAmPmTime(newTimeLabel);
+          if(!newTime) return;
+          btn.disabled = true;
+          const ok = await rescheduleCalendarEvent(eventId, newDate, newTime, calendarId);
+          if(ok){
+            const client = state.clients.find(c=>c.id===clientId);
+            if(client) syncSessionDateForCalendarEvent(client, eventId, newDate);
+            homeCalendarCache = null;
+            loadHomeCalendarAgenda();
+          }else{
+            alert('Randevu güncellenemedi.');
+            btn.disabled = false;
+          }
+        }
+      });
     });
   });
 }
