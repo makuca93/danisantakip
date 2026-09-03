@@ -171,6 +171,7 @@
     color:var(--ink);
   }
   .prospect-details textarea{min-height:50px; resize:vertical;}
+  .prospect-contact-actions{display:flex; gap:6px; flex-wrap:wrap;}
   .prospect-convert-btn{
     background:var(--green);
     border:1px solid var(--green);
@@ -1727,7 +1728,7 @@
     </div>
     <form id="addClientForm">
       <div class="search-input-wrap">
-        <input id="newClientName" type="text" placeholder="Ara ya da yeni danışan adı…" autocomplete="off">
+        <input id="newClientName" type="text" placeholder="Ara ya da Ekle" autocomplete="off">
         <button type="button" id="clearClientSearchBtn" title="Temizle">✕</button>
       </div>
       <button type="submit">Ekle</button>
@@ -2498,6 +2499,11 @@ function renderProspectList(){
         <div class="prospect-details ${open ? '' : 'collapsed'}">
           <input type="text" class="prospect-phone" placeholder="Telefon" value="${escapeAttr(p.phone||'')}">
           <input type="text" class="prospect-email" placeholder="Email" value="${escapeAttr(p.email||'')}">
+          <div class="prospect-contact-actions">
+            <a class="contact-btn ${p.phone?'':'disabled'}" href="${telLink(p.phone)}">📞 Ara</a>
+            <a class="contact-btn ${p.phone?'':'disabled'}" href="${whatsappLink(p.phone)}" target="_blank" rel="noopener">💬 WhatsApp</a>
+            <a class="contact-btn ${p.email?'':'disabled'}" href="${mailtoLink(p.email)}" rel="noopener">✉️ Email</a>
+          </div>
           <textarea class="prospect-notes" placeholder="Notlar…">${escapeHtml(p.notes||'')}</textarea>
           <button class="prospect-convert-btn" type="button">→ Danışan Yap</button>
         </div>
@@ -3443,6 +3449,16 @@ function gmailWebLink(email){
 function mailtoLink(email){
   const e = (email||'').trim();
   return e ? `mailto:${e}` : '#';
+}
+
+function whatsappLink(phone){
+  const digits = (phone||'').replace(/[^\d]/g,'');
+  return digits ? `https://wa.me/${digits}` : '#';
+}
+
+function telLink(phone){
+  const p = (phone||'').trim();
+  return p ? `tel:${p.replace(/[^\d+]/g,'')}` : '#';
 }
 
 function todayIso(){
