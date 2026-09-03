@@ -968,7 +968,13 @@
   .home-columns{display:flex; gap:24px; align-items:flex-start;}
   .home-mobile-tabs{display:none;}
   .home-tasks-col{flex:1.3; min-width:0;}
-  .home-calendar-col{flex:1; min-width:0; position:sticky; top:0;}
+  .home-calendar-col{
+    flex:1; min-width:0;
+    position:sticky; top:18px;
+    max-height:calc(100vh - 36px);
+    display:flex;
+    flex-direction:column;
+  }
   .home-col-title{font-size:16px; margin:0 0 12px;}
   .owed-total{font-size:13.5px; color:var(--ink); margin-bottom:12px; padding:10px 14px; background:var(--highlight); border:1px solid var(--highlight-line); border-radius:8px;}
   .owed-list{display:flex; flex-direction:column; gap:8px; max-height:60vh; overflow-y:auto;}
@@ -1057,7 +1063,8 @@
     border:1px solid var(--card-line);
     border-radius:12px;
     padding:16px;
-    max-height:70vh;
+    flex:1;
+    min-height:0;
     overflow-y:auto;
   }
   .agenda-day-group{margin-bottom:14px;}
@@ -3191,7 +3198,7 @@ function miniCalendarMonthHtml(year, month, selectedIso){
 
 // Opens a small popover with a mini month calendar (date) + 15-minute dropdown (time)
 // to replace the old prompt()-based reschedule flow.
-function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm }){
+function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm, title }){
   const overlay = document.createElement('div');
   overlay.className = 'reschedule-overlay';
 
@@ -3203,7 +3210,7 @@ function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm }){
   function renderPopover(){
     overlay.innerHTML = `
       <div class="reschedule-popover">
-        <h3>Randevuyu Yeniden Planla</h3>
+        <h3>${title || 'Randevuyu Yeniden Planla'}</h3>
         <div class="mini-cal">${miniCalendarMonthHtml(viewDate.getFullYear(), viewDate.getMonth(), selectedIso)}</div>
         <div class="field-block" style="margin-top:12px;">
           <label>Saat</label>
@@ -4100,6 +4107,7 @@ function wireCalendarPanel(client){
   const dtBtn = panel.querySelector('.cal-datetime-btn');
   dtBtn.addEventListener('click', ()=>{
     openReschedulePopover({
+      title: 'Randevu Tarih ve Saati Seç',
       initialDate: dtBtn.getAttribute('data-date'),
       initialTimeLabel: dtBtn.getAttribute('data-time') || '10:00 AM',
       onConfirm: (newDate, newTimeLabel)=>{
