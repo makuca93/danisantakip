@@ -121,9 +121,14 @@
     display:flex;
     gap:6px;
   }
+  .search-input-wrap{
+    position:relative;
+    flex:1;
+    display:flex;
+  }
   #newClientName{
     flex:1;
-    padding:8px 10px;
+    padding:8px 28px 8px 10px;
     border-radius:6px;
     border:1px solid var(--card-line);
     background:rgba(255,255,255,0.75);
@@ -132,6 +137,22 @@
     font-size:13px;
   }
   #newClientName::placeholder{color:var(--muted);}
+  #clearClientSearchBtn{
+    position:absolute;
+    right:4px;
+    top:50%;
+    transform:translateY(-50%);
+    background:none;
+    border:none;
+    color:var(--muted);
+    font-size:12px;
+    cursor:pointer;
+    padding:4px 6px;
+    display:none;
+    line-height:1;
+  }
+  #clearClientSearchBtn:hover{color:var(--ink);}
+  #clearClientSearchBtn.visible{display:block;}
   .search-empty{
     color:var(--muted);
     font-size:12.5px;
@@ -1640,7 +1661,10 @@
       <button id="invoicesNavBtn" type="button" title="Faturalar"><span class="nav-icon">🧾</span><span class="nav-label">Faturalar</span></button>
     </div>
     <form id="addClientForm">
-      <input id="newClientName" type="text" placeholder="Ara ya da yeni danışan adı…" autocomplete="off">
+      <div class="search-input-wrap">
+        <input id="newClientName" type="text" placeholder="Ara ya da yeni danışan adı…" autocomplete="off">
+        <button type="button" id="clearClientSearchBtn" title="Temizle">✕</button>
+      </div>
       <button type="submit">Ekle</button>
     </form>
     <div class="sort-row">
@@ -1770,29 +1794,6 @@ function saveViewState(){
   }catch(e){ /* sessionStorage unavailable, ignore */ }
 }
 
-function restoreViewState(){
-  try{
-    const raw = sessionStorage.getItem('viewState');
-    if(!raw) return false;
-    const saved = JSON.parse(raw);
-    if(saved.mainView === 'client' && saved.activeClientId){
-      const exists = state.clients.some(c => c.id === saved.activeClientId);
-      if(exists){
-        mainView = 'client';
-        activeClientId = saved.activeClientId;
-        return true;
-      }
-      return false;
-    }
-    if(['home','settings','practice','invoices'].includes(saved.mainView)){
-      mainView = saved.mainView;
-      return true;
-    }
-    return false;
-  }catch(e){
-    return false;
-  }
-}
 let homeSortMode = 'due';
 let homeMobileTab = 'tasks';
 let homeDoneCollapsed = true;
@@ -2048,8 +2049,7 @@ function proceedToApp(){
   document.getElementById('fileSetup').style.display = 'none';
   document.getElementById('appShell').classList.add('visible');
   document.getElementById('fileStatus').innerHTML = `<span class="dot"></span>${escapeHtml(currentUser.email || currentUser.displayName || 'Google hesabı')}`;
-  const restored = restoreViewState();
-  if(!restored && !activeClientId && state.clients.length){ activeClientId = state.clients[0].id; }
+  mainView = 'home';
   lastBackupTime = Date.now();
   saveBackupSnapshot(state);
   resetInactivityTimer();
@@ -4211,6 +4211,16 @@ function itemRowWithInput(label, checkboxKey, textKey, session){
 document.getElementById('newClientName').addEventListener('input', (ev)=>{
   searchQuery = ev.target.value;
   renderSidebar();
+  document.getElementById('clearClientSearchBtn').classList.toggle('visible', !!ev.target.value);
+});
+
+document.getElementById('clearClientSearchBtn').addEventListener('click', ()=>{
+  const input = document.getElementById('newClientName');
+  input.value = '';
+  searchQuery = '';
+  renderSidebar();
+  document.getElementById('clearClientSearchBtn').classList.remove('visible');
+  input.focus();
 });
 
 document.getElementById('addClientForm').addEventListener('submit', (ev)=>{
@@ -5388,7 +5398,8 @@ function owedListHtml(){
     </div>`;
 }
 
-async function loadHomeCalendarAgenda(){
+async function loadHomeCalendarAgenda(retryCount){
+  retryCount = retryCount || 0;
   const box = document.getElementById('homeCalendarList');
   if(!box) return;
 
@@ -5408,6 +5419,12 @@ async function loadHomeCalendarAgenda(){
   const events = await fetchUpcomingRangeEvents(30);
   if(!document.getElementById('homeCalendarList')) return; // view changed while loading
   if(events === null){
+    if(retryCount < 3){
+      // Right after login the Google access token may not be captured yet — retry silently a few times.
+      await new Promise(r => setTimeout(r, 1500));
+      if(!document.getElementById('homeCalendarList')) return;
+      return loadHomeCalendarAgenda(retryCount + 1);
+    }
     box.innerHTML = `<div class="cal-day-empty" style="color:var(--muted);">Randevular yüklenemedi (Google bağlantısı gerekebilir).</div>`;
     return; // don't cache a failure, allow retry on next tab/view
   }
