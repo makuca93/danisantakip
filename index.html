@@ -121,6 +121,67 @@
     display:flex;
     gap:6px;
   }
+  .sidebar-list-toggle{display:flex; gap:6px; margin-bottom:10px;}
+  .sidebar-list-toggle-btn{
+    flex:1;
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-family:inherit;
+    font-size:11.5px;
+    font-weight:600;
+    padding:6px 4px;
+    border-radius:7px;
+    cursor:pointer;
+  }
+  .sidebar-list-toggle-btn.active{background:var(--highlight); border-color:var(--highlight-line); color:var(--ink);}
+  #addProspectForm{display:flex; gap:6px; margin-bottom:10px;}
+  #newProspectName{
+    flex:1;
+    padding:8px 10px;
+    border-radius:6px;
+    border:1px solid var(--card-line);
+    background:rgba(255,255,255,0.75);
+    color:var(--ink);
+    font-family:inherit;
+    font-size:13px;
+  }
+  .prospect-row{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:9px;
+    padding:10px 12px;
+    margin-bottom:8px;
+  }
+  .prospect-row-top{display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer;}
+  .prospect-name{font-size:13.5px; font-weight:600; color:var(--ink);}
+  .prospect-row-actions{display:flex; gap:4px; flex-shrink:0;}
+  .prospect-row-actions button{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:2px 4px;}
+  .prospect-row-actions button:hover{color:var(--ink);}
+  .prospect-details{margin-top:10px; padding-top:10px; border-top:1px dashed var(--card-line); display:flex; flex-direction:column; gap:8px;}
+  .prospect-details.collapsed{display:none;}
+  .prospect-details input, .prospect-details textarea{
+    width:100%;
+    font-family:inherit;
+    font-size:12.5px;
+    padding:6px 8px;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    background:#fdfcfd;
+    color:var(--ink);
+  }
+  .prospect-details textarea{min-height:50px; resize:vertical;}
+  .prospect-convert-btn{
+    background:var(--green);
+    border:1px solid var(--green);
+    color:#fff;
+    font-family:inherit;
+    font-size:12px;
+    font-weight:600;
+    padding:7px 10px;
+    border-radius:6px;
+    cursor:pointer;
+  }
   .search-input-wrap{
     position:relative;
     flex:1;
@@ -1660,6 +1721,10 @@
       <button id="practiceNavBtn" type="button" title="Yönetim"><span class="nav-icon">🏢</span><span class="nav-label">Yönetim</span></button>
       <button id="invoicesNavBtn" type="button" title="Faturalar"><span class="nav-icon">🧾</span><span class="nav-label">Faturalar</span></button>
     </div>
+    <div class="sidebar-list-toggle">
+      <button class="sidebar-list-toggle-btn" id="clientsListToggleBtn" data-mode="clients">Danışanlar</button>
+      <button class="sidebar-list-toggle-btn" id="prospectsListToggleBtn" data-mode="prospects">Danışan Adayları</button>
+    </div>
     <form id="addClientForm">
       <div class="search-input-wrap">
         <input id="newClientName" type="text" placeholder="Ara ya da yeni danışan adı…" autocomplete="off">
@@ -1667,7 +1732,11 @@
       </div>
       <button type="submit">Ekle</button>
     </form>
-    <div class="sort-row">
+    <form id="addProspectForm" style="display:none;">
+      <input id="newProspectName" type="text" placeholder="Yeni danışan adayı adı…" autocomplete="off">
+      <button type="submit">Ekle</button>
+    </form>
+    <div class="sort-row" id="clientSortRow">
       <label for="sortSelect">Sırala</label>
       <select id="sortSelect">
         <option value="default">Varsayılan</option>
@@ -1678,6 +1747,7 @@
       </select>
     </div>
     <ul id="clientList"></ul>
+    <ul id="prospectList" style="display:none;"></ul>
     <div id="sidebarFooter">
       <div id="fileStatus"></div>
       <button id="settingsNavBtn" type="button">⚙️ Ayarlar</button>
@@ -1786,6 +1856,8 @@ let activeClientId = null;
 let editingClientId = null;
 let sortMode = 'default';
 let searchQuery = '';
+let sidebarListMode = 'clients';
+let expandedProspectId = null;
 let mainView = 'client';
 
 function saveViewState(){
@@ -2015,12 +2087,14 @@ function subscribeToData(){
       if(!migrated){ state = exampleData(); }
       if(!state.clients) state.clients = [];
       if(!state.generalTodos) state.generalTodos = [];
+      if(!state.prospects) state.prospects = [];
       if(migrated){
         try{ await window.FB.setDoc(ref, JSON.parse(JSON.stringify(state))); }catch(e){ console.error('Taşıma kaydı başarısız', e); }
       }
     }
     if(!state.clients) state.clients = [];
     if(!state.generalTodos) state.generalTodos = [];
+      if(!state.prospects) state.prospects = [];
 
     if(!hasLoadedOnce){
       hasLoadedOnce = true;
@@ -2369,7 +2443,8 @@ function uid(){ return Math.random().toString(36).slice(2,10) + Date.now().toStr
 function exampleData(){
   return {
     clients: [],
-    generalTodos: []
+    generalTodos: [],
+    prospects: []
   };
 }
 
@@ -2393,6 +2468,93 @@ function clientStatus(client){
     }
   }
   return 'green';
+}
+
+function renderProspectList(){
+  const list = document.getElementById('prospectList');
+  list.innerHTML = '';
+  if(!state.prospects) state.prospects = [];
+  const prospects = state.prospects.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+
+  if(!prospects.length){
+    const li = document.createElement('li');
+    li.className = 'search-empty';
+    li.innerHTML = `<span>Henüz danışan adayı yok.<br>Yukarıdan bir isim ekleyerek başla.</span>`;
+    list.appendChild(li);
+    return;
+  }
+
+  prospects.forEach(p=>{
+    const li = document.createElement('li');
+    const open = expandedProspectId === p.id;
+    li.innerHTML = `
+      <div class="prospect-row" data-id="${p.id}">
+        <div class="prospect-row-top">
+          <span class="prospect-name">${escapeHtml(p.name)}</span>
+          <div class="prospect-row-actions">
+            <button class="prospect-del" title="Sil">✕</button>
+          </div>
+        </div>
+        <div class="prospect-details ${open ? '' : 'collapsed'}">
+          <input type="text" class="prospect-phone" placeholder="Telefon" value="${escapeAttr(p.phone||'')}">
+          <input type="text" class="prospect-email" placeholder="Email" value="${escapeAttr(p.email||'')}">
+          <textarea class="prospect-notes" placeholder="Notlar…">${escapeHtml(p.notes||'')}</textarea>
+          <button class="prospect-convert-btn" type="button">→ Danışan Yap</button>
+        </div>
+      </div>`;
+    list.appendChild(li);
+
+    li.querySelector('.prospect-row-top').addEventListener('click', (ev)=>{
+      if(ev.target.closest('.prospect-del')) return;
+      expandedProspectId = (expandedProspectId === p.id) ? null : p.id;
+      renderProspectList();
+    });
+    li.querySelector('.prospect-del').addEventListener('click', ()=>{
+      if(!confirm(`"${p.name}" silinsin mi?`)) return;
+      state.prospects = state.prospects.filter(x=>x.id!==p.id);
+      saveState();
+      renderProspectList();
+    });
+    if(open){
+      li.querySelector('.prospect-phone').addEventListener('blur', (ev)=>{
+        p.phone = ev.target.value; saveState();
+      });
+      li.querySelector('.prospect-email').addEventListener('blur', (ev)=>{
+        p.email = ev.target.value; saveState();
+      });
+      li.querySelector('.prospect-notes').addEventListener('blur', (ev)=>{
+        p.notes = ev.target.value; saveState();
+      });
+      li.querySelector('.prospect-convert-btn').addEventListener('click', ()=>{
+        convertProspectToClient(p);
+      });
+    }
+  });
+}
+
+function convertProspectToClient(prospect){
+  if(!confirm(`"${prospect.name}" danışan listesine taşınsın mı?`)) return;
+  const newClient = {
+    id: uid(),
+    name: prospect.name,
+    generalAdminNote: prospect.notes || '',
+    todos: [],
+    sessions: [],
+    profile: {
+      info: '', address: '',
+      phone: prospect.phone || '', email: prospect.email || '',
+      ifhp: false, rate: null, noInvoice: false, terminated: false
+    }
+  };
+  state.clients.push(newClient);
+  state.prospects = state.prospects.filter(x=>x.id!==prospect.id);
+  saveState();
+  sidebarListMode = 'clients';
+  activeClientId = newClient.id;
+  mainView = 'client';
+  expandedProspectId = null;
+  document.body.classList.add('mobile-detail');
+  render();
 }
 
 function pendingChecklistCount(client){
@@ -2467,6 +2629,20 @@ function renderSidebar(){
   document.getElementById('homeNavBtn').classList.toggle('active', mainView==='home');
   document.getElementById('practiceNavBtn').classList.toggle('active', mainView==='practice');
   document.getElementById('invoicesNavBtn').classList.toggle('active', mainView==='invoices');
+
+  document.getElementById('clientsListToggleBtn').classList.toggle('active', sidebarListMode==='clients');
+  document.getElementById('prospectsListToggleBtn').classList.toggle('active', sidebarListMode==='prospects');
+  document.getElementById('addClientForm').style.display = sidebarListMode==='clients' ? 'flex' : 'none';
+  document.getElementById('addProspectForm').style.display = sidebarListMode==='prospects' ? 'flex' : 'none';
+  document.getElementById('clientSortRow').style.display = sidebarListMode==='clients' ? 'flex' : 'none';
+  document.getElementById('clientList').style.display = sidebarListMode==='clients' ? '' : 'none';
+  document.getElementById('prospectList').style.display = sidebarListMode==='prospects' ? '' : 'none';
+
+  if(sidebarListMode === 'prospects'){
+    renderProspectList();
+    return;
+  }
+
   const list = document.getElementById('clientList');
   list.innerHTML = '';
   const clients = getSortedClients();
@@ -4240,10 +4416,31 @@ document.getElementById('addClientForm').addEventListener('submit', (ev)=>{
   render();
 });
 
+document.querySelectorAll('.sidebar-list-toggle-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    sidebarListMode = btn.getAttribute('data-mode');
+    expandedProspectId = null;
+    renderSidebar();
+  });
+});
+
+document.getElementById('addProspectForm').addEventListener('submit', (ev)=>{
+  ev.preventDefault();
+  const input = document.getElementById('newProspectName');
+  const name = input.value.trim();
+  if(!name) return;
+  if(!state.prospects) state.prospects = [];
+  const prospect = { id: uid(), name, phone:'', email:'', notes:'', createdAt: Date.now() };
+  state.prospects.push(prospect);
+  input.value = '';
+  saveState();
+  renderProspectList();
+});
+
 function resetAllData(){
   if(confirm('Bu hesaptaki tüm danışan verileri silinecek. Emin misin?')){
     const clientCount = state.clients.length;
-    state = { clients: [], generalTodos: [] };
+    state = { clients: [], generalTodos: [], prospects: [] };
     activeClientId = null;
     saveState();
     logAudit('tüm veriler sıfırlandı', `${clientCount} danışan silindi`);
@@ -5529,6 +5726,7 @@ function wireHomeCalendarButtons(box){
 function renderHome(){
   const main = document.getElementById('main');
   if(!state.generalTodos) state.generalTodos = [];
+      if(!state.prospects) state.prospects = [];
 
   const tasks = [];
   const doneTasks = [];
