@@ -1778,6 +1778,19 @@
     cursor:pointer;
   }
   .reschedule-cancel-btn:hover{background:var(--neutral-bg);}
+  .cal-datetime-btn{
+    width:100%;
+    text-align:left;
+    padding:8px 12px;
+    border-radius:8px;
+    border:1px solid var(--card-line);
+    font-family:inherit;
+    font-size:13.5px;
+    color:var(--ink);
+    background:var(--card);
+    cursor:pointer;
+  }
+  .cal-datetime-btn:hover{background:var(--neutral-bg);}
 
   /* Isolated to installed Home Screen apps only — never affects the normal Safari tab,
      where the layout already renders correctly edge to edge. */
@@ -3089,20 +3102,6 @@ async function cancelCalendarEvent(eventId, calendarId){
   }
 }
 
-function timeOptions5MinHtml(){
-  const opts = [];
-  for(let h = 0; h < 24; h++){
-    for(let m = 0; m < 60; m += 15){
-      let hour12 = h % 12;
-      if(hour12 === 0) hour12 = 12;
-      const meridiem = h >= 12 ? 'PM' : 'AM';
-      const label = `${hour12}:${String(m).padStart(2,'0')} ${meridiem}`;
-      opts.push(`<option value="${label}">`);
-    }
-  }
-  return opts.join('');
-}
-
 function parseAmPmTime(input){
   if(!input) return null;
   const match = input.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/);
@@ -3828,6 +3827,11 @@ function todoItemHtml(todo){
   </div>`;
 }
 
+function calDateTimeButtonLabel(dateStr, timeLabel){
+  const dateLabel = dateStr ? `${turkishDayName(dateStr)}, ${formatShortDate(dateStr)}` : 'Tarih seç';
+  return `📅 ${dateLabel}${timeLabel ? ' — ' + timeLabel : ' — saat seç'}`;
+}
+
 function calendarPanelHtml(client){
   const today = todayIso();
   const sessionLink = getProvider().sessionLink;
@@ -3839,14 +3843,9 @@ function calendarPanelHtml(client){
         <label>Başlık</label>
         <input type="text" class="cal-title" value="${escapeAttr(client.name + '-Psychotherapy Session')}">
       </div>
-      <div class="field-block">
-        <label>Tarih</label>
-        <input type="date" class="cal-date" value="${today}">
-      </div>
-      <div class="field-block">
-        <label>Saat</label>
-        <input type="text" class="cal-time" list="timeOptions5min" placeholder="örn: 10:00 AM" value="">
-        <datalist id="timeOptions5min">${timeOptions5MinHtml()}</datalist>
+      <div class="field-block full">
+        <label>Tarih ve Saat</label>
+        <button type="button" class="cal-datetime-btn" data-date="${today}" data-time="">${calDateTimeButtonLabel(today, '')}</button>
       </div>
       <div class="field-block">
         <label>Süre</label>
@@ -4025,7 +4024,8 @@ function removeSessionForCalendarEvent(client, eventId){
 }
 
 async function loadCalendarDayEvents(panel, client){
-  const dateStr = panel.querySelector('.cal-date').value;
+  const dtBtn = panel.querySelector('.cal-datetime-btn');
+  const dateStr = dtBtn ? dtBtn.getAttribute('data-date') : '';
   const box = panel.querySelector('.cal-day-events');
   if(!dateStr){ box.textContent = 'Tarih seçince görünecek…'; return; }
   box.textContent = 'Yükleniyor…';
@@ -4066,23 +4066,30 @@ async function loadCalendarDayEvents(panel, client){
     });
   });
   box.querySelectorAll('.cal-event-edit-btn').forEach(btn=>{
-    btn.addEventListener('click', async (ev)=>{
+    btn.addEventListener('click', (ev)=>{
       const row = ev.target.closest('.cal-day-event-row');
       const eventId = row.getAttribute('data-event-id');
       const calendarId = row.getAttribute('data-calendar-id') || 'primary';
-      const newDate = prompt('Yeni tarih (YYYY-AA-GG):', dateStr);
-      if(!newDate) return;
-      const newTime = promptForTime('10:00 AM');
-      if(!newTime) return;
-      btn.disabled = true;
-      const ok = await rescheduleCalendarEvent(eventId, newDate, newTime, calendarId);
-      if(ok){
-        const sessionUpdated = syncSessionDateForCalendarEvent(client, eventId, newDate);
-        if(sessionUpdated){ render(); }
-        else{ loadCalendarDayEvents(panel, client); }
-      }else{
-        alert('Randevu güncellenemedi.'); btn.disabled = false;
-      }
+      const timeEl = row.querySelector('.cal-day-event-time');
+      const currentTimeLabel = (timeEl && timeEl.textContent !== 'Tüm gün') ? timeEl.textContent : '10:00 AM';
+
+      openReschedulePopover({
+        initialDate: dateStr,
+        initialTimeLabel: currentTimeLabel,
+        onConfirm: async (newDate, newTimeLabel)=>{
+          const newTime = parseAmPmTime(newTimeLabel);
+          if(!newTime) return;
+          btn.disabled = true;
+          const ok = await rescheduleCalendarEvent(eventId, newDate, newTime, calendarId);
+          if(ok){
+            const sessionUpdated = syncSessionDateForCalendarEvent(client, eventId, newDate);
+            if(sessionUpdated){ render(); }
+            else{ loadCalendarDayEvents(panel, client); }
+          }else{
+            alert('Randevu güncellenemedi.'); btn.disabled = false;
+          }
+        }
+      });
     });
   });
 }
@@ -4090,7 +4097,19 @@ async function loadCalendarDayEvents(panel, client){
 function wireCalendarPanel(client){
   const panel = document.getElementById('calendarPanel');
 
-  panel.querySelector('.cal-date').addEventListener('change', ()=>loadCalendarDayEvents(panel, client));
+  const dtBtn = panel.querySelector('.cal-datetime-btn');
+  dtBtn.addEventListener('click', ()=>{
+    openReschedulePopover({
+      initialDate: dtBtn.getAttribute('data-date'),
+      initialTimeLabel: dtBtn.getAttribute('data-time') || '10:00 AM',
+      onConfirm: (newDate, newTimeLabel)=>{
+        dtBtn.setAttribute('data-date', newDate);
+        dtBtn.setAttribute('data-time', newTimeLabel);
+        dtBtn.textContent = calDateTimeButtonLabel(newDate, newTimeLabel);
+        loadCalendarDayEvents(panel, client);
+      }
+    });
+  });
   if(panel.classList.contains('open')) loadCalendarDayEvents(panel, client);
 
   panel.querySelector('.cal-repeat').addEventListener('change', (ev)=>{
@@ -4099,8 +4118,8 @@ function wireCalendarPanel(client){
 
   panel.querySelector('.cal-create-btn').addEventListener('click', async ()=>{
     const title = panel.querySelector('.cal-title').value.trim();
-    const dateStr = panel.querySelector('.cal-date').value;
-    const timeRaw = panel.querySelector('.cal-time').value;
+    const dateStr = dtBtn.getAttribute('data-date');
+    const timeRaw = dtBtn.getAttribute('data-time');
     const timeStr = parseAmPmTime(timeRaw);
     const durationMinutes = Number(panel.querySelector('.cal-duration').value);
     const inviteClient = panel.querySelector('.cal-invite').checked;
@@ -4543,19 +4562,23 @@ function renderSessionCard(client, session, index){
     }
   });
   if(isFuture && isCalendarLinked){
-    div.querySelector('.future-reschedule-btn').addEventListener('click', async ()=>{
-      const newDate = prompt('Yeni tarih (YYYY-AA-GG):', session.date);
-      if(!newDate) return;
-      const newTime = promptForTime('10:00 AM');
-      if(!newTime) return;
-      const ok = await rescheduleCalendarEvent(session.calendarEventId, newDate, newTime, session.calendarId || 'primary');
-      if(ok){
-        session.date = newDate;
-        saveState();
-        render();
-      }else{
-        alert('Randevu güncellenemedi.');
-      }
+    div.querySelector('.future-reschedule-btn').addEventListener('click', ()=>{
+      openReschedulePopover({
+        initialDate: session.date,
+        initialTimeLabel: session.calendarEndTime ? formatEventTime(session.calendarEndTime) : '10:00 AM',
+        onConfirm: async (newDate, newTimeLabel)=>{
+          const newTime = parseAmPmTime(newTimeLabel);
+          if(!newTime) return;
+          const ok = await rescheduleCalendarEvent(session.calendarEventId, newDate, newTime, session.calendarId || 'primary');
+          if(ok){
+            session.date = newDate;
+            saveState();
+            render();
+          }else{
+            alert('Randevu güncellenemedi.');
+          }
+        }
+      });
     });
     div.querySelector('.future-cancel-btn').addEventListener('click', async ()=>{
       if(!confirm('Bu randevu Takvim\'den iptal edilsin ve bu kayıt silinsin mi? Danışana bilgilendirme gider.')) return;
