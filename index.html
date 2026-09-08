@@ -1226,6 +1226,17 @@
   }
   #profilePanel.open{display:block;}
   .contact-row{display:flex; gap:6px; align-items:center;}
+  .second-person-fields{
+    display:contents;
+  }
+  .second-person-fields.collapsed{display:none;}
+  .second-person-note{
+    grid-column:1 / -1;
+    font-size:12px;
+    color:var(--muted);
+    line-height:1.5;
+    margin:-4px 0 0;
+  }
   .contact-row input{
     flex:1;
     font-family:inherit;
@@ -3408,6 +3419,10 @@ async function createCalendarEvent(client, opts){
   }
   if(opts.inviteClient && client.profile && client.profile.email){
     event.attendees = [{ email: client.profile.email.trim() }];
+    const sp = client.profile.secondPerson;
+    if(sp && sp.email && sp.email.trim()){
+      event.attendees.push({ email: sp.email.trim() });
+    }
   }
 
   try{
@@ -3459,7 +3474,7 @@ async function createGmailDraftWithAttachment(client, session, doc, filename){
   const token = await ensureGoogleAccessToken();
   if(!token) return false;
 
-  const to = (client.profile && client.profile.email) ? client.profile.email.trim() : '';
+  const to = clientEmailList(client);
   const subject = `Your Receipt from ${getProvider().name} - ${formatInvoiceDate(session.date)}`;
   const bodyText = `Hello ${client.name},\n\nPlease find your receipt for the session on ${formatInvoiceDate(session.date)} attached.\n\nBest regards,`;
 
@@ -3532,12 +3547,50 @@ function invoiceFilename(client, session){
   return `Invoice-${namePart}${yy}.${mm}.${dd}.pdf`;
 }
 
-function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber){
+function askBillToName(client){
+  return new Promise((resolve)=>{
+    const sp = client.profile && client.profile.secondPerson;
+    if(!sp || !sp.name || !sp.name.trim()){
+      resolve(client.name);
+      return;
+    }
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:360px;">
+        <div class="backups-box-header">
+          <h2>Kimin adına kesilsin?</h2>
+        </div>
+        <div style="padding:0 20px 20px; display:flex; flex-direction:column; gap:10px;">
+          <button class="settings-btn bill-to-choice" data-name="${escapeAttr(client.name)}" style="width:100%;">${escapeHtml(client.name)}</button>
+          <button class="settings-btn bill-to-choice" data-name="${escapeAttr(sp.name)}" style="width:100%;">${escapeHtml(sp.name)}</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelectorAll('.bill-to-choice').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const name = btn.getAttribute('data-name');
+        modal.remove();
+        resolve(name);
+      });
+    });
+    modal.addEventListener('click', (ev)=>{
+      if(ev.target === modal){
+        modal.remove();
+        resolve(client.name);
+      }
+    });
+  });
+}
+
+function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const amountStr = `CA$${rate.toFixed(2)}`;
   const docTitle = ifhp ? 'INVOICE' : 'RECEIPT';
-  const clientName = toAscii(client.name);
+  const clientName = toAscii(billToName || client.name);
 
   // left accent bar
   doc.setFillColor(217, 227, 240);
@@ -3647,7 +3700,9 @@ async function generateInvoiceForSession(client, session, action){
     invoiceNumber = entered.trim();
   }
 
-  const doc = buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber);
+  const billToName = await askBillToName(client);
+
+  const doc = buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName);
   const filename = invoiceFilename(client, session);
 
   if(ifhp){
@@ -3670,7 +3725,7 @@ async function generateInvoiceForSession(client, session, action){
 }
 
 function receiptEmailContent(client, session){
-  const email = (client.profile && client.profile.email) ? encodeURIComponent(client.profile.email.trim()) : '';
+  const email = encodeURIComponent(clientEmailList(client));
   const subject = encodeURIComponent(`Your Receipt from ${getProvider().name} - ${formatInvoiceDate(session.date)}`);
   const body = encodeURIComponent(
     `Hello ${client.name},\n\n`+
@@ -3690,6 +3745,18 @@ async function shareInvoiceFile(doc, filename, client){
     }
   }catch(e){ /* user cancelled the share sheet */ }
   alert('Bu tarayıcı/cihaz dosya paylaşımını desteklemiyor. Bunun yerine "İndir" butonunu kullanabilirsin.');
+}
+
+function clientEmailList(client){
+  const emails = [];
+  if(client.profile && client.profile.email && client.profile.email.trim()){
+    emails.push(client.profile.email.trim());
+  }
+  const sp = client.profile && client.profile.secondPerson;
+  if(sp && sp.email && sp.email.trim()){
+    emails.push(sp.email.trim());
+  }
+  return emails.join(', ');
 }
 
 function waLink(phone){
@@ -3882,7 +3949,7 @@ function calendarPanelHtml(client){
       </div>
       <div class="field-block">
         <label>&nbsp;</label>
-        <div class="tick-row"><input type="checkbox" class="cal-invite" ${client.profile && client.profile.email ? 'checked' : ''}><span>Danışanı davet et (${client.profile && client.profile.email ? escapeHtml(client.profile.email) : 'email yok'})</span></div>
+        <div class="tick-row"><input type="checkbox" class="cal-invite" ${client.profile && client.profile.email ? 'checked' : ''}><span>Danışanı davet et (${client.profile && client.profile.email ? escapeHtml(client.profile.email) + (client.profile.secondPerson && client.profile.secondPerson.email ? ' + ' + escapeHtml(client.profile.secondPerson.email) : '') : 'email yok'})</span></div>
       </div>
       <div class="field-block full">
         <div class="tick-row"><input type="checkbox" class="cal-repeat"><span>Her hafta aynı gün/saatte tekrarla</span></div>
@@ -4318,6 +4385,7 @@ function noShowSummaryText(client){
 
 function profilePanelHtml(client){
   const p = client.profile || {};
+  const sp = p.secondPerson || null;
   return `
   <div id="profilePanel">
     <div class="form-grid">
@@ -4355,6 +4423,31 @@ function profilePanelHtml(client){
       <div class="field-block full">
         <button class="settings-btn profile-contact-sync-btn" type="button" style="width:auto;">📇 ${client.googleContactResourceName ? 'Google Kişiler\'de Güncelle' : 'Google Kişiler\'e Ekle'}</button>
         <span class="profile-contact-sync-status" style="font-size:12px; color:var(--muted); margin-left:10px;"></span>
+      </div>
+      <div class="field-block full">
+        <div class="tick-row"><input type="checkbox" class="profile-second-toggle" ${sp ? 'checked' : ''}><span>👥 İkinci bir kişi ekle (çift / aile terapisi)</span></div>
+      </div>
+      <div class="second-person-fields ${sp ? '' : 'collapsed'}">
+        <div class="field-block">
+          <label>İkinci Kişinin Adı</label>
+          <input type="text" class="profile-second-name" value="${escapeAttr(sp && sp.name || '')}">
+        </div>
+        <div class="field-block">
+          <label>İkinci Kişinin Telefonu</label>
+          <div class="contact-row">
+            <input type="text" class="profile-second-phone" placeholder="+1 416 000 0000" value="${escapeAttr(sp && sp.phone || '')}">
+            <a class="contact-btn whatsapp-btn ${sp && sp.phone?'':'disabled'}" href="${waLink(sp && sp.phone)}" target="_blank" rel="noopener">WhatsApp</a>
+          </div>
+        </div>
+        <div class="field-block full">
+          <label>İkinci Kişinin Email'i</label>
+          <div class="contact-row">
+            <input type="text" class="profile-second-email" placeholder="ornek@mail.com" value="${escapeAttr(sp && sp.email || '')}">
+            <a class="contact-btn gmail-btn ${sp && sp.email?'':'disabled'}" href="${gmailWebLink(sp && sp.email)}" target="_blank" rel="noopener">Gmail</a>
+            <a class="contact-btn mailto-btn ${sp && sp.email?'':'disabled'}" href="${mailtoLink(sp && sp.email)}" rel="noopener">Email</a>
+          </div>
+        </div>
+        <p class="second-person-note">Davetiye, mail ve otomatik hatırlatmalar hem bu danışana hem ikinci kişiye birlikte gider — ama tek bir profil ve tek bir davetiye olarak kalır.</p>
       </div>
       <div class="field-block full">
         <label>Faturalama</label>
@@ -4426,6 +4519,40 @@ function wireProfilePanel(client){
     contactSyncBtn.disabled = false;
     contactSyncBtn.textContent = `📇 ${liveClient.googleContactResourceName ? 'Google Kişiler\'de Güncelle' : 'Google Kişiler\'e Ekle'}`;
   });
+
+  panel.querySelector('.profile-second-toggle').addEventListener('change', (ev)=>{
+    if(ev.target.checked){
+      if(!client.profile.secondPerson) client.profile.secondPerson = { name:'', phone:'', email:'' };
+    }else{
+      client.profile.secondPerson = null;
+    }
+    saveState();
+    render();
+  });
+  const secondNameEl = panel.querySelector('.profile-second-name');
+  if(secondNameEl){
+    secondNameEl.addEventListener('blur', (ev)=>{
+      if(!client.profile.secondPerson) client.profile.secondPerson = { name:'', phone:'', email:'' };
+      client.profile.secondPerson.name = ev.target.value;
+      saveState();
+    });
+  }
+  const secondPhoneEl = panel.querySelector('.profile-second-phone');
+  if(secondPhoneEl){
+    secondPhoneEl.addEventListener('blur', (ev)=>{
+      if(!client.profile.secondPerson) client.profile.secondPerson = { name:'', phone:'', email:'' };
+      client.profile.secondPerson.phone = ev.target.value;
+      saveState();
+    });
+  }
+  const secondEmailEl = panel.querySelector('.profile-second-email');
+  if(secondEmailEl){
+    secondEmailEl.addEventListener('blur', (ev)=>{
+      if(!client.profile.secondPerson) client.profile.secondPerson = { name:'', phone:'', email:'' };
+      client.profile.secondPerson.email = ev.target.value;
+      saveState();
+    });
+  }
 
   const ifhpCb = panel.querySelector('.profile-ifhp');
   const rateInput = panel.querySelector('.profile-rate');
