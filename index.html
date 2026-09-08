@@ -5229,6 +5229,23 @@ function currentPersonId(){
   return canonicalPersonId(currentUser.email);
 }
 
+const TASK_NOTIFY_URL = 'https://tasknotify-171012588947.us-central1.run.app/';
+const TASK_NOTIFY_SECRET = 'iki-therapy-notify-2026';
+
+function notifyTaskEvent(type, task){
+  fetch(TASK_NOTIFY_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      secret: TASK_NOTIFY_SECRET,
+      type,
+      taskTitle: task.title,
+      assignedTo: task.assignedTo,
+      assignedBy: task.assignedBy
+    })
+  }).catch(e => console.error('Bildirim gönderilemedi', e));
+}
+
 function personLabel(id){
   return id === 'kubilay' ? 'Kubilay' : id === 'duygu' ? 'Duygu' : id === 'both' ? 'Ortak (Kubilay & Duygu)' : '?';
 }
@@ -5676,6 +5693,7 @@ function wirePracticePage(){
     if(!practiceState.tasks) practiceState.tasks = [];
     practiceState.tasks.push({ id: uid(), title, assignedTo, assignedBy: me, importance, dueDate, done:false, createdAt: Date.now() });
     logPracticeActivity(`${personLabel(me)}, ${personLabel(assignedTo)}'a bir iş atadı: "${title}"`);
+    notifyTaskEvent('assigned', { title, assignedTo, assignedBy: me });
     await savePracticeShared();
     renderPracticeContent();
   });
@@ -5688,7 +5706,10 @@ function wirePracticePage(){
       if(!task) return;
       task.done = ev.target.checked;
       task.doneAt = task.done ? Date.now() : null;
-      if(task.done) logPracticeActivity(`${personLabel(currentPersonId())}, "${task.title}" işini tamamladı.`);
+      if(task.done){
+        logPracticeActivity(`${personLabel(currentPersonId())}, "${task.title}" işini tamamladı.`);
+        notifyTaskEvent('completed', task);
+      }
       await savePracticeShared();
       renderPracticeContent();
     });
