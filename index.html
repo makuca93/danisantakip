@@ -399,6 +399,20 @@
     font-family:inherit;
   }
   #settingsNavBtn:hover{color:var(--ink); border-color:var(--highlight-line);}
+  .footer-btn-row{display:flex; gap:6px;}
+  .footer-btn-row #settingsNavBtn{flex:1;}
+  #refreshAppBtn{
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-size:13px;
+    padding:6px 10px;
+    border-radius:6px;
+    cursor:pointer;
+    font-family:inherit;
+    flex-shrink:0;
+  }
+  #refreshAppBtn:hover{color:var(--ink); border-color:var(--highlight-line);}
 
   .backups-modal{
     display:none;
@@ -1885,7 +1899,10 @@
     <ul id="prospectList" style="display:none;"></ul>
     <div id="sidebarFooter">
       <div id="fileStatus"></div>
-      <button id="settingsNavBtn" type="button">⚙️ Ayarlar</button>
+      <div class="footer-btn-row">
+        <button id="settingsNavBtn" type="button">⚙️ Ayarlar</button>
+        <button id="refreshAppBtn" type="button" title="Sayfayı Yenile">🔄</button>
+      </div>
     </div>
   </div>
   <div id="main"></div>
@@ -4756,6 +4773,10 @@ document.getElementById('settingsNavBtn').addEventListener('click', ()=>{
   mainView = 'settings';
   document.body.classList.add('mobile-detail');
   render();
+});
+
+document.getElementById('refreshAppBtn').addEventListener('click', ()=>{
+  window.location.reload();
 });
 
 async function exportCurrentDataJson(){
