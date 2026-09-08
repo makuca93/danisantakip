@@ -5241,7 +5241,8 @@ function notifyTaskEvent(type, task){
       type,
       taskTitle: task.title,
       assignedTo: task.assignedTo,
-      assignedBy: task.assignedBy
+      assignedBy: task.assignedBy,
+      completedBy: task.completedBy || null
     })
   }).catch(e => console.error('Bildirim gönderilemedi', e));
 }
@@ -5708,7 +5709,7 @@ function wirePracticePage(){
       task.doneAt = task.done ? Date.now() : null;
       if(task.done){
         logPracticeActivity(`${personLabel(currentPersonId())}, "${task.title}" işini tamamladı.`);
-        notifyTaskEvent('completed', task);
+        notifyTaskEvent('completed', { ...task, completedBy: currentPersonId() });
       }
       await savePracticeShared();
       renderPracticeContent();
