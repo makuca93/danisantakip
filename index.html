@@ -2021,7 +2021,7 @@ let editingClientId = null;
 let sortMode = 'default';
 let searchQuery = '';
 let sidebarListMode = 'clients';
-let expandedProspectId = null;
+let activeProspectId = null;
 let mainView = 'client';
 
 function saveViewState(){
@@ -2650,54 +2650,27 @@ function renderProspectList(){
 
   prospects.forEach(p=>{
     const li = document.createElement('li');
-    const open = expandedProspectId === p.id;
+    li.className = 'client-row' + (mainView==='prospect' && activeProspectId===p.id ? ' active' : '');
     li.innerHTML = `
-      <div class="prospect-row" data-id="${p.id}">
-        <div class="prospect-row-top">
-          <span class="prospect-name">${escapeHtml(p.name)}</span>
-          <div class="prospect-row-actions">
-            <button class="prospect-del" title="Sil">✕</button>
-          </div>
-        </div>
-        <div class="prospect-details ${open ? '' : 'collapsed'}">
-          <input type="text" class="prospect-phone" placeholder="Telefon" value="${escapeAttr(p.phone||'')}">
-          <input type="text" class="prospect-email" placeholder="Email" value="${escapeAttr(p.email||'')}">
-          <div class="prospect-contact-actions">
-            <a class="contact-btn ${p.phone?'':'disabled'}" href="${telLink(p.phone)}">📞 Ara</a>
-            <a class="contact-btn ${p.phone?'':'disabled'}" href="${whatsappLink(p.phone)}" target="_blank" rel="noopener">💬 WhatsApp</a>
-            <a class="contact-btn ${p.email?'':'disabled'}" href="${mailtoLink(p.email)}" rel="noopener">✉️ Email</a>
-          </div>
-          <textarea class="prospect-notes" placeholder="Notlar…">${escapeHtml(p.notes||'')}</textarea>
-          <button class="prospect-convert-btn" type="button">→ Danışan Yap</button>
-        </div>
-      </div>`;
-    list.appendChild(li);
-
-    li.querySelector('.prospect-row-top').addEventListener('click', (ev)=>{
-      if(ev.target.closest('.prospect-del')) return;
-      expandedProspectId = (expandedProspectId === p.id) ? null : p.id;
-      renderProspectList();
+      <span class="client-name">${escapeHtml(p.name || '(isimsiz aday)')}</span>
+      <button class="client-del" title="Sil">✕</button>
+    `;
+    li.addEventListener('click', (ev)=>{
+      if(ev.target.closest('.client-del')) return;
+      activeProspectId = p.id;
+      mainView = 'prospect';
+      document.body.classList.add('mobile-detail');
+      render();
     });
-    li.querySelector('.prospect-del').addEventListener('click', ()=>{
+    li.querySelector('.client-del').addEventListener('click', (ev)=>{
+      ev.stopPropagation();
       if(!confirm(`"${p.name}" silinsin mi?`)) return;
       state.prospects = state.prospects.filter(x=>x.id!==p.id);
+      if(activeProspectId === p.id){ activeProspectId = null; mainView = 'home'; document.body.classList.remove('mobile-detail'); }
       saveState();
-      renderProspectList();
+      render();
     });
-    if(open){
-      li.querySelector('.prospect-phone').addEventListener('blur', (ev)=>{
-        p.phone = ev.target.value; saveState();
-      });
-      li.querySelector('.prospect-email').addEventListener('blur', (ev)=>{
-        p.email = ev.target.value; saveState();
-      });
-      li.querySelector('.prospect-notes').addEventListener('blur', (ev)=>{
-        p.notes = ev.target.value; saveState();
-      });
-      li.querySelector('.prospect-convert-btn').addEventListener('click', ()=>{
-        convertProspectToClient(p);
-      });
-    }
+    list.appendChild(li);
   });
 }
 
@@ -2721,9 +2694,165 @@ function convertProspectToClient(prospect){
   sidebarListMode = 'clients';
   activeClientId = newClient.id;
   mainView = 'client';
-  expandedProspectId = null;
+  activeProspectId = null;
   document.body.classList.add('mobile-detail');
   render();
+}
+
+async function syncProspectToGoogleContacts(prospect){
+  const email = prospect.email ? prospect.email.trim() : '';
+  const phone = prospect.phone ? prospect.phone.trim() : '';
+  if(!email && !phone) return;
+
+  const token = await ensureGoogleAccessToken();
+  if(!token) return;
+
+  const body = { names: [{ givenName: prospect.name || '' }] };
+  if(email) body.emailAddresses = [{ value: email }];
+  if(phone) body.phoneNumbers = [{ value: phone }];
+
+  try{
+    if(prospect.googleContactResourceName){
+      const getRes = await fetch(`https://people.googleapis.com/v1/${prospect.googleContactResourceName}?personFields=names,emailAddresses,phoneNumbers`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if(!getRes.ok){
+        console.error('Google Kişi bulunamadı, güncellenemedi', await getRes.text());
+        return;
+      }
+      const existing = await getRes.json();
+      body.etag = existing.etag;
+      const updateRes = await fetch(`https://people.googleapis.com/v1/${prospect.googleContactResourceName}:updateContact?updatePersonFields=names,emailAddresses,phoneNumbers`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if(!updateRes.ok){
+        console.error('Google Kişi güncellenemedi', await updateRes.text());
+      }
+    }else{
+      const foundResourceName = await findExistingGoogleContact(token, email);
+      if(foundResourceName){
+        prospect.googleContactResourceName = foundResourceName;
+        saveState();
+        return;
+      }
+      const res = await fetch('https://people.googleapis.com/v1/people:createContact', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if(res.ok){
+        const data = await res.json();
+        prospect.googleContactResourceName = data.resourceName;
+        saveState();
+      }else{
+        console.error('Google Kişiler\'e eklenemedi', await res.text());
+      }
+    }
+  }catch(e){
+    console.error('Google Kişiler senkron hatası', e);
+  }
+}
+
+function renderProspectPage(){
+  const main = document.getElementById('main');
+  const prospect = (state.prospects||[]).find(p=>p.id===activeProspectId);
+  if(!prospect){
+    mainView = 'home';
+    renderHome();
+    return;
+  }
+
+  main.innerHTML = `
+    <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
+    <div id="clientHeader"><h2>${escapeHtml(prospect.name || '(isimsiz aday)')}</h2></div>
+    <div id="clientSub">Danışan Adayı</div>
+
+    <div class="settings-section">
+      <div class="form-grid">
+        <div class="field-block full">
+          <label>Aday İsmi</label>
+          <input type="text" class="prospect-page-name" value="${escapeAttr(prospect.name||'')}">
+        </div>
+        <div class="field-block">
+          <label>Telefon</label>
+          <div class="contact-row">
+            <input type="text" class="prospect-page-phone" placeholder="+1 416 000 0000" value="${escapeAttr(prospect.phone||'')}">
+            <a class="contact-btn ${prospect.phone?'':'disabled'}" href="${telLink(prospect.phone)}">📞 Ara</a>
+            <a class="contact-btn ${prospect.phone?'':'disabled'}" href="${whatsappLink(prospect.phone)}" target="_blank" rel="noopener">💬 WhatsApp</a>
+          </div>
+        </div>
+        <div class="field-block">
+          <label>Email</label>
+          <div class="contact-row">
+            <input type="text" class="prospect-page-email" placeholder="ornek@mail.com" value="${escapeAttr(prospect.email||'')}">
+            <a class="contact-btn ${prospect.email?'':'disabled'}" href="${mailtoLink(prospect.email)}" rel="noopener">✉️ Email</a>
+          </div>
+        </div>
+        <div class="field-block full">
+          <label>Notlar</label>
+          <textarea class="prospect-page-notes" style="min-height:80px;">${escapeHtml(prospect.notes||'')}</textarea>
+        </div>
+        <div class="field-block full">
+          <button class="settings-btn prospect-page-contact-sync-btn" type="button" style="width:auto;">📇 ${prospect.googleContactResourceName ? 'Google Kişiler\'de Güncelle' : 'Google Kişiler\'e Ekle'}</button>
+          <span class="prospect-page-contact-sync-status" style="font-size:12px; color:var(--muted); margin-left:10px;"></span>
+        </div>
+        <div class="field-block full">
+          <button class="prospect-convert-btn" type="button">→ Danışan Yap</button>
+          <button class="settings-btn danger prospect-page-del-btn" type="button" style="width:auto; margin-left:10px;">Adayı Sil</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('backToListBtn').addEventListener('click', ()=>{
+    document.body.classList.remove('mobile-detail');
+  });
+
+  main.querySelector('.prospect-page-name').addEventListener('blur', (ev)=>{
+    prospect.name = ev.target.value.trim();
+    saveState();
+    render();
+  });
+  main.querySelector('.prospect-page-phone').addEventListener('blur', (ev)=>{
+    prospect.phone = ev.target.value;
+    saveState();
+    render();
+  });
+  main.querySelector('.prospect-page-email').addEventListener('blur', (ev)=>{
+    prospect.email = ev.target.value;
+    saveState();
+    render();
+  });
+  main.querySelector('.prospect-page-notes').addEventListener('blur', (ev)=>{
+    prospect.notes = ev.target.value;
+    saveState();
+  });
+  main.querySelector('.prospect-convert-btn').addEventListener('click', ()=>{
+    convertProspectToClient(prospect);
+  });
+  main.querySelector('.prospect-page-del-btn').addEventListener('click', ()=>{
+    if(!confirm(`"${prospect.name}" silinsin mi?`)) return;
+    state.prospects = state.prospects.filter(x=>x.id!==prospect.id);
+    activeProspectId = null;
+    mainView = 'home';
+    document.body.classList.remove('mobile-detail');
+    saveState();
+    render();
+  });
+  const syncBtn = main.querySelector('.prospect-page-contact-sync-btn');
+  syncBtn.addEventListener('click', async ()=>{
+    if(syncBtn.disabled) return;
+    const statusEl = main.querySelector('.prospect-page-contact-sync-status');
+    syncBtn.disabled = true;
+    statusEl.textContent = 'Gönderiliyor…';
+    const liveProspect = (state.prospects||[]).find(p=>p.id===prospect.id) || prospect;
+    await syncProspectToGoogleContacts(liveProspect);
+    statusEl.textContent = '✅ Tamamlandı';
+    syncBtn.disabled = false;
+    syncBtn.textContent = `📇 ${liveProspect.googleContactResourceName ? 'Google Kişiler\'de Güncelle' : 'Google Kişiler\'e Ekle'}`;
+  });
 }
 
 function pendingChecklistCount(client){
@@ -2769,6 +2898,8 @@ function getSortedClients(){
     arr.sort((a,b)=> pendingChecklistCount(b) - pendingChecklistCount(a));
   } else if(sortMode === 'pendingTodos'){
     arr.sort((a,b)=> pendingTodoCount(b) - pendingTodoCount(a));
+  } else {
+    arr.reverse(); // default: most recently added first
   }
   if(searchQuery.trim()){
     const q = normalizeForSearch(searchQuery.trim());
@@ -2793,6 +2924,8 @@ function render(){
     renderPracticePage();
   }else if(mainView === 'invoices'){
     renderInvoicesPage();
+  }else if(mainView === 'prospect'){
+    renderProspectPage();
   }else{
     renderMain();
   }
@@ -4941,7 +5074,6 @@ document.getElementById('newClientBtn').addEventListener('click', ()=>{
 document.querySelectorAll('.sidebar-list-toggle-btn').forEach(btn=>{
   btn.addEventListener('click', ()=>{
     sidebarListMode = btn.getAttribute('data-mode');
-    expandedProspectId = null;
     renderSidebar();
   });
 });
