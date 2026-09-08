@@ -1104,6 +1104,7 @@
   }
   .home-task-row.assigned-kubilay{background:#f2f6fc;}
   .home-task-row.assigned-duygu{background:#fcf2f6;}
+  .home-task-row.assigned-both{background:linear-gradient(135deg, #f2f6fc 0%, #fcf2f6 100%); border-color:#d8c9e8;}
   .home-task-row input[type="checkbox"]{width:17px; height:17px; margin-top:2px; accent-color:var(--green); flex-shrink:0;}
   .home-task-main{flex:1; min-width:0;}
   .home-task-text-input{
@@ -5229,7 +5230,7 @@ function currentPersonId(){
 }
 
 function personLabel(id){
-  return id === 'kubilay' ? 'Kubilay' : id === 'duygu' ? 'Duygu' : '?';
+  return id === 'kubilay' ? 'Kubilay' : id === 'duygu' ? 'Duygu' : id === 'both' ? 'Ortak (Kubilay & Duygu)' : '?';
 }
 
 async function loadPracticeShared(){
@@ -5416,6 +5417,7 @@ function practiceTaskRowHtml(t){
           <select class="practice-task-edit-assignee">
             <option value="kubilay" ${t.assignedTo==='kubilay'?'selected':''}>Kubilay'a ata</option>
             <option value="duygu" ${t.assignedTo==='duygu'?'selected':''}>Duygu'ya ata</option>
+            <option value="both" ${t.assignedTo==='both'?'selected':''}>Ortak İş (ikisine de ata)</option>
           </select>
           <select class="practice-task-edit-importance">
             <option value="1" ${t.importance===1?'selected':''}>⭐ Düşük</option>
@@ -5509,7 +5511,10 @@ async function renderPracticePage(){
 function renderPracticeContent(){
   const main = document.getElementById('main');
   const allTasks = practiceState.tasks || [];
-  const filteredTasks = practiceTaskAssigneeFilter === 'all' ? allTasks : allTasks.filter(t=>t.assignedTo===practiceTaskAssigneeFilter);
+  const filteredTasks = practiceTaskAssigneeFilter === 'all' ? allTasks : allTasks.filter(t=>{
+    if(practiceTaskAssigneeFilter === 'both') return t.assignedTo === 'both';
+    return t.assignedTo === practiceTaskAssigneeFilter || t.assignedTo === 'both';
+  });
   const pendingTasks = filteredTasks.filter(t=>!t.done).sort((a,b)=>{
     if(practiceTaskSortMode === 'importance') return (b.importance||0) - (a.importance||0);
     return (a.dueDate||'9999').localeCompare(b.dueDate||'9999');
@@ -5533,6 +5538,7 @@ function renderPracticeContent(){
           <select class="practice-task-assignee">
             <option value="kubilay">Kubilay'a ata</option>
             <option value="duygu">Duygu'ya ata</option>
+            <option value="both">Ortak İş (ikisine de ata)</option>
           </select>
           <select class="practice-task-importance">
             <option value="1">⭐ Düşük</option>
@@ -5546,6 +5552,7 @@ function renderPracticeContent(){
           <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='all'?'active':''}" data-filter="all">Tümü</button>
           <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='kubilay'?'active':''}" data-filter="kubilay">Kubilay'a Atananlar</button>
           <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='duygu'?'active':''}" data-filter="duygu">Duygu'ya Atananlar</button>
+          <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='both'?'active':''}" data-filter="both">Ortak İşler</button>
           <select class="practice-task-sort-select" style="margin-left:auto;">
             <option value="due" ${practiceTaskSortMode==='due'?'selected':''}>Son tarihe göre</option>
             <option value="importance" ${practiceTaskSortMode==='importance'?'selected':''}>Öneme göre</option>
