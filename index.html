@@ -2405,6 +2405,7 @@ async function loadPracticeSharedForNotifications(){
   if(!loaded) return;
   practiceState = loaded;
   updateNotificationBell();
+  checkDailyReminders();
   maybeShowNewNotificationToasts();
 }
 
@@ -2542,6 +2543,8 @@ async function uploadDriveBackup(interactive){
   }
 }
 
+let driveBackupConsecutiveFailures = 0;
+
 async function maybeDriveBackup(){
   const now = Date.now();
   if(now - lastDriveBackupAt < DRIVE_BACKUP_MIN_INTERVAL_MS) return;
@@ -2549,6 +2552,15 @@ async function maybeDriveBackup(){
   driveBackupStatus = 'saving';
   const ok = await uploadDriveBackup(false); // silent only — never interrupts with a popup
   driveBackupStatus = ok ? 'success' : 'error';
+  if(ok){
+    driveBackupConsecutiveFailures = 0;
+  }else{
+    driveBackupConsecutiveFailures++;
+    if(driveBackupConsecutiveFailures === 3){
+      const me = currentPersonId();
+      if(me) pushInAppNotification(me, '⚠️ Google Drive yedeklemesi arka arkaya birkaç kez başarısız oldu — Ayarlar > Google Drive Yedeği bölümünden elle dene.');
+    }
+  }
 }
 
 async function saveState(){
@@ -2986,6 +2998,50 @@ function renderProspectPage(){
     syncBtn.disabled = false;
     syncBtn.textContent = `📇 ${liveProspect.googleContactResourceName ? 'Google Kişiler\'de Güncelle' : 'Google Kişiler\'e Ekle'}`;
   });
+}
+
+const UNPAID_NOTIFY_THRESHOLD = 3;
+function checkUnpaidThreshold(client){
+  let unpaidCount = 0;
+  (client.sessions||[]).forEach(s=>{
+    if(isSessionDue(s) && !s.paymentDone) unpaidCount++;
+  });
+  if(unpaidCount >= UNPAID_NOTIFY_THRESHOLD && !client.unpaidThresholdNotified){
+    client.unpaidThresholdNotified = true;
+    saveState();
+    const me = currentPersonId();
+    if(me) pushInAppNotification(me, `${client.name} adlı danışanın ${unpaidCount} ödenmemiş seansı var.`);
+  }else if(unpaidCount < UNPAID_NOTIFY_THRESHOLD && client.unpaidThresholdNotified){
+    client.unpaidThresholdNotified = false;
+    saveState();
+  }
+}
+
+function checkDailyReminders(){
+  const today = todayIso();
+  let lastCheck = null;
+  try{ lastCheck = localStorage.getItem('lastDailyReminderCheck'); }catch(e){}
+  if(lastCheck === today) return;
+  try{ localStorage.setItem('lastDailyReminderCheck', today); }catch(e){}
+
+  const me = currentPersonId();
+  if(!me) return;
+
+  // Doğum günü bugünse
+  computeUpcomingBirthdays().filter(b=>b.diffDays===0).forEach(b=>{
+    pushInAppNotification(me, `🎂 Bugün ${b.name} adlı danışanın doğum günü!`);
+  });
+
+  // 7+ gündür dokunulmamış danışan adayları
+  const STALE_DAYS = 7;
+  (state.prospects||[]).forEach(p=>{
+    const ageDays = (Date.now() - (p.createdAt||0)) / (24*60*60*1000);
+    if(ageDays >= STALE_DAYS && !p.staleNotified){
+      p.staleNotified = true;
+      pushInAppNotification(me, `${p.name || '(isimsiz aday)'} adlı danışan adayı ${Math.floor(ageDays)} gündür bekliyor — kontrol etmeyi unutma.`);
+    }
+  });
+  saveState();
 }
 
 function pendingChecklistCount(client){
@@ -4394,6 +4450,12 @@ async function loadNextAppointmentInfo(client){
   if(cancelledElsewhere.length){
     client.sessions = client.sessions.filter(s => !cancelledElsewhere.includes(s));
     changed = true;
+    const me = currentPersonId();
+    if(me){
+      cancelledElsewhere.forEach(s=>{
+        pushInAppNotification(me, `${client.name} adlı danışanın ${formatShortDate(s.date)} tarihli randevusu Takvim'den iptal edildi.`);
+      });
+    }
   }
 
   if(changed){
@@ -5120,6 +5182,7 @@ function renderSessionCard(client, session, index){
       const key = ev.target.getAttribute('data-key');
       session[key] = ev.target.checked;
       saveState();
+      if(key === 'paymentDone') checkUnpaidThreshold(client);
       render();
     });
   });
@@ -6056,6 +6119,8 @@ function wirePracticePage(){
     if(!practiceState.notes) practiceState.notes = [];
     practiceState.notes.push({ id: uid(), text, author: me, createdAt: Date.now() });
     logPracticeActivity(`${personLabel(me)} panoya bir not ekledi.`);
+    const otherPersonId = me === 'kubilay' ? 'duygu' : 'kubilay';
+    pushInAppNotification(otherPersonId, `${personLabel(me)} panoya yeni bir not ekledi: "${text.slice(0,80)}"`);
     await savePracticeShared();
     renderPracticeContent();
   });
