@@ -118,7 +118,7 @@
     text-transform:uppercase;
     line-height:1.4;
   }
-  #addClientForm{
+  #clientSearchRow{
     display:flex;
     gap:6px;
   }
@@ -237,7 +237,7 @@
   }
   .sidebar-empty svg{width:52px; height:52px; flex-shrink:0;}
   .sidebar-empty span{font-size:12.5px; line-height:1.5;}
-  #addClientForm button{
+  #clientSearchRow button{
     background:var(--highlight);
     border:1px solid var(--highlight-line);
     color:var(--ink);
@@ -247,7 +247,7 @@
     cursor:pointer;
     font-size:13px;
   }
-  #addClientForm button:hover{filter:brightness(0.97);}
+  #clientSearchRow button:hover{filter:brightness(0.97);}
   .sort-row{
     display:flex;
     align-items:center;
@@ -1564,7 +1564,7 @@
     .item-row input[type="checkbox"]{ width:20px; height:20px; }
     .contact-row{ flex-wrap:wrap; }
     .contact-btn{ padding:10px 14px; font-size:13.5px; }
-    .add-session-toggle, #addClientForm button,
+    .add-session-toggle, #clientSearchRow button,
     .form-actions button, #saveSessionBtn, #cancelSessionBtn,
     .invoice-actions button, .invoice-email-group button{
       padding:12px 16px; font-size:14px;
@@ -1885,13 +1885,13 @@
       <button class="sidebar-list-toggle-btn" id="clientsListToggleBtn" data-mode="clients">Danışanlar</button>
       <button class="sidebar-list-toggle-btn" id="prospectsListToggleBtn" data-mode="prospects">Danışan Adayları</button>
     </div>
-    <form id="addClientForm">
+    <div id="clientSearchRow">
       <div class="search-input-wrap">
-        <input id="newClientName" type="text" placeholder="Ara ya da Ekle" autocomplete="off">
+        <input id="newClientName" type="text" placeholder="Danışan ara…" autocomplete="off">
         <button type="button" id="clearClientSearchBtn" title="Temizle">✕</button>
       </div>
-      <button type="submit">Ekle</button>
-    </form>
+      <button type="button" id="newClientBtn" title="Yeni Danışan Ekle">+ Yeni</button>
+    </div>
     <form id="addProspectForm" style="display:none;">
       <input id="newProspectName" type="text" placeholder="Yeni danışan adayı adı…" autocomplete="off">
       <button type="submit">Ekle</button>
@@ -2016,6 +2016,7 @@ let unsubscribeSnapshot = null;
 let hasLoadedOnce = false;
 let state = null;
 let activeClientId = null;
+let openProfileOnNextRender = false;
 let editingClientId = null;
 let sortMode = 'default';
 let searchQuery = '';
@@ -2771,7 +2772,11 @@ function getSortedClients(){
   }
   if(searchQuery.trim()){
     const q = normalizeForSearch(searchQuery.trim());
-    arr = arr.filter(c=>normalizeForSearch(c.name).includes(q));
+    arr = arr.filter(c=>{
+      const sp = c.profile && c.profile.secondPerson;
+      const spName = sp && sp.name ? sp.name : '';
+      return normalizeForSearch(c.name).includes(q) || (spName && normalizeForSearch(spName).includes(q));
+    });
   }
   return arr;
 }
@@ -2800,7 +2805,7 @@ function renderSidebar(){
 
   document.getElementById('clientsListToggleBtn').classList.toggle('active', sidebarListMode==='clients');
   document.getElementById('prospectsListToggleBtn').classList.toggle('active', sidebarListMode==='prospects');
-  document.getElementById('addClientForm').style.display = sidebarListMode==='clients' ? 'flex' : 'none';
+  document.getElementById('clientSearchRow').style.display = sidebarListMode==='clients' ? 'flex' : 'none';
   document.getElementById('addProspectForm').style.display = sidebarListMode==='prospects' ? 'flex' : 'none';
   document.getElementById('clientSortRow').style.display = sidebarListMode==='clients' ? 'flex' : 'none';
   document.getElementById('clientList').style.display = sidebarListMode==='clients' ? '' : 'none';
@@ -2818,7 +2823,7 @@ function renderSidebar(){
   if(!clients.length && searchQuery.trim()){
     const li = document.createElement('li');
     li.className = 'search-empty';
-    li.textContent = 'Eşleşme yok — "Ekle" ile yeni danışan olarak ekleyebilirsin.';
+    li.textContent = 'Eşleşme yok — "+ Yeni" ile yeni danışan ekleyebilirsin.';
     list.appendChild(li);
     return;
   }
@@ -2870,7 +2875,7 @@ function renderSidebar(){
     const hasOverdueTodo = (client.todos||[]).some(t=>!t.done && t.dueDate && t.dueDate < todayIso());
     li.innerHTML = `
       <span class="seal ${status}" title="${sealTitle}"></span>
-      <span class="client-name">${escapeHtml(client.name)}</span>
+      <span class="client-name">${escapeHtml(clientDisplayName(client))}</span>
       ${pendingCount ? `<span class="todo-badge ${hasOverdueTodo?'overdue':''}" title="${pendingCount} tamamlanmamış iş${hasOverdueTodo?' — süresi geçmiş iş var':''}">${pendingCount}</span>` : ''}
       <button class="client-edit" title="Adını düzenle">✎</button>
       <button class="client-del" title="Danışanı sil">✕</button>
@@ -2928,8 +2933,8 @@ function renderMain(){
     if(emptyBtn){
       emptyBtn.addEventListener('click', ()=>{
         document.body.classList.remove('mobile-detail');
-        const input = document.getElementById('newClientName');
-        if(input) input.focus();
+        const btn = document.getElementById('newClientBtn');
+        if(btn) btn.click();
       });
     }
     return;
@@ -2944,7 +2949,7 @@ function renderMain(){
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader">
-      <h2>${escapeHtml(client.name)}</h2>
+      <h2>${escapeHtml(clientDisplayName(client))}</h2>
       <span class="status-pill ${status}">${statusText}</span>
     </div>
     <div id="clientSub">${client.sessions.length} seans kaydı</div>
@@ -2993,8 +2998,9 @@ function renderMain(){
     if(!wasOpen) panel.classList.add('open');
   });
   // Restore the profile panel state after rebuilding the DOM.
-  if(profileWasOpen){
+  if(profileWasOpen || openProfileOnNextRender){
     document.getElementById('profilePanel').classList.add('open');
+    openProfileOnNextRender = false;
   }
   wireProfilePanel(client);
 
@@ -3388,6 +3394,64 @@ async function syncClientToGoogleContacts(client){
 
 let contactsSyncRunning = false;
 
+async function syncSecondPersonToGoogleContacts(client){
+  const sp = client.profile && client.profile.secondPerson;
+  if(!sp) return;
+  const email = sp.email ? sp.email.trim() : '';
+  const phone = sp.phone ? sp.phone.trim() : '';
+  if(!email && !phone) return;
+
+  const token = await ensureGoogleAccessToken();
+  if(!token) return;
+
+  const body = { names: [{ givenName: sp.name || '' }] };
+  if(email) body.emailAddresses = [{ value: email }];
+  if(phone) body.phoneNumbers = [{ value: phone }];
+
+  try{
+    if(sp.googleContactResourceName){
+      const getRes = await fetch(`https://people.googleapis.com/v1/${sp.googleContactResourceName}?personFields=names,emailAddresses,phoneNumbers`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if(!getRes.ok){
+        console.error('Google Kişi bulunamadı, güncellenemedi', await getRes.text());
+        return;
+      }
+      const existing = await getRes.json();
+      body.etag = existing.etag;
+      const updateRes = await fetch(`https://people.googleapis.com/v1/${sp.googleContactResourceName}:updateContact?updatePersonFields=names,emailAddresses,phoneNumbers`, {
+        method: 'PATCH',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if(!updateRes.ok){
+        console.error('Google Kişi güncellenemedi', await updateRes.text());
+      }
+    }else{
+      const foundResourceName = await findExistingGoogleContact(token, email);
+      if(foundResourceName){
+        sp.googleContactResourceName = foundResourceName;
+        saveState();
+        return;
+      }
+      const res = await fetch('https://people.googleapis.com/v1/people:createContact', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if(res.ok){
+        const data = await res.json();
+        sp.googleContactResourceName = data.resourceName;
+        saveState();
+      }else{
+        console.error('Google Kişiler\'e eklenemedi', await res.text());
+      }
+    }
+  }catch(e){
+    console.error('Google Kişiler senkron hatası', e);
+  }
+}
+
 async function syncAllClientsToGoogleContacts(onProgress){
   const candidateIds = state.clients.filter(c => c.profile && (c.profile.email || c.profile.phone)).map(c=>c.id);
   let done = 0;
@@ -3745,6 +3809,15 @@ async function shareInvoiceFile(doc, filename, client){
     }
   }catch(e){ /* user cancelled the share sheet */ }
   alert('Bu tarayıcı/cihaz dosya paylaşımını desteklemiyor. Bunun yerine "İndir" butonunu kullanabilirsin.');
+}
+
+function clientDisplayName(client){
+  const primary = client.name || '(isimsiz danışan)';
+  const sp = client.profile && client.profile.secondPerson;
+  if(sp && sp.name && sp.name.trim()){
+    return `${primary} - ${sp.name.trim()}`;
+  }
+  return primary;
 }
 
 function clientEmailList(client){
@@ -4390,6 +4463,10 @@ function profilePanelHtml(client){
   <div id="profilePanel">
     <div class="form-grid">
       <div class="field-block full">
+        <label>Danışan İsmi</label>
+        <input type="text" class="profile-client-name" placeholder="Danışanın adı soyadı" value="${escapeAttr(client.name||'')}">
+      </div>
+      <div class="field-block full">
         <label>Kişisel bilgiler</label>
         <textarea class="profile-info" placeholder="Meslek, aile durumu vb....">${escapeHtml(p.info||'')}</textarea>
       </div>
@@ -4447,6 +4524,10 @@ function profilePanelHtml(client){
             <a class="contact-btn mailto-btn ${sp && sp.email?'':'disabled'}" href="${mailtoLink(sp && sp.email)}" rel="noopener">Email</a>
           </div>
         </div>
+        <div class="field-block full">
+          <button class="settings-btn profile-second-contact-sync-btn" type="button" style="width:auto;">📇 ${sp && sp.googleContactResourceName ? 'İkinci Kişiyi Google Kişiler\'de Güncelle' : 'İkinci Kişiyi Google Kişiler\'e Ekle'}</button>
+          <span class="profile-second-contact-sync-status" style="font-size:12px; color:var(--muted); margin-left:10px;"></span>
+        </div>
         <p class="second-person-note">Davetiye, mail ve otomatik hatırlatmalar hem bu danışana hem ikinci kişiye birlikte gider — ama tek bir profil ve tek bir davetiye olarak kalır.</p>
       </div>
       <div class="field-block full">
@@ -4466,6 +4547,12 @@ function profilePanelHtml(client){
 function wireProfilePanel(client){
   if(!client.profile) client.profile = { info:'', address:'', phone:'', email:'', ifhp:false, rate:null, terminated:false };
   const panel = document.getElementById('profilePanel');
+
+  panel.querySelector('.profile-client-name').addEventListener('blur', (ev)=>{
+    client.name = ev.target.value.trim();
+    saveState();
+    render();
+  });
 
   panel.querySelector('.profile-info').addEventListener('blur', (ev)=>{
     client.profile.info = ev.target.value;
@@ -4551,6 +4638,22 @@ function wireProfilePanel(client){
       if(!client.profile.secondPerson) client.profile.secondPerson = { name:'', phone:'', email:'' };
       client.profile.secondPerson.email = ev.target.value;
       saveState();
+    });
+  }
+
+  const secondContactSyncBtn = panel.querySelector('.profile-second-contact-sync-btn');
+  if(secondContactSyncBtn){
+    secondContactSyncBtn.addEventListener('click', async ()=>{
+      if(secondContactSyncBtn.disabled) return;
+      const statusEl = panel.querySelector('.profile-second-contact-sync-status');
+      secondContactSyncBtn.disabled = true;
+      statusEl.textContent = 'Gönderiliyor…';
+      const liveClient = state.clients.find(c => c.id === client.id) || client;
+      await syncSecondPersonToGoogleContacts(liveClient);
+      statusEl.textContent = '✅ Tamamlandı';
+      secondContactSyncBtn.disabled = false;
+      const sp2 = liveClient.profile.secondPerson;
+      secondContactSyncBtn.textContent = `📇 ${sp2 && sp2.googleContactResourceName ? 'İkinci Kişiyi Google Kişiler\'de Güncelle' : 'İkinci Kişiyi Google Kişiler\'e Ekle'}`;
     });
   }
 
@@ -4823,20 +4926,15 @@ document.getElementById('clearClientSearchBtn').addEventListener('click', ()=>{
   input.focus();
 });
 
-document.getElementById('addClientForm').addEventListener('submit', (ev)=>{
-  ev.preventDefault();
-  const input = document.getElementById('newClientName');
-  const name = input.value.trim();
-  if(!name) return;
-  const client = { id: uid(), name, sessions: [], todos: [], generalAdminNote: '', profile: { info:'', address:'', phone:'', email:'', ifhp:false, rate:null, terminated:false } };
+document.getElementById('newClientBtn').addEventListener('click', ()=>{
+  const client = { id: uid(), name: '', sessions: [], todos: [], generalAdminNote: '', profile: { info:'', address:'', phone:'', email:'', ifhp:false, rate:null, terminated:false } };
   state.clients.push(client);
   activeClientId = client.id;
   mainView = 'client';
   document.body.classList.add('mobile-detail');
-  input.value = '';
-  searchQuery = '';
+  openProfileOnNextRender = true;
   saveState();
-  logAudit('danışan eklendi', name);
+  logAudit('danışan eklendi', '(yeni)');
   render();
 });
 
@@ -6083,7 +6181,7 @@ async function loadHomeCalendarAgenda(retryCount){
       const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
       return `<div class="cal-day-event-row" data-event-id="${ev.id}" data-event-date="${dateStr}" data-client-id="${client.id}" data-calendar-id="${escapeAttr(ev._calendarId||'primary')}">
         <span class="cal-day-event-time">${timeLabel}</span>
-        <span class="cal-day-event-title cal-client-link" data-client-id="${client.id}">${escapeHtml(client.name)}</span>
+        <span class="cal-day-event-title cal-client-link" data-client-id="${client.id}">${escapeHtml(clientDisplayName(client))}</span>
         <button class="cal-event-edit-btn" type="button" title="Yeniden planla">✏️</button>
         <button class="cal-event-cancel-btn" type="button" title="İptal et">✕</button>
       </div>`;
