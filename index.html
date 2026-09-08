@@ -120,9 +120,10 @@
   }
   #clientSearchRow, #prospectSearchRow{
     display:flex;
+    align-items:center;
     gap:6px;
   }
-  .sidebar-list-toggle{display:flex; gap:6px; margin-bottom:10px;}
+  .sidebar-list-toggle{display:flex; gap:6px;}
   .sidebar-list-toggle-btn{
     flex:1;
     background:none;
@@ -235,6 +236,8 @@
     padding:8px 12px;
     cursor:pointer;
     font-size:13px;
+    white-space:nowrap;
+    flex-shrink:0;
   }
   #clientSearchRow button:hover, #prospectSearchRow button:hover{filter:brightness(0.97);}
   .sort-row{
@@ -254,7 +257,7 @@
     font-family:inherit;
     font-size:12.5px;
   }
-  #clientList{
+  #clientList, #prospectList{
     list-style:none;
     margin:0;
     padding:0;
