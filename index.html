@@ -3960,7 +3960,7 @@ function invoiceFilename(client, session){
   return `Invoice-${namePart}${yy}.${mm}.${dd}.pdf`;
 }
 
-function askIfhpInvoiceNumber(){
+function askInvoiceNumber(){
   return new Promise((resolve)=>{
     const recent = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,3);
     const modal = document.createElement('div');
@@ -3969,12 +3969,12 @@ function askIfhpInvoiceNumber(){
     modal.innerHTML = `
       <div class="backups-box" style="max-width:380px;">
         <div class="backups-box-header">
-          <h2>IFHP Fatura Numarası</h2>
+          <h2>Fatura Numarası</h2>
         </div>
         <div style="padding:0 20px 20px;">
           ${recent.length ? `
           <div class="ifhp-recent-list">
-            <p class="ifhp-recent-title">Son 3 IFHP faturası:</p>
+            <p class="ifhp-recent-title">Son 3 fatura numarası:</p>
             ${recent.map(r=>`<div class="ifhp-recent-row"><span>#${escapeHtml(r.invoiceNumber)}</span><span>${escapeHtml(r.clientName)} — ${formatShortDate(r.date)}</span></div>`).join('')}
           </div>` : ''}
           <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin:14px 0 5px;">Yeni Fatura Numarası</label>
@@ -4141,13 +4141,18 @@ async function generateInvoiceForSession(client, session, action){
     }
   }
   let invoiceNumber = '';
-  if(ifhp){
-    const entered = await askIfhpInvoiceNumber();
+  const wantsInvoiceNumber = ifhp || !!(client.profile && client.profile.useInvoiceNumber);
+  if(wantsInvoiceNumber){
+    const entered = await askInvoiceNumber();
     if(!entered || !entered.trim()){
-      alert('Fatura numarası girilmeden IFHP faturası oluşturulamaz.');
-      return;
+      if(ifhp){
+        alert('Fatura numarası girilmeden IFHP faturası oluşturulamaz.');
+        return;
+      }
+      // non-IFHP: number is desired but not strictly mandatory — proceed without one if cancelled
+    }else{
+      invoiceNumber = entered.trim();
     }
-    invoiceNumber = entered.trim();
   }
 
   const billToName = await askBillToName(client);
@@ -4155,7 +4160,7 @@ async function generateInvoiceForSession(client, session, action){
   const doc = buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName);
   const filename = invoiceFilename(client, session);
 
-  if(ifhp){
+  if(invoiceNumber){
     session.lastInvoiceNumber = invoiceNumber;
     if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
     state.ifhpInvoiceNumbers.push({
@@ -4938,6 +4943,7 @@ function profilePanelHtml(client){
         <div class="tick-row"><input type="checkbox" class="profile-ifhp" ${p.ifhp?'checked':''}><span>IFHP danışanı (seans ücreti sabit CA$205)</span></div>
         <input type="number" class="profile-rate" placeholder="Seans ücreti (CA$)" value="${p.rate!=null?p.rate:''}" ${p.ifhp?'disabled':''} style="margin-top:8px; max-width:180px;">
         <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-no-invoice" ${p.noInvoice?'checked':''}><span>Bu danışana fatura hazırlanmayacak</span></div>
+        <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-use-invoice-number" ${p.useInvoiceNumber?'checked':''}><span>Bu danışan için de fatura numarası kullanılsın</span></div>
       </div>
       <div class="field-block full">
         <label>Danışan Durumu</label>
@@ -5078,6 +5084,12 @@ function wireProfilePanel(client){
     saveState();
     renderMain();
     document.getElementById('profilePanel').classList.add('open');
+  });
+
+  const useInvoiceNumberCb = panel.querySelector('.profile-use-invoice-number');
+  useInvoiceNumberCb.addEventListener('change', ()=>{
+    client.profile.useInvoiceNumber = useInvoiceNumberCb.checked;
+    saveState();
   });
 
   const terminatedCb = panel.querySelector('.profile-terminated');
@@ -6304,10 +6316,16 @@ function backfillIfhpInvoiceNumbers(){
 
 const MONTH_NAMES_TR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
+let invoiceNumbersClientFilter = '';
+
 function ifhpNumbersListHtml(){
-  const entries = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  let entries = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  if(invoiceNumbersClientFilter.trim()){
+    const q = normalizeForSearch(invoiceNumbersClientFilter);
+    entries = entries.filter(r=>normalizeForSearch(r.clientName||'').includes(q));
+  }
   const list = !entries.length
-    ? '<div class="todo-empty">Henüz IFHP faturası oluşturulmadı.</div>'
+    ? '<div class="todo-empty">Kayıt yok.</div>'
     : `<div class="invoices-list">${entries.map(r=>`
       <div class="invoice-row" data-id="${r.id}">
         <div class="invoice-row-main">
@@ -6322,11 +6340,16 @@ function ifhpNumbersListHtml(){
 
   return `
     <div class="ifhp-manual-add-row">
-      <input type="text" id="ifhpManualName" placeholder="Danışan adı…">
+      <div class="client-picker ifhp-client-picker">
+        <input type="text" id="ifhpManualName" placeholder="Danışan adı…" autocomplete="off">
+        <input type="hidden" id="ifhpManualClientId" value="">
+        <div class="client-picker-list"></div>
+      </div>
       <input type="date" id="ifhpManualDate">
       <input type="text" id="ifhpManualNumber" placeholder="Fatura no…">
       <button class="settings-btn" id="ifhpManualAddBtn" type="button" style="width:auto;">+ Elle Ekle</button>
     </div>
+    <input type="text" id="invoiceNumbersFilterInput" placeholder="Danışan adına göre filtrele…" value="${escapeAttr(invoiceNumbersClientFilter)}" style="width:100%; margin-bottom:10px; font-family:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--card-line); border-radius:7px; background:#fdfcfd; color:var(--ink);">
     ${list}
   `;
 }
@@ -6362,7 +6385,7 @@ function renderInvoicesPage(){
 
     <div class="settings-section">
       <h3 class="practice-section-toggle" data-section="ifhpNumbers">
-        <span>🔢 IFHP Fatura Numaraları</span>
+        <span>🔢 Fatura Numaraları</span>
         <span class="practice-section-arrow">${practiceSectionCollapsed.ifhpNumbers ? '▸' : '▾'}</span>
       </h3>
       <div class="practice-section-body ${practiceSectionCollapsed.ifhpNumbers ? 'collapsed' : ''}">
@@ -6439,10 +6462,45 @@ function wireInvoicesPage(rows){
     renderInvoicesPage();
   });
 
+  const ifhpPickerWrap = document.querySelector('.ifhp-client-picker');
+  if(ifhpPickerWrap){
+    const nameInput = document.getElementById('ifhpManualName');
+    const hiddenId = document.getElementById('ifhpManualClientId');
+    const listEl = ifhpPickerWrap.querySelector('.client-picker-list');
+    function renderIfhpOptions(query){
+      const q = normalizeForSearch(query.trim());
+      const matches = q ? state.clients.filter(c=>normalizeForSearch(c.name).includes(q)) : state.clients;
+      listEl.innerHTML = matches.length
+        ? matches.map(c=>`<div class="client-picker-item" data-id="${c.id}">${escapeHtml(c.name)}</div>`).join('')
+        : `<div class="client-picker-empty">Eşleşme yok</div>`;
+      listEl.querySelectorAll('.client-picker-item').forEach(item=>{
+        item.addEventListener('click', ()=>{
+          hiddenId.value = item.getAttribute('data-id');
+          nameInput.value = item.textContent;
+          listEl.classList.remove('open');
+        });
+      });
+    }
+    nameInput.addEventListener('focus', ()=>{ renderIfhpOptions(nameInput.value); listEl.classList.add('open'); });
+    nameInput.addEventListener('input', ()=>{ hiddenId.value=''; renderIfhpOptions(nameInput.value); listEl.classList.add('open'); });
+    document.addEventListener('click', (ev)=>{
+      if(!ev.target.closest('.ifhp-client-picker')) listEl.classList.remove('open');
+    });
+  }
+
+  const invoiceNumbersFilterInput = document.getElementById('invoiceNumbersFilterInput');
+  if(invoiceNumbersFilterInput){
+    invoiceNumbersFilterInput.addEventListener('input', (ev)=>{
+      invoiceNumbersClientFilter = ev.target.value;
+      renderInvoicesPage();
+    });
+  }
+
   const ifhpAddBtn = document.getElementById('ifhpManualAddBtn');
   if(ifhpAddBtn){
     ifhpAddBtn.addEventListener('click', ()=>{
       const name = document.getElementById('ifhpManualName').value.trim();
+      const clientId = document.getElementById('ifhpManualClientId').value || null;
       const date = document.getElementById('ifhpManualDate').value;
       const number = document.getElementById('ifhpManualNumber').value.trim();
       if(!name || !date || !number){
@@ -6451,7 +6509,7 @@ function wireInvoicesPage(rows){
       }
       if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
       state.ifhpInvoiceNumbers.push({
-        id: uid(), clientId: null, clientName: name,
+        id: uid(), clientId, clientName: name,
         sessionId: null, invoiceNumber: number, date, createdAt: Date.now()
       });
       saveState();
