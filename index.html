@@ -3948,7 +3948,7 @@ function invoiceFilename(client, session){
 
 function askIfhpInvoiceNumber(){
   return new Promise((resolve)=>{
-    const recent = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,3);
+    const recent = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,3);
     const modal = document.createElement('div');
     modal.className = 'backups-modal';
     modal.style.display = 'flex';
@@ -6268,10 +6268,30 @@ function downloadInvoicesCsv(rows){
   URL.revokeObjectURL(url);
 }
 
+function backfillIfhpInvoiceNumbers(){
+  if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
+  const existingSessionIds = new Set(state.ifhpInvoiceNumbers.map(r=>r.sessionId));
+  let added = false;
+  (state.clients||[]).forEach(c=>{
+    if(!c.profile || !c.profile.ifhp) return;
+    (c.sessions||[]).forEach(s=>{
+      if(s.lastInvoiceNumber && !existingSessionIds.has(s.id)){
+        state.ifhpInvoiceNumbers.push({
+          id: uid(), clientId: c.id, clientName: c.name,
+          sessionId: s.id, invoiceNumber: s.lastInvoiceNumber, date: s.date, createdAt: 0
+        });
+        existingSessionIds.add(s.id);
+        added = true;
+      }
+    });
+  });
+  if(added) saveState();
+}
+
 const MONTH_NAMES_TR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 
 function ifhpNumbersListHtml(){
-  const entries = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const entries = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   if(!entries.length) return '<div class="todo-empty">Henüz IFHP faturası oluşturulmadı.</div>';
   return `<div class="invoices-list">${entries.map(r=>`
     <div class="invoice-row">
@@ -6286,6 +6306,7 @@ function ifhpNumbersListHtml(){
 }
 
 function renderInvoicesPage(){
+  backfillIfhpInvoiceNumbers();
   const main = document.getElementById('main');
   const allRows = collectInvoicedSessions();
   const years = [...new Set(allRows.map(r=>r.date ? r.date.slice(0,4) : '').filter(Boolean))].sort().reverse();
