@@ -1910,6 +1910,9 @@
     cursor:pointer;
   }
   .reschedule-cancel-btn:hover{background:var(--neutral-bg);}
+  .ifhp-recent-list{background:var(--neutral-bg); border-radius:8px; padding:10px 12px;}
+  .ifhp-recent-title{font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; margin:0 0 6px;}
+  .ifhp-recent-row{display:flex; justify-content:space-between; gap:10px; font-size:12.5px; color:var(--ink); padding:3px 0;}
   .cal-datetime-btn{
     width:100%;
     text-align:left;
@@ -2364,6 +2367,7 @@ function subscribeToData(){
       if(!state.clients) state.clients = [];
       if(!state.generalTodos) state.generalTodos = [];
       if(!state.prospects) state.prospects = [];
+      if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
       if(migrated){
         try{ await window.FB.setDoc(ref, JSON.parse(JSON.stringify(state))); }catch(e){ console.error('Taşıma kaydı başarısız', e); }
       }
@@ -2371,6 +2375,7 @@ function subscribeToData(){
     if(!state.clients) state.clients = [];
     if(!state.generalTodos) state.generalTodos = [];
       if(!state.prospects) state.prospects = [];
+      if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
 
     if(!hasLoadedOnce){
       hasLoadedOnce = true;
@@ -3941,6 +3946,43 @@ function invoiceFilename(client, session){
   return `Invoice-${namePart}${yy}.${mm}.${dd}.pdf`;
 }
 
+function askIfhpInvoiceNumber(){
+  return new Promise((resolve)=>{
+    const recent = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).slice(0,3);
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:380px;">
+        <div class="backups-box-header">
+          <h2>IFHP Fatura Numarası</h2>
+        </div>
+        <div style="padding:0 20px 20px;">
+          ${recent.length ? `
+          <div class="ifhp-recent-list">
+            <p class="ifhp-recent-title">Son 3 IFHP faturası:</p>
+            ${recent.map(r=>`<div class="ifhp-recent-row"><span>#${escapeHtml(r.invoiceNumber)}</span><span>${escapeHtml(r.clientName)} — ${formatShortDate(r.date)}</span></div>`).join('')}
+          </div>` : ''}
+          <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin:14px 0 5px;">Yeni Fatura Numarası</label>
+          <input type="text" id="ifhpNumberInput" style="width:100%; font-family:inherit; font-size:14px; padding:9px 11px; border:1px solid var(--card-line); border-radius:7px;">
+          <div class="form-actions" style="margin-top:14px; display:flex; gap:8px; justify-content:flex-end;">
+            <button class="reschedule-cancel-btn" id="ifhpCancelBtn" type="button">Vazgeç</button>
+            <button class="reschedule-confirm-btn" id="ifhpConfirmBtn" type="button">Onayla</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    const input = document.getElementById('ifhpNumberInput');
+    input.focus();
+    const cleanup = (value)=>{ modal.remove(); resolve(value); };
+    document.getElementById('ifhpConfirmBtn').addEventListener('click', ()=> cleanup(input.value));
+    document.getElementById('ifhpCancelBtn').addEventListener('click', ()=> cleanup(null));
+    input.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter') cleanup(input.value); });
+    modal.addEventListener('click', (ev)=>{ if(ev.target === modal) cleanup(null); });
+  });
+}
+
 function askBillToName(client){
   return new Promise((resolve)=>{
     const sp = client.profile && client.profile.secondPerson;
@@ -4086,7 +4128,7 @@ async function generateInvoiceForSession(client, session, action){
   }
   let invoiceNumber = '';
   if(ifhp){
-    const entered = prompt('IFHP fatura numarasını gir:');
+    const entered = await askIfhpInvoiceNumber();
     if(!entered || !entered.trim()){
       alert('Fatura numarası girilmeden IFHP faturası oluşturulamaz.');
       return;
@@ -4101,6 +4143,11 @@ async function generateInvoiceForSession(client, session, action){
 
   if(ifhp){
     session.lastInvoiceNumber = invoiceNumber;
+    if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
+    state.ifhpInvoiceNumbers.push({
+      id: uid(), clientId: client.id, clientName: client.name,
+      sessionId: session.id, invoiceNumber, date: session.date, createdAt: Date.now()
+    });
     saveState();
   }
 
@@ -5430,7 +5477,7 @@ let practiceTaskSortMode = 'due';
 let practiceDoneCollapsed = true;
 let editingPracticeTaskId = null;
 let editingPracticeNoteId = null;
-let practiceSectionCollapsed = { tasks:false, notes:false, stats:false, activity:false, owed:false, provider:false };
+let practiceSectionCollapsed = { tasks:false, notes:false, stats:false, activity:false, owed:false, provider:false, ifhpNumbers:false };
 
 function currentPersonId(){
   if(!currentUser) return null;
@@ -6184,6 +6231,7 @@ function wirePracticePage(){
 
 /* ---------- Faturalar arşivi (also covers year-end CSV export) ---------- */
 let invoicesYearFilter = 'all';
+let invoicesMonthFilter = 'all';
 let invoicesSearchQuery = '';
 
 function collectInvoicedSessions(){
@@ -6210,13 +6258,31 @@ function downloadInvoicesCsv(rows){
   const blob = new Blob([csv], { type:'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  const yearLabel = invoicesYearFilter === 'all' ? 'tum-yillar' : invoicesYearFilter;
+  const parts = [invoicesYearFilter === 'all' ? 'tum-yillar' : invoicesYearFilter];
+  if(invoicesMonthFilter !== 'all') parts.push(invoicesMonthFilter);
   a.href = url;
-  a.download = `faturalar-${yearLabel}.csv`;
+  a.download = `faturalar-${parts.join('-')}.csv`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+const MONTH_NAMES_TR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+
+function ifhpNumbersListHtml(){
+  const entries = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  if(!entries.length) return '<div class="todo-empty">Henüz IFHP faturası oluşturulmadı.</div>';
+  return `<div class="invoices-list">${entries.map(r=>`
+    <div class="invoice-row">
+      <div class="invoice-row-main">
+        <span class="invoice-client-name">${escapeHtml(r.clientName)}</span>
+        <span class="invoice-date">${formatShortDate(r.date)}</span>
+      </div>
+      <div class="invoice-row-actions">
+        <span class="invoice-amount">#${escapeHtml(r.invoiceNumber)}</span>
+      </div>
+    </div>`).join('')}</div>`;
 }
 
 function renderInvoicesPage(){
@@ -6225,6 +6291,7 @@ function renderInvoicesPage(){
   const years = [...new Set(allRows.map(r=>r.date ? r.date.slice(0,4) : '').filter(Boolean))].sort().reverse();
   let rows = allRows;
   if(invoicesYearFilter !== 'all') rows = rows.filter(r=>r.date && r.date.startsWith(invoicesYearFilter));
+  if(invoicesMonthFilter !== 'all') rows = rows.filter(r=>r.date && r.date.slice(5,7) === invoicesMonthFilter);
   if(invoicesSearchQuery.trim()){
     const q = normalizeForSearch(invoicesSearchQuery);
     rows = rows.filter(r=>normalizeForSearch(r.clientName).includes(q));
@@ -6247,10 +6314,24 @@ function renderInvoicesPage(){
     </div>
 
     <div class="settings-section">
+      <h3 class="practice-section-toggle" data-section="ifhpNumbers">
+        <span>🔢 IFHP Fatura Numaraları</span>
+        <span class="practice-section-arrow">${practiceSectionCollapsed.ifhpNumbers ? '▸' : '▾'}</span>
+      </h3>
+      <div class="practice-section-body ${practiceSectionCollapsed.ifhpNumbers ? 'collapsed' : ''}">
+        ${ifhpNumbersListHtml()}
+      </div>
+    </div>
+
+    <div class="settings-section">
       <div class="invoices-filters">
         <select id="invoicesYearSelect">
           <option value="all">Tüm yıllar</option>
           ${years.map(y=>`<option value="${y}" ${invoicesYearFilter===y?'selected':''}>${y}</option>`).join('')}
+        </select>
+        <select id="invoicesMonthSelect">
+          <option value="all">Tüm aylar</option>
+          ${MONTH_NAMES_TR.map((m,i)=>{ const mm = String(i+1).padStart(2,'0'); return `<option value="${mm}" ${invoicesMonthFilter===mm?'selected':''}>${m}</option>`; }).join('')}
         </select>
         <input type="text" id="invoicesSearchInput" placeholder="Danışan ara…" value="${escapeAttr(invoicesSearchQuery)}">
         <button class="settings-btn" id="invoicesCsvBtn" style="width:auto;">📊 CSV İndir</button>
@@ -6304,6 +6385,10 @@ function wireInvoicesPage(rows){
 
   document.getElementById('invoicesYearSelect').addEventListener('change', (ev)=>{
     invoicesYearFilter = ev.target.value;
+    renderInvoicesPage();
+  });
+  document.getElementById('invoicesMonthSelect').addEventListener('change', (ev)=>{
+    invoicesMonthFilter = ev.target.value;
     renderInvoicesPage();
   });
   document.getElementById('invoicesSearchInput').addEventListener('input', (ev)=>{
