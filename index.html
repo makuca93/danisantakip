@@ -3494,13 +3494,13 @@ function renderMain(){
 }
 
 const DEFAULT_PROVIDER = {
-  name: 'Malik Kubilay Cadircioglu',
-  credential: 'MA',
+  name: '',
+  credential: '',
   title: 'Registered Psychotherapist',
   college: 'College of Registered Psychotherapists of Ontario',
-  regNumber: '18488',
-  address: '68 Arnold Estates Lane\nAjax, Ontario L1S 7L6\nCA',
-  phone: '+1 437 256 9397',
+  regNumber: '',
+  address: '',
+  phone: '',
   email: '',
   sessionLink: ''
 };
@@ -4264,7 +4264,7 @@ async function generateInvoiceForSession(client, session, action){
   if(action === 'save'){
     await savePdfWithPicker(doc, filename);
   }else if(action === 'drive'){
-    await uploadPdfToDriveFolder(doc, filename);
+    return await uploadPdfToDriveFolder(doc, filename);
   }else if(action === 'share'){
     shareInvoiceFile(doc, filename, client);
   }else if(action === 'gmail'){
@@ -5373,8 +5373,18 @@ function renderSessionCard(client, session, index){
     div.querySelector('.invoice-save-btn').addEventListener('click', ()=>{
       generateInvoiceForSession(client, session, 'save');
     });
-    div.querySelector('.invoice-drive-btn').addEventListener('click', ()=>{
-      generateInvoiceForSession(client, session, 'drive');
+    div.querySelector('.invoice-drive-btn').addEventListener('click', async (ev)=>{
+      const btn = ev.target;
+      if(btn.disabled) return;
+      const originalText = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '⏳ Kaydediliyor…';
+      const ok = await generateInvoiceForSession(client, session, 'drive');
+      btn.textContent = ok ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene';
+      setTimeout(()=>{
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }, 2500);
     });
     div.querySelector('.invoice-share-btn').addEventListener('click', ()=>{
       generateInvoiceForSession(client, session, 'share');
@@ -6775,7 +6785,7 @@ function renderSettingsPage(){
 
     <div class="settings-section">
       <h3>📁 Fatura Kayıt Klasörü</h3>
-      <p>"Drive'a Kaydet" ile bir fatura/makbuz indirdiğinde, her seferinde sormadan doğrudan seçtiğin bu klasöre kaydedilir. Bu ayar sadece senin hesabına özel — Duygu kendi klasörünü ayrı seçebilir.</p>
+      <p>"Drive'a Kaydet" ile bir fatura/makbuz indirdiğinde, her seferinde sormadan doğrudan seçtiğin bu klasöre kaydedilir. Bu ayar sadece senin hesabına özel — ${currentPersonId()==='kubilay' ? 'Duygu' : 'Kubilay'} kendi klasörünü ayrı seçebilir.</p>
       <div style="font-size:13px; color:var(--ink); margin-bottom:10px;">
         Şu an seçili: <strong>${state.driveInvoiceFolderName ? escapeHtml(state.driveInvoiceFolderName) : 'Seçilmedi'}</strong>
       </div>
