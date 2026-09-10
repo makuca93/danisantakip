@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://apis.google.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.googleusercontent.com; connect-src 'self' https://*.googleapis.com https://*.google.com https://accounts.google.com https://tasknotify-171012588947.us-central1.run.app; frame-src https://accounts.google.com https://*.firebaseapp.com;">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://accounts.google.com https://apis.google.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.googleusercontent.com; connect-src 'self' https://*.googleapis.com https://*.google.com https://accounts.google.com https://tasknotify-171012588947.us-central1.run.app; frame-src https://accounts.google.com https://*.firebaseapp.com https://docs.google.com https://drive.google.com;">
 <meta charset="UTF-8">
 <meta name="robots" content="noindex, nofollow">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -1648,7 +1648,6 @@
     text-overflow:ellipsis;
   }
   .invoice-email-group button:hover{filter:brightness(0.97);}
-  .invoice-email-btn{background:var(--highlight) !important; border-color:var(--highlight-line) !important;}
   .invoice-gmail-btn{background:var(--highlight) !important; border-color:var(--highlight-line) !important;}
   .back-to-list{
     display:none;
@@ -2521,6 +2520,96 @@ async function findOrCreateDriveBackupFileId(token){
     }
   }catch(e){ console.error('Drive dosyası aranamadı', e); }
   return driveBackupFileId;
+}
+
+/* ---------- Google Picker: choose a Drive folder for invoice PDFs ---------- */
+const GOOGLE_PICKER_API_KEY = 'AIzaSyDnQNpDJa6xTyxxvf_cPK3SNYW6kf2AddI';
+
+function loadGoogleApiScript(){
+  return new Promise((resolve, reject)=>{
+    if(window.gapi){ resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://apis.google.com/js/api.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+function loadPickerLibrary(){
+  return new Promise((resolve)=>{
+    window.gapi.load('picker', { callback: resolve });
+  });
+}
+
+async function openDriveFolderPicker(){
+  try{
+    await loadGoogleApiScript();
+    await loadPickerLibrary();
+  }catch(e){
+    alert('Google Picker yüklenemedi, internet bağlantını kontrol et.');
+    return;
+  }
+  const token = await ensureGoogleAccessToken();
+  if(!token) return;
+
+  const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS)
+    .setSelectFolderEnabled(true)
+    .setIncludeFolders(true)
+    .setMode(google.picker.DocsViewMode.LIST);
+
+  const picker = new google.picker.PickerBuilder()
+    .setOAuthToken(token)
+    .setDeveloperKey(GOOGLE_PICKER_API_KEY)
+    .addView(view)
+    .setTitle('Fatura kayıt klasörünü seç')
+    .setCallback((data)=>{
+      if(data.action === google.picker.Action.PICKED){
+        const folder = data.docs[0];
+        state.driveInvoiceFolderId = folder.id;
+        state.driveInvoiceFolderName = folder.name;
+        saveState();
+        renderSettingsPage();
+      }
+    })
+    .build();
+  picker.setVisible(true);
+}
+
+async function uploadPdfToDriveFolder(doc, filename){
+  if(!state.driveInvoiceFolderId){
+    alert('Önce Ayarlar > Fatura Kayıt Klasörü bölümünden bir klasör seçmelisin.');
+    return false;
+  }
+  const token = await ensureGoogleAccessToken();
+  if(!token) return false;
+
+  const pdfBlob = doc.output('blob');
+  const metadata = { name: filename, mimeType: 'application/pdf', parents: [state.driveInvoiceFolderId] };
+  const boundary = 'danisantakipinvoiceboundary';
+  const pdfBase64 = btoa(arrayBufferToBinaryString(await pdfBlob.arrayBuffer()));
+  const body =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+    `--${boundary}\r\nContent-Type: application/pdf\r\nContent-Transfer-Encoding: base64\r\n\r\n${pdfBase64}\r\n` +
+    `--${boundary}--`;
+
+  try{
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` },
+      body
+    });
+    if(!res.ok){
+      console.error('Drive\'a fatura yüklenemedi', await res.text());
+      alert('Drive\'a kaydedilemedi, tekrar dener misin?');
+      return false;
+    }
+    return true;
+  }catch(e){
+    console.error('Drive\'a fatura yüklenemedi', e);
+    alert('Drive\'a kaydedilemedi, tekrar dener misin?');
+    return false;
+  }
 }
 
 async function uploadDriveBackup(interactive){
@@ -4174,26 +4263,16 @@ async function generateInvoiceForSession(client, session, action){
 
   if(action === 'save'){
     await savePdfWithPicker(doc, filename);
+  }else if(action === 'drive'){
+    await uploadPdfToDriveFolder(doc, filename);
   }else if(action === 'share'){
     shareInvoiceFile(doc, filename, client);
-  }else if(action === 'email'){
-    const { email, subject, body } = receiptEmailContent(client, session);
-    window.location.href = email ? `mailto:${email}?subject=${subject}&body=${body}` : `mailto:?subject=${subject}&body=${body}`;
   }else if(action === 'gmail'){
     createGmailDraftWithAttachment(client, session, doc, filename);
   }
 }
 
-function receiptEmailContent(client, session){
-  const email = encodeURIComponent(clientEmailList(client));
-  const subject = encodeURIComponent(`Your Receipt from ${getProvider().name} - ${formatInvoiceDate(session.date)}`);
-  const body = encodeURIComponent(
-    `Hello ${client.name},\n\n`+
-    `Please find your receipt for the session on ${formatInvoiceDate(session.date)} attached.\n\n`+
-    `Best regards,`
-  );
-  return { email, subject, body };
-}
+
 
 async function shareInvoiceFile(doc, filename, client){
   try{
@@ -5201,10 +5280,10 @@ function renderSessionCard(client, session, index){
     <div class="invoice-actions-blackout">Bu danışan için fatura/makbuz oluşturulmuyor</div>` : `
     <div class="invoice-actions-label">Fatura / Makbuz</div>
     <div class="invoice-actions">
-      <button class="invoice-save-btn" type="button">📄 İndir</button>
+      <button class="invoice-save-btn" type="button">💻 Bilgisayara İndir</button>
+      <button class="invoice-drive-btn" type="button">☁️ Drive'a Kaydet</button>
       <button class="invoice-share-btn" type="button">📤 Gönder</button>
       <div class="invoice-email-group">
-        <button class="invoice-email-btn" type="button" title="Mail programında aç">✉️ Email</button>
         <button class="invoice-gmail-btn" type="button" title="Gmail'de ekli taslak oluştur">📧 Gmail Taslağı</button>
       </div>
     </div>`}
@@ -5294,11 +5373,11 @@ function renderSessionCard(client, session, index){
     div.querySelector('.invoice-save-btn').addEventListener('click', ()=>{
       generateInvoiceForSession(client, session, 'save');
     });
+    div.querySelector('.invoice-drive-btn').addEventListener('click', ()=>{
+      generateInvoiceForSession(client, session, 'drive');
+    });
     div.querySelector('.invoice-share-btn').addEventListener('click', ()=>{
       generateInvoiceForSession(client, session, 'share');
-    });
-    div.querySelector('.invoice-email-btn').addEventListener('click', ()=>{
-      generateInvoiceForSession(client, session, 'email');
     });
     div.querySelector('.invoice-gmail-btn').addEventListener('click', ()=>{
       generateInvoiceForSession(client, session, 'gmail');
@@ -6695,6 +6774,16 @@ function renderSettingsPage(){
     </div>
 
     <div class="settings-section">
+      <h3>📁 Fatura Kayıt Klasörü</h3>
+      <p>"Drive'a Kaydet" ile bir fatura/makbuz indirdiğinde, her seferinde sormadan doğrudan seçtiğin bu klasöre kaydedilir. Bu ayar sadece senin hesabına özel — Duygu kendi klasörünü ayrı seçebilir.</p>
+      <div style="font-size:13px; color:var(--ink); margin-bottom:10px;">
+        Şu an seçili: <strong>${state.driveInvoiceFolderName ? escapeHtml(state.driveInvoiceFolderName) : 'Seçilmedi'}</strong>
+      </div>
+      <button class="settings-btn" id="settingsPickDriveFolderBtn" style="width:auto;">📁 Klasör Seç</button>
+      ${state.driveInvoiceFolderId ? `<button class="settings-btn" id="settingsClearDriveFolderBtn" style="width:auto; margin-left:8px;">Kaldır</button>` : ''}
+    </div>
+
+    <div class="settings-section">
       <h3>📥 Mevcut Veriyi İndir</h3>
       <p>Tüm danışan verilerinin bir kopyasını JSON dosyası olarak bilgisayarına indir — elle yedek almak için.</p>
       <button class="settings-btn" id="settingsExportBtn">Şimdi İndir</button>
@@ -6769,6 +6858,18 @@ function renderSettingsPage(){
     if(statusEl) statusEl.textContent = driveBackupStatusText();
     btn.disabled = false;
   });
+
+  document.getElementById('settingsPickDriveFolderBtn').addEventListener('click', openDriveFolderPicker);
+  const clearFolderBtn = document.getElementById('settingsClearDriveFolderBtn');
+  if(clearFolderBtn){
+    clearFolderBtn.addEventListener('click', ()=>{
+      state.driveInvoiceFolderId = null;
+      state.driveInvoiceFolderName = null;
+      saveState();
+      renderSettingsPage();
+    });
+  }
+
   document.getElementById('settingsExportBtn').addEventListener('click', exportCurrentDataJson);
   document.getElementById('settingsImportInput').addEventListener('change', handleImportJsonFile);
   document.getElementById('settingsSignOutBtn').addEventListener('click', signOutAccount);
