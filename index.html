@@ -1099,6 +1099,20 @@
   .owed-count{font-size:11.5px; color:var(--muted);}
   .owed-amount{font-size:15px; font-weight:700; color:var(--red); flex-shrink:0; font-family:'Fraunces',serif;}
   .invoices-filters{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  .ifhp-manual-add-row{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;}
+  .ifhp-manual-add-row input{
+    font-family:inherit;
+    font-size:13px;
+    padding:8px 10px;
+    border:1px solid var(--card-line);
+    border-radius:7px;
+    background:#fdfcfd;
+    color:var(--ink);
+    flex:1;
+    min-width:110px;
+  }
+  .ifhp-number-del-btn{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; flex-shrink:0;}
+  .ifhp-number-del-btn:hover{color:var(--red);}
   .invoices-filters select, .invoices-filters input{
     font-family:inherit;
     font-size:13.5px;
@@ -6240,7 +6254,7 @@ function collectInvoicedSessions(){
     if(c.profile && c.profile.noInvoice) return;
     (c.sessions||[]).forEach(s=>{
       if(!s.invoiceDone) return;
-      const rate = (c.profile && c.profile.ifhp) ? 205 : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+      const rate = (c.profile && c.profile.ifhp) ? (205 * 0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
       rows.push({ clientId: c.id, clientName: c.name, session: s, date: s.date, ifhp: !!(c.profile && c.profile.ifhp), rate });
     });
   });
@@ -6292,17 +6306,29 @@ const MONTH_NAMES_TR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmu
 
 function ifhpNumbersListHtml(){
   const entries = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  if(!entries.length) return '<div class="todo-empty">Henüz IFHP faturası oluşturulmadı.</div>';
-  return `<div class="invoices-list">${entries.map(r=>`
-    <div class="invoice-row">
-      <div class="invoice-row-main">
-        <span class="invoice-client-name">${escapeHtml(r.clientName)}</span>
-        <span class="invoice-date">${formatShortDate(r.date)}</span>
-      </div>
-      <div class="invoice-row-actions">
-        <span class="invoice-amount">#${escapeHtml(r.invoiceNumber)}</span>
-      </div>
-    </div>`).join('')}</div>`;
+  const list = !entries.length
+    ? '<div class="todo-empty">Henüz IFHP faturası oluşturulmadı.</div>'
+    : `<div class="invoices-list">${entries.map(r=>`
+      <div class="invoice-row" data-id="${r.id}">
+        <div class="invoice-row-main">
+          <span class="invoice-client-name">${escapeHtml(r.clientName)}</span>
+          <span class="invoice-date">${formatShortDate(r.date)}</span>
+        </div>
+        <div class="invoice-row-actions">
+          <span class="invoice-amount">#${escapeHtml(r.invoiceNumber)}</span>
+          <button class="ifhp-number-del-btn" type="button" title="Sil">✕</button>
+        </div>
+      </div>`).join('')}</div>`;
+
+  return `
+    <div class="ifhp-manual-add-row">
+      <input type="text" id="ifhpManualName" placeholder="Danışan adı…">
+      <input type="date" id="ifhpManualDate">
+      <input type="text" id="ifhpManualNumber" placeholder="Fatura no…">
+      <button class="settings-btn" id="ifhpManualAddBtn" type="button" style="width:auto;">+ Elle Ekle</button>
+    </div>
+    ${list}
+  `;
 }
 
 function renderInvoicesPage(){
@@ -6412,6 +6438,44 @@ function wireInvoicesPage(rows){
     invoicesMonthFilter = ev.target.value;
     renderInvoicesPage();
   });
+
+  const ifhpAddBtn = document.getElementById('ifhpManualAddBtn');
+  if(ifhpAddBtn){
+    ifhpAddBtn.addEventListener('click', ()=>{
+      const name = document.getElementById('ifhpManualName').value.trim();
+      const date = document.getElementById('ifhpManualDate').value;
+      const number = document.getElementById('ifhpManualNumber').value.trim();
+      if(!name || !date || !number){
+        alert('Danışan adı, tarih ve fatura numarasının hepsi gerekli.');
+        return;
+      }
+      if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
+      state.ifhpInvoiceNumbers.push({
+        id: uid(), clientId: null, clientName: name,
+        sessionId: null, invoiceNumber: number, date, createdAt: Date.now()
+      });
+      saveState();
+      renderInvoicesPage();
+    });
+  }
+
+  document.querySelectorAll('.ifhp-number-del-btn').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      const id = row.getAttribute('data-id');
+      if(!confirm('Bu fatura numarası kaydı silinsin mi?')) return;
+      const entry = (state.ifhpInvoiceNumbers||[]).find(r=>r.id===id);
+      if(entry && entry.clientId && entry.sessionId){
+        const c = state.clients.find(cl=>cl.id===entry.clientId);
+        const s = c && c.sessions.find(ss=>ss.id===entry.sessionId);
+        if(s) s.lastInvoiceNumber = null;
+      }
+      state.ifhpInvoiceNumbers = (state.ifhpInvoiceNumbers||[]).filter(r=>r.id!==id);
+      saveState();
+      renderInvoicesPage();
+    });
+  });
+
   document.getElementById('invoicesSearchInput').addEventListener('input', (ev)=>{
     invoicesSearchQuery = ev.target.value;
     renderInvoicesPage();
