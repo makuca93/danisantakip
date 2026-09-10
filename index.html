@@ -4538,6 +4538,10 @@ async function loadNextAppointmentInfo(client){
   if(!stillThere) return; // user navigated away while loading
   calendarCheckedClientIds.add(client.id);
 
+  // Always operate on the current, live client object — state may have been
+  // replaced by a Firestore snapshot while the network requests above were in flight.
+  const liveClient = state.clients.find(c => c.id === client.id) || client;
+
   if(events === null){
     const html = '📅 Takvim kontrol edilemedi (Google bağlantısı gerekebilir).';
     stillThere.textContent = html;
@@ -4565,7 +4569,7 @@ async function loadNextAppointmentInfo(client){
     const startTime = ev.start && ev.start.dateTime ? ev.start.dateTime : null;
     const endTime = ev.end && ev.end.dateTime ? ev.end.dateTime : null;
     const calId = ev._calendarId || 'primary';
-    let session = client.sessions.find(s => s.calendarEventId === ev.id);
+    let session = liveClient.sessions.find(s => s.calendarEventId === ev.id);
     if(session){
       if(session.date !== dateOnly){
         session.date = dateOnly;
@@ -4584,7 +4588,7 @@ async function loadNextAppointmentInfo(client){
         changed = true;
       }
     }else{
-      client.sessions.push({
+      liveClient.sessions.push({
         id: uid(),
         date: dateOnly,
         paymentDone:false, invoiceDone:false, notesDone:false,
@@ -4602,22 +4606,22 @@ async function loadNextAppointmentInfo(client){
   // Detect sessions linked to a calendar event that no longer exists (cancelled directly
   // in Google Calendar, outside the app) and remove them too — today-forward only.
   const matchedEventIds = new Set(matches.map(ev => ev.id));
-  const cancelledElsewhere = client.sessions.filter(s =>
+  const cancelledElsewhere = liveClient.sessions.filter(s =>
     s.calendarEventId && s.date >= today && !matchedEventIds.has(s.calendarEventId)
   );
   if(cancelledElsewhere.length){
-    client.sessions = client.sessions.filter(s => !cancelledElsewhere.includes(s));
+    liveClient.sessions = liveClient.sessions.filter(s => !cancelledElsewhere.includes(s));
     changed = true;
     const me = currentPersonId();
     if(me){
       cancelledElsewhere.forEach(s=>{
-        pushInAppNotification(me, `${client.name} adlı danışanın ${formatShortDate(s.date)} tarihli randevusu Takvim'den iptal edildi.`);
+        pushInAppNotification(me, `${liveClient.name} adlı danışanın ${formatShortDate(s.date)} tarihli randevusu Takvim'den iptal edildi.`);
       });
     }
   }
 
   if(changed){
-    client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+    liveClient.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
     saveState();
   }
 
