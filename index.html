@@ -4943,7 +4943,7 @@ function profilePanelHtml(client){
         <div class="tick-row"><input type="checkbox" class="profile-ifhp" ${p.ifhp?'checked':''}><span>IFHP danışanı (seans ücreti sabit CA$205)</span></div>
         <input type="number" class="profile-rate" placeholder="Seans ücreti (CA$)" value="${p.rate!=null?p.rate:''}" ${p.ifhp?'disabled':''} style="margin-top:8px; max-width:180px;">
         <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-no-invoice" ${p.noInvoice?'checked':''}><span>Bu danışana fatura hazırlanmayacak</span></div>
-        <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-use-invoice-number" ${p.useInvoiceNumber?'checked':''}><span>Bu danışan için de fatura numarası kullanılsın</span></div>
+        <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-use-invoice-number" ${p.useInvoiceNumber?'checked':''}><span>Bu danışan için fatura numarası eklensin</span></div>
       </div>
       <div class="field-block full">
         <label>Danışan Durumu</label>
@@ -6354,6 +6354,17 @@ function ifhpNumbersListHtml(){
   `;
 }
 
+function reRenderPreservingFocus(inputId, renderFn){
+  const input = document.getElementById(inputId);
+  const cursorPos = input ? input.selectionStart : null;
+  renderFn();
+  const newInput = document.getElementById(inputId);
+  if(newInput && cursorPos !== null){
+    newInput.focus();
+    newInput.setSelectionRange(cursorPos, cursorPos);
+  }
+}
+
 function renderInvoicesPage(){
   backfillIfhpInvoiceNumbers();
   const main = document.getElementById('main');
@@ -6492,7 +6503,7 @@ function wireInvoicesPage(rows){
   if(invoiceNumbersFilterInput){
     invoiceNumbersFilterInput.addEventListener('input', (ev)=>{
       invoiceNumbersClientFilter = ev.target.value;
-      renderInvoicesPage();
+      reRenderPreservingFocus('invoiceNumbersFilterInput', renderInvoicesPage);
     });
   }
 
@@ -6536,7 +6547,7 @@ function wireInvoicesPage(rows){
 
   document.getElementById('invoicesSearchInput').addEventListener('input', (ev)=>{
     invoicesSearchQuery = ev.target.value;
-    renderInvoicesPage();
+    reRenderPreservingFocus('invoicesSearchInput', renderInvoicesPage);
   });
   document.querySelectorAll('.invoice-client-name.cal-client-link').forEach(link=>{
     link.addEventListener('click', ()=>{
