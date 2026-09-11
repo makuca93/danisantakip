@@ -4825,6 +4825,7 @@ function wireCalendarPanel(client){
       alert(`${successCount} / ${repeatWeeks} randevu Google Takvimine eklendi.`);
       calendarCheckedClientIds.delete(client.id);
       panel.classList.remove('open');
+      if(successCount) markPreviousSessionAsNext(client, dateStr, title);
       loadNextAppointmentInfo(client);
       return;
     }
@@ -4836,11 +4837,23 @@ function wireCalendarPanel(client){
       alert('Randevu Google Takvimine eklendi.');
       calendarCheckedClientIds.delete(client.id);
       panel.classList.remove('open');
+      markPreviousSessionAsNext(client, dateStr, title);
       loadNextAppointmentInfo(client);
     }else{
       loadCalendarDayEvents(panel, client);
     }
   });
+}
+
+function markPreviousSessionAsNext(client, newDateStr, title){
+  const liveClient = state.clients.find(c => c.id === client.id) || client;
+  const priorSessions = (liveClient.sessions||[]).filter(s => s.date && s.date < newDateStr);
+  if(!priorSessions.length) return;
+  priorSessions.sort((a,b)=> b.date.localeCompare(a.date));
+  const prev = priorSessions[0];
+  prev.nextDone = true;
+  prev.nextNote = `${formatShortDate(newDateStr)} - ${title}`;
+  saveState();
 }
 
 function todoPanelHtml(client){
