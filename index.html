@@ -1544,6 +1544,18 @@
     border-bottom:1px dashed var(--card-line);
   }
   .item-row:last-child{border-bottom:none;}
+  .item-row.item-disabled{opacity:0.45;}
+  .item-disable-toggle{
+    background:none;
+    border:none;
+    color:var(--muted);
+    cursor:pointer;
+    font-size:12px;
+    flex-shrink:0;
+    padding:2px 4px;
+    margin-left:auto;
+  }
+  .item-disable-toggle:hover{color:var(--ink);}
   .item-row input[type="checkbox"]{
     margin-top:2px;
     width:16px;height:16px;
@@ -3164,10 +3176,11 @@ function pendingChecklistCount(client){
   let count = 0;
   (client.sessions||[]).forEach(s=>{
     if(!isSessionDue(s)) return; // not due yet (session hasn't ended), don't count as pending
-    if(!s.paymentDone) count++;
-    if(!noInvoice && !s.invoiceDone) count++;
-    if(!s.notesDone) count++;
-    if(!s.nextDone) count++;
+    const disabled = s.disabledChecks || [];
+    if(!disabled.includes('paymentDone') && !s.paymentDone) count++;
+    if(!noInvoice && !disabled.includes('invoiceDone') && !s.invoiceDone) count++;
+    if(!disabled.includes('notesDone') && !s.notesDone) count++;
+    if(!disabled.includes('nextDone') && !s.nextDone) count++;
   });
   return count;
 }
@@ -5356,6 +5369,20 @@ function renderSessionCard(client, session, index){
       render();
     });
   });
+  div.querySelectorAll('.item-disable-toggle').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      const key = ev.target.getAttribute('data-key');
+      if(!session.disabledChecks) session.disabledChecks = [];
+      const idx = session.disabledChecks.indexOf(key);
+      if(idx === -1){
+        session.disabledChecks.push(key);
+      }else{
+        session.disabledChecks.splice(idx, 1);
+      }
+      saveState();
+      render();
+    });
+  });
   div.querySelector('.inline-note-input').addEventListener('blur', (ev)=>{
     session.nextNote = ev.target.value;
     saveState();
@@ -5404,20 +5431,24 @@ function boolLabel(v){ return v ? 'Evet' : 'Hayır'; }
 
 function itemRow(label, value, key, session){
   const empty = (value === '—');
+  const disabled = (session.disabledChecks||[]).includes(key);
   return `
-    <div class="item-row">
-      <input type="checkbox" data-key="${key}" ${session[key] ? 'checked' : ''}>
+    <div class="item-row ${disabled?'item-disabled':''}">
+      <input type="checkbox" data-key="${key}" ${session[key] ? 'checked' : ''} ${disabled?'disabled':''}>
       <span class="item-label">${label}</span>
       <span class="item-value ${empty?'empty':''}">${escapeHtml(value)}</span>
+      <button class="item-disable-toggle" data-key="${key}" type="button" title="${disabled?'Bu maddeyi etkinleştir':'Bu seans için geçerli değil'}">${disabled?'↺':'🚫'}</button>
     </div>`;
 }
 
 function itemRowWithInput(label, checkboxKey, textKey, session){
+  const disabled = (session.disabledChecks||[]).includes(checkboxKey);
   return `
-    <div class="item-row">
-      <input type="checkbox" data-key="${checkboxKey}" ${session[checkboxKey] ? 'checked' : ''}>
+    <div class="item-row ${disabled?'item-disabled':''}">
+      <input type="checkbox" data-key="${checkboxKey}" ${session[checkboxKey] ? 'checked' : ''} ${disabled?'disabled':''}>
       <span class="item-label">${label}</span>
-      <input type="text" class="inline-note-input" value="${escapeAttr(session[textKey]||'')}" placeholder="Not…">
+      <input type="text" class="inline-note-input" value="${escapeAttr(session[textKey]||'')}" placeholder="Not…" ${disabled?'disabled':''}>
+      <button class="item-disable-toggle" data-key="${checkboxKey}" type="button" title="${disabled?'Bu maddeyi etkinleştir':'Bu seans için geçerli değil'}">${disabled?'↺':'🚫'}</button>
     </div>`;
 }
 
