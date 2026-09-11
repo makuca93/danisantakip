@@ -2879,8 +2879,12 @@ function clientStatus(client){
   const pastSessions = client.sessions.filter(s => isSessionDue(s));
   if(!pastSessions.length) return 'neutral';
   for(const s of pastSessions){
-    const invoiceOk = noInvoice ? true : s.invoiceDone;
-    if(!(s.paymentDone && invoiceOk && s.notesDone && s.nextDone)){
+    const disabled = s.disabledChecks || [];
+    const paymentOk = disabled.includes('paymentDone') || s.paymentDone;
+    const invoiceOk = noInvoice || disabled.includes('invoiceDone') ? true : s.invoiceDone;
+    const notesOk = disabled.includes('notesDone') || s.notesDone;
+    const nextOk = disabled.includes('nextDone') || s.nextDone;
+    if(!(paymentOk && invoiceOk && notesOk && nextOk)){
       return 'red';
     }
   }
@@ -3131,7 +3135,7 @@ const UNPAID_NOTIFY_THRESHOLD = 3;
 function checkUnpaidThreshold(client){
   let unpaidCount = 0;
   (client.sessions||[]).forEach(s=>{
-    if(isSessionDue(s) && !s.paymentDone) unpaidCount++;
+    if(isSessionDue(s) && !s.paymentDone && !(s.disabledChecks||[]).includes('paymentDone')) unpaidCount++;
   });
   if(unpaidCount >= UNPAID_NOTIFY_THRESHOLD && !client.unpaidThresholdNotified){
     client.unpaidThresholdNotified = true;
@@ -7019,6 +7023,7 @@ function computeOwedList(){
     let unpaidCount = 0;
     (c.sessions||[]).forEach(s=>{
       if(!isSessionDue(s)) return;
+      if((s.disabledChecks||[]).includes('paymentDone')) return;
       if(!s.paymentDone) unpaidCount++;
     });
     if(unpaidCount === 0) return;
