@@ -3505,8 +3505,9 @@ function renderMain(){
     wrap.innerHTML = `<div id="emptyState"><h2>Seans kaydı yok</h2><p>İlk seansı yukarıdaki formla ekleyin.</p></div>`;
     return;
   }
+  const defaultOpenId = getDefaultOpenSessionId(client);
   client.sessions.forEach((session, index)=>{
-    wrap.appendChild(renderSessionCard(client, session, index));
+    wrap.appendChild(renderSessionCard(client, session, index, defaultOpenId));
   });
 }
 
@@ -5274,16 +5275,40 @@ function readSessionForm(){
 
 let sessionCollapseOverrides = {};
 
-function isSessionCollapsed(session, index){
-  if(sessionCollapseOverrides.hasOwnProperty(session.id)) return sessionCollapseOverrides[session.id];
-  return index !== 0;
+function isSessionFullyDone(session, client){
+  const disabled = session.disabledChecks || [];
+  const noInvoice = !!(client.profile && client.profile.noInvoice);
+  const paymentOk = disabled.includes('paymentDone') || session.paymentDone;
+  const invoiceOk = noInvoice || disabled.includes('invoiceDone') || session.invoiceDone;
+  const notesOk = disabled.includes('notesDone') || session.notesDone;
+  const nextOk = disabled.includes('nextDone') || session.nextDone;
+  return paymentOk && invoiceOk && notesOk && nextOk;
 }
 
-function renderSessionCard(client, session, index){
+function getDefaultOpenSessionId(client){
+  const sessions = client.sessions || [];
+  if(!sessions.length) return null;
+  const pastSessions = sessions.filter(s => isSessionDue(s)).sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+  const futureSessions = sessions.filter(s => !isSessionDue(s)).sort((a,b)=> (a.date||'').localeCompare(b.date||''));
+
+  if(pastSessions.length){
+    const lastCompleted = pastSessions[0];
+    if(!isSessionFullyDone(lastCompleted, client)) return lastCompleted.id;
+    return futureSessions.length ? futureSessions[0].id : lastCompleted.id;
+  }
+  return futureSessions.length ? futureSessions[0].id : sessions[0].id;
+}
+
+function isSessionCollapsed(session, index, defaultOpenId){
+  if(sessionCollapseOverrides.hasOwnProperty(session.id)) return sessionCollapseOverrides[session.id];
+  return session.id !== defaultOpenId;
+}
+
+function renderSessionCard(client, session, index, defaultOpenId){
   const div = document.createElement('div');
   div.className = `session-card ${session.noShow ? 'noshow' : ''}`;
   const noInvoice = !!(client.profile && client.profile.noInvoice);
-  const collapsed = isSessionCollapsed(session, index);
+  const collapsed = isSessionCollapsed(session, index, defaultOpenId);
   const isFuture = !isSessionDue(session);
   const isCalendarLinked = !!session.calendarEventId;
 
