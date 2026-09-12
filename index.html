@@ -2156,7 +2156,7 @@ let state = null;
 let activeClientId = null;
 let openProfileOnNextRender = false;
 let editingClientId = null;
-let sortMode = 'default';
+let sortMode = 'lastSession';
 let searchQuery = '';
 let sidebarListMode = 'clients';
 let prospectSearchQuery = '';
@@ -5580,6 +5580,7 @@ function resetAllData(){
   }
 }
 
+document.getElementById('sortSelect').value = sortMode;
 document.getElementById('sortSelect').addEventListener('change', (ev)=>{
   sortMode = ev.target.value;
   renderSidebar();
