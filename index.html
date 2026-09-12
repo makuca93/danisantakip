@@ -4234,7 +4234,7 @@ function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName)
   return doc;
 }
 
-async function generateInvoiceForSession(client, session, action){
+async function resolveInvoiceDetails(client, session){
   const ifhp = !!(client.profile && client.profile.ifhp);
   let rate;
   if(ifhp){
@@ -4243,17 +4243,17 @@ async function generateInvoiceForSession(client, session, action){
     rate = client.profile ? Number(client.profile.rate) : NaN;
     if(!rate || rate <= 0){
       alert('Önce bu danışanın profiline seans ücretini girmelisin.');
-      return;
+      return null;
     }
   }
-  let invoiceNumber = '';
+  let invoiceNumber = session.lastInvoiceNumber || '';
   const wantsInvoiceNumber = ifhp || !!(client.profile && client.profile.useInvoiceNumber);
-  if(wantsInvoiceNumber){
+  if(wantsInvoiceNumber && !invoiceNumber){
     const entered = await askInvoiceNumber();
     if(!entered || !entered.trim()){
       if(ifhp){
         alert('Fatura numarası girilmeden IFHP faturası oluşturulamaz.');
-        return;
+        return null;
       }
       // non-IFHP: number is desired but not strictly mandatory — proceed without one if cancelled
     }else{
@@ -4266,7 +4266,7 @@ async function generateInvoiceForSession(client, session, action){
   const doc = buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName);
   const filename = invoiceFilename(client, session);
 
-  if(invoiceNumber){
+  if(invoiceNumber && session.lastInvoiceNumber !== invoiceNumber){
     session.lastInvoiceNumber = invoiceNumber;
     if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
     state.ifhpInvoiceNumbers.push({
@@ -4276,7 +4276,15 @@ async function generateInvoiceForSession(client, session, action){
     saveState();
   }
 
-  logAudit('fatura/makbuz oluşturuldu', `${client.name} - ${action} - CA$${rate.toFixed(2)}${ifhp ? ' - #'+invoiceNumber : ''}`);
+  logAudit('fatura/makbuz hazırlandı', `${client.name} - CA$${rate.toFixed(2)}${invoiceNumber ? ' - #'+invoiceNumber : ''}`);
+
+  return { doc, filename, rate, invoiceNumber };
+}
+
+async function generateInvoiceForSession(client, session, action){
+  const details = await resolveInvoiceDetails(client, session);
+  if(!details) return;
+  const { doc, filename } = details;
 
   if(action === 'save'){
     await savePdfWithPicker(doc, filename);
@@ -5425,9 +5433,11 @@ function renderSessionCard(client, session, index){
       const btn = ev.target;
       if(btn.disabled) return;
       const originalText = btn.textContent;
+      const details = await resolveInvoiceDetails(client, session);
+      if(!details) return;
       btn.disabled = true;
       btn.textContent = '⏳ Kaydediliyor…';
-      const ok = await generateInvoiceForSession(client, session, 'drive');
+      const ok = await uploadPdfToDriveFolder(details.doc, details.filename);
       btn.textContent = ok ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene';
       setTimeout(()=>{
         btn.textContent = originalText;
