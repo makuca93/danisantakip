@@ -2880,7 +2880,7 @@ async function maybeDriveBackup(){
     driveBackupConsecutiveFailures++;
     if(driveBackupConsecutiveFailures === 3){
       const me = currentPersonId();
-      if(me) pushInAppNotification(me, '⚠️ Google Drive yedeklemesi arka arkaya birkaç kez başarısız oldu — Ayarlar > Google Drive Yedeği bölümünden elle dene.');
+      if(me) pushInAppNotification(me, '⚠️ Google Drive yedeklemesi arka arkaya birkaç kez başarısız oldu — Ayarlar > Google Drive Yedeği bölümünden elle dene.', 'driveBackupFail');
     }
   }
 }
@@ -3336,7 +3336,7 @@ function checkUnpaidThreshold(client){
     client.unpaidThresholdNotified = true;
     saveState();
     const me = currentPersonId();
-    if(me) pushInAppNotification(me, `${client.name} adlı danışanın ${unpaidCount} ödenmemiş seansı var.`);
+    if(me) pushInAppNotification(me, `${client.name} adlı danışanın ${unpaidCount} ödenmemiş seansı var.`, 'unpaidThreshold');
   }else if(unpaidCount < UNPAID_NOTIFY_THRESHOLD && client.unpaidThresholdNotified){
     client.unpaidThresholdNotified = false;
     saveState();
@@ -3355,7 +3355,7 @@ function checkDailyReminders(){
 
   // Doğum günü bugünse
   computeUpcomingBirthdays().filter(b=>b.diffDays===0).forEach(b=>{
-    pushInAppNotification(me, `🎂 Bugün ${b.name} adlı danışanın doğum günü!`);
+    pushInAppNotification(me, `🎂 Bugün ${b.name} adlı danışanın doğum günü!`, 'birthday');
   });
 
   // 7+ gündür dokunulmamış danışan adayları
@@ -3364,7 +3364,7 @@ function checkDailyReminders(){
     const ageDays = (Date.now() - (p.createdAt||0)) / (24*60*60*1000);
     if(ageDays >= STALE_DAYS && !p.staleNotified){
       p.staleNotified = true;
-      pushInAppNotification(me, `${p.name || '(isimsiz aday)'} adlı danışan adayı ${Math.floor(ageDays)} gündür bekliyor — kontrol etmeyi unutma.`);
+      pushInAppNotification(me, `${p.name || '(isimsiz aday)'} adlı danışan adayı ${Math.floor(ageDays)} gündür bekliyor — kontrol etmeyi unutma.`, 'staleProspect');
     }
   });
   saveState();
@@ -4885,7 +4885,7 @@ async function loadNextAppointmentInfo(client){
     const me = currentPersonId();
     if(me){
       cancelledElsewhere.forEach(s=>{
-        pushInAppNotification(me, `${liveClient.name} adlı danışanın ${formatShortDate(s.date)} tarihli randevusu Takvim'den iptal edildi.`);
+        pushInAppNotification(me, `${liveClient.name} adlı danışanın ${formatShortDate(s.date)} tarihli randevusu Takvim'den iptal edildi.`, 'calendarCancelled');
       });
     }
   }
@@ -6260,9 +6260,9 @@ async function loadPracticeShared(){
     const snap = await window.FB.getDoc(ref);
     if(snap.exists()){
       const data = snap.data();
-      return { tasks: data.tasks||[], notes: data.notes||[], activity: data.activity||[], stats: data.stats||{}, notifications: data.notifications||[] };
+      return { tasks: data.tasks||[], notes: data.notes||[], activity: data.activity||[], stats: data.stats||{}, notifications: data.notifications||[], notificationPrefs: data.notificationPrefs||{}, emailNotificationPrefs: data.emailNotificationPrefs||{} };
     }
-    return { tasks:[], notes:[], activity:[], stats:{}, notifications:[] };
+    return { tasks:[], notes:[], activity:[], stats:{}, notifications:[], notificationPrefs:{}, emailNotificationPrefs:{} };
   }catch(e){
     console.error('Ortaklık verisi yüklenemedi', e);
     return null;
@@ -6699,9 +6699,9 @@ function wirePracticePage(){
     notifyTaskEvent('assigned', { title, assignedTo, assignedBy: me });
     if(assignedTo === 'both'){
       const target = me === 'kubilay' ? 'duygu' : 'kubilay';
-      pushInAppNotification(target, `${personLabel(me)}, ortak bir iş atadı: "${title}"`);
+      pushInAppNotification(target, `${personLabel(me)}, ortak bir iş atadı: "${title}"`, 'taskAssigned');
     }else if(assignedTo !== me){
-      pushInAppNotification(assignedTo, `${personLabel(me)}, sana bir iş atadı: "${title}"`);
+      pushInAppNotification(assignedTo, `${personLabel(me)}, sana bir iş atadı: "${title}"`, 'taskAssigned');
     }
     await savePracticeShared();
     renderPracticeContent();
@@ -6721,9 +6721,9 @@ function wirePracticePage(){
         notifyTaskEvent('completed', { ...task, completedBy: me });
         if(task.assignedTo === 'both'){
           const target = me === 'kubilay' ? 'duygu' : 'kubilay';
-          pushInAppNotification(target, `${personLabel(me)}, ortak işi tamamladı: "${task.title}"`);
+          pushInAppNotification(target, `${personLabel(me)}, ortak işi tamamladı: "${task.title}"`, 'taskCompleted');
         }else if(task.assignedBy !== me){
-          pushInAppNotification(task.assignedBy, `${personLabel(me)}, senin atadığın işi tamamladı: "${task.title}"`);
+          pushInAppNotification(task.assignedBy, `${personLabel(me)}, senin atadığın işi tamamladı: "${task.title}"`, 'taskCompleted');
         }
       }
       await savePracticeShared();
@@ -6744,9 +6744,9 @@ function wirePracticePage(){
         if(task.assignedBy === me){
           if(task.assignedTo === 'both'){
             const target = me === 'kubilay' ? 'duygu' : 'kubilay';
-            pushInAppNotification(target, `${personLabel(me)}, ortak bir işi sildi: "${task.title}"`);
+            pushInAppNotification(target, `${personLabel(me)}, ortak bir işi sildi: "${task.title}"`, 'taskDeleted');
           }else if(task.assignedTo !== me){
-            pushInAppNotification(task.assignedTo, `${personLabel(me)}, sana atadığı bir işi sildi: "${task.title}"`);
+            pushInAppNotification(task.assignedTo, `${personLabel(me)}, sana atadığı bir işi sildi: "${task.title}"`, 'taskDeleted');
           }
         }
       }
@@ -6826,7 +6826,7 @@ function wirePracticePage(){
     practiceState.notes.push({ id: uid(), text, author: me, createdAt: Date.now() });
     logPracticeActivity(`${personLabel(me)} panoya bir not ekledi.`);
     const otherPersonId = me === 'kubilay' ? 'duygu' : 'kubilay';
-    pushInAppNotification(otherPersonId, `${personLabel(me)} panoya yeni bir not ekledi: "${text.slice(0,80)}"`);
+    pushInAppNotification(otherPersonId, `${personLabel(me)} panoya yeni bir not ekledi: "${text.slice(0,80)}"`, 'boardNote');
     await savePracticeShared();
     renderPracticeContent();
   });
