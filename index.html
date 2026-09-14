@@ -7416,8 +7416,8 @@ function matchClientEvents(events){
 
 let homeCalendarCache = null;
 let homePastCalendarCache = null;
-let homeCalendarTab = 'upcoming'; // 'upcoming' | 'past' | 'calendar'
 let calendarViewMode = 'month'; // 'day' | 'week' | 'month'
+let calendarViewModeInitialized = false;
 let calendarAnchorDate = todayIso(); // date used to compute the visible day/week/month range
 let calendarSelectedDate = todayIso(); // the specific day highlighted below the grid
 let calendarViewCache = {}; // keyed by "mode:startIso" -> matched events for that range
@@ -7673,6 +7673,10 @@ function calendarRangeLabel(start, end){
 }
 
 async function loadHomeCalendarView(){
+  if(!calendarViewModeInitialized){
+    calendarViewMode = getCalendarPrefs().lastViewMode || 'month';
+    calendarViewModeInitialized = true;
+  }
   const box = document.getElementById('homeCalendarList');
   if(!box) return;
   box.innerHTML = `
@@ -7694,6 +7698,9 @@ async function loadHomeCalendarView(){
   document.querySelectorAll('.cal-gran-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
       calendarViewMode = btn.getAttribute('data-gran');
+      if(!state.calendarPrefs) state.calendarPrefs = { weekStartsMonday: true, use24HourTime: false };
+      state.calendarPrefs.lastViewMode = calendarViewMode;
+      saveState();
       renderHome();
     });
   });
@@ -7989,27 +7996,12 @@ function renderHome(){
       </div>
       <div class="home-calendar-col">
         <h3 class="home-col-title">📅 Danışan Randevuları</h3>
-        <div class="home-cal-tabs">
-          <button type="button" class="home-cal-tab-btn ${homeCalendarTab==='upcoming'?'active':''}" data-tab="upcoming">Yaklaşan</button>
-          <button type="button" class="home-cal-tab-btn ${homeCalendarTab==='past'?'active':''}" data-tab="past">Geçmiş</button>
-          <button type="button" class="home-cal-tab-btn ${homeCalendarTab==='calendar'?'active':''}" data-tab="calendar">Takvim</button>
-        </div>
         <div id="homeCalendarList" class="home-calendar-list">Yükleniyor…</div>
       </div>
     </div>
   `;
 
-  if(homeCalendarTab === 'upcoming') loadHomeCalendarAgenda();
-  else if(homeCalendarTab === 'past') loadHomePastAgenda();
-  else loadHomeCalendarView();
-
-  document.querySelectorAll('.home-cal-tab-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      homeCalendarTab = btn.getAttribute('data-tab');
-      renderHome();
-    });
-  });
-
+  loadHomeCalendarView();
   document.querySelectorAll('.owed-client-name.cal-client-link').forEach(link=>{
     link.addEventListener('click', ()=>{
       const clientId = link.getAttribute('data-client-id');
