@@ -1187,6 +1187,134 @@
     min-height:0;
     overflow-y:auto;
   }
+  .home-cal-tabs{display:flex; gap:6px; margin-bottom:10px;}
+  .home-cal-tab-btn{
+    flex:1;
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-family:inherit;
+    font-size:12px;
+    font-weight:600;
+    padding:7px 4px;
+    border-radius:7px;
+    cursor:pointer;
+  }
+  .home-cal-tab-btn.active{background:var(--highlight); border-color:var(--highlight-line); color:var(--ink);}
+  .cal-view-controls{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-bottom:12px;
+  }
+  .cal-granularity-tabs{display:flex; gap:6px;}
+  .cal-gran-btn{
+    flex:1;
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-family:inherit;
+    font-size:11.5px;
+    font-weight:600;
+    padding:5px 4px;
+    border-radius:6px;
+    cursor:pointer;
+  }
+  .cal-gran-btn.active{background:var(--green); border-color:var(--green); color:#fff;}
+  .cal-nav-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+  }
+  .cal-nav-btn{
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--ink);
+    font-size:14px;
+    width:28px; height:28px;
+    border-radius:6px;
+    cursor:pointer;
+    flex-shrink:0;
+  }
+  .cal-nav-btn:hover{background:var(--neutral-bg);}
+  .cal-nav-label{font-size:13px; font-weight:600; color:var(--ink); text-align:center; flex:1;}
+  .cal-grid-container{margin-bottom:12px;}
+  .cal-month-weekdays{
+    display:grid;
+    grid-template-columns:repeat(7, 1fr);
+    gap:2px;
+    margin-bottom:4px;
+  }
+  .cal-month-weekdays span{
+    text-align:center;
+    font-size:10.5px;
+    font-weight:600;
+    color:var(--muted);
+  }
+  .cal-month-grid{
+    display:grid;
+    grid-template-columns:repeat(7, 1fr);
+    gap:3px;
+  }
+  .cal-big-cell{
+    aspect-ratio:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:2px;
+    background:none;
+    border:1px solid transparent;
+    border-radius:7px;
+    cursor:pointer;
+    font-family:inherit;
+    font-size:12px;
+    color:var(--ink);
+  }
+  .cal-big-cell.empty{cursor:default;}
+  .cal-big-cell:not(.empty):hover{background:var(--neutral-bg);}
+  .cal-big-cell.today .cal-big-cell-num{font-weight:800; color:var(--green);}
+  .cal-big-cell.selected{background:var(--highlight); border-color:var(--highlight-line);}
+  .cal-big-cell-dot{width:5px; height:5px; border-radius:50%; background:var(--green);}
+  .cal-week-grid{
+    display:grid;
+    grid-template-columns:repeat(7, 1fr);
+    gap:4px;
+  }
+  .cal-week-cell{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:3px;
+    padding:8px 2px;
+    background:none;
+    border:1px solid var(--card-line);
+    border-radius:8px;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .cal-week-cell:hover{background:var(--neutral-bg);}
+  .cal-week-cell.today .cal-week-cell-num{color:var(--green); font-weight:800;}
+  .cal-week-cell.selected{background:var(--highlight); border-color:var(--highlight-line);}
+  .cal-week-cell-day{font-size:10px; color:var(--muted); font-weight:600;}
+  .cal-week-cell-num{font-size:14px; color:var(--ink); font-weight:700;}
+  .cal-week-cell-count{
+    font-size:9.5px;
+    font-weight:700;
+    color:#fff;
+    background:var(--green);
+    border-radius:8px;
+    padding:1px 5px;
+  }
+  .cal-day-header-big{
+    text-align:center;
+    font-size:14px;
+    font-weight:700;
+    color:var(--ink);
+    padding:10px 0;
+  }
+  .cal-selected-list{border-top:1px dashed var(--card-line); padding-top:10px;}
   .agenda-day-group{margin-bottom:14px;}
   .agenda-day-group:last-child{margin-bottom:0;}
   .agenda-day-header{
@@ -4864,6 +4992,26 @@ function wireCalendarPanel(client){
     const btn = panel.querySelector('.cal-create-btn');
     btn.disabled = true;
 
+    if(dateStr < todayIso()){
+      // Past date: don't send a real Calendar invite — just create a manual session note.
+      const newSession = {
+        id: uid(), date: dateStr,
+        paymentDone:false, invoiceDone:false, notesDone:false,
+        nextNote:'', nextDone:false, adminNote:'',
+        calendarEventId: null, calendarId: null, calendarEndTime: null,
+        calendarStartTime: timeStr ? `${dateStr}T${timeStr}:00` : null
+      };
+      client.sessions.push(newSession);
+      client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+      markPreviousSessionAsNext(client, dateStr, title);
+      saveState();
+      btn.disabled = false; btn.textContent = 'Randevu Oluştur';
+      alert('Geçmiş tarihli seans notu oluşturuldu (Takvim daveti gönderilmedi).');
+      panel.classList.remove('open');
+      render();
+      return;
+    }
+
     if(repeatWeekly){
       const baseDate = new Date(dateStr + 'T00:00:00');
       let successCount = 0;
@@ -7217,18 +7365,15 @@ function getKnownClientEmails(){
   return map;
 }
 
-async function fetchUpcomingRangeEvents(days){
+async function fetchEventsInRange(startDate, endDate){
   const token = await getTokenSilentOnly();
   if(!token) return null;
-  const startOfToday = new Date();
-  startOfToday.setHours(0,0,0,0);
-  const future = new Date(startOfToday.getTime() + days*24*60*60*1000);
   const calendarIds = ['primary'];
   const other = otherPersonEmail();
   if(other) calendarIds.push(other);
   try{
     const results = await Promise.all(calendarIds.map(async (calId)=>{
-      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?timeMin=${encodeURIComponent(startOfToday.toISOString())}&timeMax=${encodeURIComponent(future.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=100`;
+      const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?timeMin=${encodeURIComponent(startDate.toISOString())}&timeMax=${encodeURIComponent(endDate.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=250`;
       const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
       if(!res.ok) return [];
       const data = await res.json();
@@ -7244,7 +7389,38 @@ async function fetchUpcomingRangeEvents(days){
   }
 }
 
+async function fetchUpcomingRangeEvents(days){
+  const startOfToday = new Date();
+  startOfToday.setHours(0,0,0,0);
+  const future = new Date(startOfToday.getTime() + days*24*60*60*1000);
+  return fetchEventsInRange(startOfToday, future);
+}
+
+async function fetchPastRangeEvents(days){
+  const startOfToday = new Date();
+  startOfToday.setHours(0,0,0,0);
+  const past = new Date(startOfToday.getTime() - days*24*60*60*1000);
+  return fetchEventsInRange(past, startOfToday);
+}
+
+function matchClientEvents(events){
+  const emailMap = getKnownClientEmails();
+  const matched = [];
+  events.forEach(ev=>{
+    const attendees = ev.attendees || [];
+    const hit = attendees.find(a => emailMap[(a.email||'').trim().toLowerCase()]);
+    if(hit) matched.push({ ev, client: emailMap[hit.email.trim().toLowerCase()] });
+  });
+  return matched;
+}
+
 let homeCalendarCache = null;
+let homePastCalendarCache = null;
+let homeCalendarTab = 'upcoming'; // 'upcoming' | 'past' | 'calendar'
+let calendarViewMode = 'month'; // 'day' | 'week' | 'month'
+let calendarAnchorDate = todayIso(); // date used to compute the visible day/week/month range
+let calendarSelectedDate = todayIso(); // the specific day highlighted below the grid
+let calendarViewCache = {}; // keyed by "mode:startIso" -> matched events for that range
 
 function computeUpcomingBirthdays(){
   const today = new Date();
@@ -7389,6 +7565,294 @@ async function loadHomeCalendarAgenda(retryCount){
   wireHomeCalendarButtons(box);
 }
 
+async function loadHomePastAgenda(){
+  const box = document.getElementById('homeCalendarList');
+  if(!box) return;
+
+  if(homePastCalendarCache !== null){
+    box.innerHTML = homePastCalendarCache;
+    wirePastCalendarButtons(box);
+    return;
+  }
+
+  const emailMap = getKnownClientEmails();
+  if(!Object.keys(emailMap).length){
+    homePastCalendarCache = `<div class="cal-day-empty">Email'i kayıtlı danışan yok — profilden email ekleyince burada görünür.</div>`;
+    box.innerHTML = homePastCalendarCache;
+    return;
+  }
+
+  const events = await fetchPastRangeEvents(60);
+  if(!document.getElementById('homeCalendarList')) return;
+  if(events === null){
+    box.innerHTML = `<div class="cal-day-empty" style="color:var(--muted);">Randevular yüklenemedi (Google bağlantısı gerekebilir).</div>`;
+    return;
+  }
+
+  const matched = matchClientEvents(events);
+  if(!matched.length){
+    homePastCalendarCache = `<div class="cal-day-empty">Son 60 günde geçmiş danışan randevusu yok.</div>`;
+    box.innerHTML = homePastCalendarCache;
+    return;
+  }
+
+  const byDate = {};
+  matched.forEach(({ev,client})=>{
+    const dt = ev.start && (ev.start.dateTime || ev.start.date);
+    if(!dt) return;
+    const dateStr = dt.slice(0,10);
+    if(!byDate[dateStr]) byDate[dateStr] = [];
+    byDate[dateStr].push({ ev, client });
+  });
+
+  homePastCalendarCache = Object.keys(byDate).sort().reverse().map(dateStr=>{
+    const rows = byDate[dateStr].map(({ev,client})=>{
+      const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
+      return `<div class="cal-day-event-row" data-client-id="${client.id}">
+        <span class="cal-day-event-time">${timeLabel}</span>
+        <span class="cal-day-event-title cal-client-link" data-client-id="${client.id}">${escapeHtml(clientDisplayName(client))}</span>
+      </div>`;
+    }).join('');
+    return `<div class="agenda-day-group"><div class="agenda-day-header">${turkishDayName(dateStr)}, ${formatShortDate(dateStr)}</div>${rows}</div>`;
+  }).join('');
+  box.innerHTML = homePastCalendarCache;
+  wirePastCalendarButtons(box);
+}
+
+function wirePastCalendarButtons(box){
+  box.querySelectorAll('.cal-client-link').forEach(link=>{
+    link.addEventListener('click', ()=>{
+      const clientId = link.getAttribute('data-client-id');
+      activeClientId = clientId;
+      mainView = 'client';
+      document.body.classList.add('mobile-detail');
+      render();
+    });
+  });
+}
+
+function isoDate(d){
+  return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
+}
+
+function getCalendarRangeForView(){
+  const d = new Date(calendarAnchorDate + 'T00:00:00');
+  if(calendarViewMode === 'month'){
+    const start = new Date(d.getFullYear(), d.getMonth(), 1);
+    const end = new Date(d.getFullYear(), d.getMonth()+1, 1);
+    return { start, end };
+  }
+  if(calendarViewMode === 'week'){
+    const mondayFirst = getCalendarPrefs().weekStartsMonday;
+    let offset;
+    if(mondayFirst){
+      offset = d.getDay() - 1;
+      if(offset < 0) offset = 6;
+    }else{
+      offset = d.getDay();
+    }
+    const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - offset);
+    const end = new Date(start.getTime() + 7*24*60*60*1000);
+    return { start, end };
+  }
+  const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const end = new Date(start.getTime() + 24*60*60*1000);
+  return { start, end };
+}
+
+function calendarRangeLabel(start, end){
+  const monthNames = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+  if(calendarViewMode === 'month'){
+    return `${monthNames[start.getMonth()]} ${start.getFullYear()}`;
+  }
+  if(calendarViewMode === 'week'){
+    const endDisplay = new Date(end.getTime() - 24*60*60*1000);
+    return `${formatShortDate(isoDate(start))} – ${formatShortDate(isoDate(endDisplay))}`;
+  }
+  return `${turkishDayName(isoDate(start))}, ${formatShortDate(isoDate(start))}`;
+}
+
+async function loadHomeCalendarView(){
+  const box = document.getElementById('homeCalendarList');
+  if(!box) return;
+  box.innerHTML = `
+    <div class="cal-view-controls">
+      <div class="cal-granularity-tabs">
+        <button type="button" class="cal-gran-btn ${calendarViewMode==='day'?'active':''}" data-gran="day">Gün</button>
+        <button type="button" class="cal-gran-btn ${calendarViewMode==='week'?'active':''}" data-gran="week">Hafta</button>
+        <button type="button" class="cal-gran-btn ${calendarViewMode==='month'?'active':''}" data-gran="month">Ay</button>
+      </div>
+      <div class="cal-nav-row">
+        <button type="button" class="cal-nav-btn" data-dir="-1">‹</button>
+        <span class="cal-nav-label" id="calNavLabel"></span>
+        <button type="button" class="cal-nav-btn" data-dir="1">›</button>
+      </div>
+    </div>
+    <div id="calGridContainer" class="cal-grid-container">Yükleniyor…</div>
+    <div id="calSelectedList" class="cal-selected-list"></div>
+  `;
+  document.querySelectorAll('.cal-gran-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      calendarViewMode = btn.getAttribute('data-gran');
+      renderHome();
+    });
+  });
+  document.querySelectorAll('.cal-nav-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const dir = Number(btn.getAttribute('data-dir'));
+      const d = new Date(calendarAnchorDate + 'T00:00:00');
+      if(calendarViewMode === 'month') d.setMonth(d.getMonth() + dir);
+      else if(calendarViewMode === 'week') d.setDate(d.getDate() + dir*7);
+      else d.setDate(d.getDate() + dir);
+      calendarAnchorDate = isoDate(d);
+      refreshCalendarView();
+    });
+  });
+  await refreshCalendarView();
+}
+
+async function refreshCalendarView(){
+  const gridBox = document.getElementById('calGridContainer');
+  const label = document.getElementById('calNavLabel');
+  if(!gridBox) return;
+
+  const { start, end } = getCalendarRangeForView();
+  if(label) label.textContent = calendarRangeLabel(start, end);
+
+  const cacheKey = `${calendarViewMode}:${isoDate(start)}`;
+  let matched = calendarViewCache[cacheKey];
+  if(matched === undefined){
+    gridBox.textContent = 'Yükleniyor…';
+    const events = await fetchEventsInRange(start, end);
+    if(!document.getElementById('calGridContainer')) return;
+    if(events === null){
+      gridBox.innerHTML = '<div class="cal-day-empty" style="color:var(--muted);">Randevular yüklenemedi.</div>';
+      return;
+    }
+    matched = matchClientEvents(events);
+    calendarViewCache[cacheKey] = matched;
+  }
+
+  const byDate = {};
+  matched.forEach(({ev,client})=>{
+    const dt = ev.start && (ev.start.dateTime || ev.start.date);
+    if(!dt) return;
+    const dateStr = dt.slice(0,10);
+    if(!byDate[dateStr]) byDate[dateStr] = [];
+    byDate[dateStr].push({ ev, client });
+  });
+
+  gridBox.innerHTML = renderCalendarGrid(start, byDate);
+  wireCalendarGrid(byDate);
+  renderCalendarSelectedList(byDate);
+}
+
+function renderCalendarGrid(rangeStart, byDate){
+  if(calendarViewMode === 'month') return renderMonthGrid(rangeStart, byDate);
+  if(calendarViewMode === 'week') return renderWeekGrid(rangeStart, byDate);
+  return renderDayGrid(rangeStart);
+}
+
+function renderMonthGrid(monthStart, byDate){
+  const mondayFirst = getCalendarPrefs().weekStartsMonday;
+  const dayNames = mondayFirst ? ['Pt','Sa','Ça','Pe','Cu','Ct','Pz'] : ['Pz','Pt','Sa','Ça','Pe','Cu','Ct'];
+  const year = monthStart.getFullYear(), month = monthStart.getMonth();
+  const firstOfMonth = new Date(year, month, 1);
+  let startOffset;
+  if(mondayFirst){
+    startOffset = firstOfMonth.getDay() - 1;
+    if(startOffset < 0) startOffset = 6;
+  }else{
+    startOffset = firstOfMonth.getDay();
+  }
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const todayStr = todayIso();
+  let cells = '';
+  for(let i=0;i<startOffset;i++) cells += `<div class="cal-big-cell empty"></div>`;
+  for(let d=1; d<=daysInMonth; d++){
+    const iso = `${year}-${pad2(month+1)}-${pad2(d)}`;
+    const count = (byDate[iso]||[]).length;
+    const cls = ['cal-big-cell'];
+    if(iso === todayStr) cls.push('today');
+    if(iso === calendarSelectedDate) cls.push('selected');
+    if(count) cls.push('has-events');
+    cells += `<button type="button" class="${cls.join(' ')}" data-date="${iso}"><span class="cal-big-cell-num">${d}</span>${count?`<span class="cal-big-cell-dot"></span>`:''}</button>`;
+  }
+  return `
+    <div class="cal-month-weekdays">${dayNames.map(d=>`<span>${d}</span>`).join('')}</div>
+    <div class="cal-month-grid">${cells}</div>
+  `;
+}
+
+function renderWeekGrid(weekStart, byDate){
+  const dayNamesFull = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+  const todayStr = todayIso();
+  let cells = '';
+  for(let i=0;i<7;i++){
+    const d = new Date(weekStart.getTime() + i*24*60*60*1000);
+    const iso = isoDate(d);
+    const count = (byDate[iso]||[]).length;
+    const cls = ['cal-week-cell'];
+    if(iso === todayStr) cls.push('today');
+    if(iso === calendarSelectedDate) cls.push('selected');
+    cells += `<button type="button" class="${cls.join(' ')}" data-date="${iso}">
+      <span class="cal-week-cell-day">${dayNamesFull[d.getDay()].slice(0,3)}</span>
+      <span class="cal-week-cell-num">${d.getDate()}</span>
+      ${count?`<span class="cal-week-cell-count">${count}</span>`:''}
+    </button>`;
+  }
+  return `<div class="cal-week-grid">${cells}</div>`;
+}
+
+function renderDayGrid(dayStart){
+  const iso = isoDate(dayStart);
+  calendarSelectedDate = iso;
+  return `<div class="cal-day-header-big">${turkishDayName(iso)}, ${formatShortDate(iso)}</div>`;
+}
+
+function wireCalendarGrid(byDate){
+  document.querySelectorAll('#calGridContainer [data-date]').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      calendarSelectedDate = btn.getAttribute('data-date');
+      const { start } = getCalendarRangeForView();
+      document.getElementById('calGridContainer').innerHTML = renderCalendarGrid(start, byDate);
+      wireCalendarGrid(byDate);
+      renderCalendarSelectedList(byDate);
+    });
+  });
+}
+
+function renderCalendarSelectedList(byDate){
+  const listBox = document.getElementById('calSelectedList');
+  if(!listBox) return;
+  const dayRowHtml = (items)=> items.map(({ev,client})=>{
+    const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
+    return `<div class="cal-day-event-row" data-client-id="${client.id}">
+      <span class="cal-day-event-time">${timeLabel}</span>
+      <span class="cal-day-event-title cal-client-link" data-client-id="${client.id}">${escapeHtml(clientDisplayName(client))}</span>
+    </div>`;
+  }).join('');
+
+  if(calendarViewMode === 'week'){
+    const { start } = getCalendarRangeForView();
+    let html = '';
+    for(let i=0;i<7;i++){
+      const d = new Date(start.getTime() + i*24*60*60*1000);
+      const iso = isoDate(d);
+      const items = byDate[iso] || [];
+      if(!items.length) continue;
+      html += `<div class="agenda-day-group"><div class="agenda-day-header">${turkishDayName(iso)}, ${formatShortDate(iso)}</div>${dayRowHtml(items)}</div>`;
+    }
+    listBox.innerHTML = html || `<div class="cal-day-empty">Bu hafta danışan randevusu yok.</div>`;
+  }else{
+    const items = byDate[calendarSelectedDate] || [];
+    listBox.innerHTML = items.length
+      ? `<div class="agenda-day-group">${dayRowHtml(items)}</div>`
+      : `<div class="cal-day-empty">${formatShortDate(calendarSelectedDate)} için randevu yok.</div>`;
+  }
+  wirePastCalendarButtons(listBox);
+}
+
 function wireHomeCalendarButtons(box){
   box.querySelectorAll('.cal-client-link').forEach(link=>{
     link.addEventListener('click', ()=>{
@@ -7525,12 +7989,26 @@ function renderHome(){
       </div>
       <div class="home-calendar-col">
         <h3 class="home-col-title">📅 Danışan Randevuları</h3>
+        <div class="home-cal-tabs">
+          <button type="button" class="home-cal-tab-btn ${homeCalendarTab==='upcoming'?'active':''}" data-tab="upcoming">Yaklaşan</button>
+          <button type="button" class="home-cal-tab-btn ${homeCalendarTab==='past'?'active':''}" data-tab="past">Geçmiş</button>
+          <button type="button" class="home-cal-tab-btn ${homeCalendarTab==='calendar'?'active':''}" data-tab="calendar">Takvim</button>
+        </div>
         <div id="homeCalendarList" class="home-calendar-list">Yükleniyor…</div>
       </div>
     </div>
   `;
 
-  loadHomeCalendarAgenda();
+  if(homeCalendarTab === 'upcoming') loadHomeCalendarAgenda();
+  else if(homeCalendarTab === 'past') loadHomePastAgenda();
+  else loadHomeCalendarView();
+
+  document.querySelectorAll('.home-cal-tab-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      homeCalendarTab = btn.getAttribute('data-tab');
+      renderHome();
+    });
+  });
 
   document.querySelectorAll('.owed-client-name.cal-client-link').forEach(link=>{
     link.addEventListener('click', ()=>{
