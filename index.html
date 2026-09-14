@@ -803,6 +803,21 @@
     cursor:pointer;
   }
   .header-profile-btn:hover{color:var(--ink); border-color:var(--highlight-line); background:var(--neutral-bg);}
+  .header-icon-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:28px;
+    height:28px;
+    border-radius:50%;
+    border:1px solid var(--card-line);
+    background:none;
+    font-size:13px;
+    text-decoration:none;
+    cursor:pointer;
+  }
+  .header-icon-btn:hover{background:var(--neutral-bg); border-color:var(--highlight-line);}
+  .header-icon-btn.disabled{opacity:0.35; pointer-events:none;}
   .status-pill{
     font-size:12px;
     font-weight:500;
@@ -3580,6 +3595,10 @@ function renderMain(){
     <div id="clientHeader">
       <h2>${escapeHtml(clientDisplayName(client))}</h2>
       <div class="client-header-actions">
+        <a class="header-icon-btn ${client.profile && client.profile.phone?'':'disabled'}" href="${waLink(client.profile && client.profile.phone)}" target="_blank" rel="noopener" title="WhatsApp">💬</a>
+        <a class="header-icon-btn ${client.profile && client.profile.phone?'':'disabled'}" href="${smsLink(client.profile && client.profile.phone)}" title="Mesaj">✉️</a>
+        <a class="header-icon-btn ${client.profile && client.profile.phone?'':'disabled'}" href="${telLink(client.profile && client.profile.phone)}" title="Ara">📞</a>
+        <a class="header-icon-btn ${client.profile && client.profile.email?'':'disabled'}" href="${mailtoLink(client.profile && client.profile.email)}" title="Email">📧</a>
         <button class="header-profile-btn" id="toggleProfileBtn">👤 Profil</button>
         <span class="status-pill ${status}">${statusText}</span>
       </div>
@@ -4568,6 +4587,11 @@ function whatsappLink(phone){
 function telLink(phone){
   const p = (phone||'').trim();
   return p ? `tel:${p.replace(/[^\d+]/g,'')}` : '#';
+}
+
+function smsLink(phone){
+  const p = (phone||'').trim();
+  return p ? `sms:${p.replace(/[^\d+]/g,'')}` : '#';
 }
 
 function todayIso(){
@@ -6230,9 +6254,9 @@ async function loadPracticeShared(){
     const snap = await window.FB.getDoc(ref);
     if(snap.exists()){
       const data = snap.data();
-      return { tasks: data.tasks||[], notes: data.notes||[], activity: data.activity||[], stats: data.stats||{} };
+      return { tasks: data.tasks||[], notes: data.notes||[], activity: data.activity||[], stats: data.stats||{}, notifications: data.notifications||[] };
     }
-    return { tasks:[], notes:[], activity:[], stats:{} };
+    return { tasks:[], notes:[], activity:[], stats:{}, notifications:[] };
   }catch(e){
     console.error('Ortaklık verisi yüklenemedi', e);
     return null;
