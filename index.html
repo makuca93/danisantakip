@@ -4128,7 +4128,7 @@ async function syncAllClientsToGoogleContacts(onProgress){
 
 async function createCalendarEvent(client, opts){
   const token = await ensureGoogleAccessToken();
-  if(!token) return false;
+  if(!token) return null;
 
   const start = new Date(`${opts.dateStr}T${opts.timeStr}:00`);
   const end = new Date(start.getTime() + opts.durationMinutes*60000);
@@ -4159,12 +4159,13 @@ async function createCalendarEvent(client, opts){
     if(!res.ok){
       const err = await res.json().catch(()=>({}));
       alert('Randevu oluşturulamadı: ' + (err.error && err.error.message ? err.error.message : res.status));
-      return false;
+      return null;
     }
-    return true;
+    const data = await res.json();
+    return { id: data.id, startIso: start.toISOString(), endIso: end.toISOString() };
   }catch(e){
     alert('Randevu oluşturulamadı: ' + e.message);
-    return false;
+    return null;
   }
 }
 
@@ -5055,31 +5056,55 @@ function wireCalendarPanel(client){
     if(repeatWeekly){
       const baseDate = new Date(dateStr + 'T00:00:00');
       let successCount = 0;
+      const liveClient = state.clients.find(c => c.id === client.id) || client;
       for(let i = 0; i < repeatWeeks; i++){
         btn.textContent = `Oluşturuluyor… (${i+1}/${repeatWeeks})`;
         const d = new Date(baseDate.getTime() + i*7*24*60*60*1000);
         const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        const ok = await createCalendarEvent(client, { title, dateStr: dStr, timeStr, durationMinutes, inviteClient });
-        if(ok) successCount++;
+        const created = await createCalendarEvent(client, { title, dateStr: dStr, timeStr, durationMinutes, inviteClient });
+        if(created){
+          successCount++;
+          liveClient.sessions.push({
+            id: uid(), date: dStr,
+            paymentDone:false, invoiceDone:false, notesDone:false,
+            nextNote:'', nextDone:false, adminNote:'',
+            calendarEventId: created.id, calendarId: 'primary',
+            calendarStartTime: created.startIso, calendarEndTime: created.endIso
+          });
+        }
         await new Promise(r => setTimeout(r, 300));
       }
+      liveClient.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+      saveState();
       btn.disabled = false; btn.textContent = 'Randevu Oluştur';
       alert(`${successCount} / ${repeatWeeks} randevu Google Takvimine eklendi.`);
       calendarCheckedClientIds.delete(client.id);
       panel.classList.remove('open');
       if(successCount) markPreviousSessionAsNext(client, dateStr, title);
+      render();
       loadNextAppointmentInfo(client);
       return;
     }
 
     btn.textContent = 'Oluşturuluyor…';
-    const ok = await createCalendarEvent(client, { title, dateStr, timeStr, durationMinutes, inviteClient });
+    const created = await createCalendarEvent(client, { title, dateStr, timeStr, durationMinutes, inviteClient });
     btn.disabled = false; btn.textContent = 'Randevu Oluştur';
-    if(ok){
+    if(created){
       alert('Randevu Google Takvimine eklendi.');
+      const liveClient = state.clients.find(c => c.id === client.id) || client;
+      liveClient.sessions.push({
+        id: uid(), date: dateStr,
+        paymentDone:false, invoiceDone:false, notesDone:false,
+        nextNote:'', nextDone:false, adminNote:'',
+        calendarEventId: created.id, calendarId: 'primary',
+        calendarStartTime: created.startIso, calendarEndTime: created.endIso
+      });
+      liveClient.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+      markPreviousSessionAsNext(client, dateStr, title);
+      saveState();
       calendarCheckedClientIds.delete(client.id);
       panel.classList.remove('open');
-      markPreviousSessionAsNext(client, dateStr, title);
+      render();
       loadNextAppointmentInfo(client);
     }else{
       loadCalendarDayEvents(panel, client);
