@@ -816,8 +816,12 @@
     text-decoration:none;
     cursor:pointer;
   }
-  .header-icon-btn:hover{background:var(--neutral-bg); border-color:var(--highlight-line);}
+  .header-icon-btn:hover{filter:brightness(0.95); border-color:var(--highlight-line);}
   .header-icon-btn.disabled{opacity:0.35; pointer-events:none;}
+  .header-icon-btn.wa{background:#25D366; border-color:#25D366;}
+  .header-icon-btn.sms{background:#eef0f3; border-color:#d8dce2;}
+  .header-icon-btn.call{background:#e7f5ec; border-color:#bfe3cd;}
+  .header-icon-btn.gmail{background:#fbe9e7; border-color:#f3c2bb;}
   .status-pill{
     font-size:12px;
     font-weight:500;
@@ -3595,10 +3599,10 @@ function renderMain(){
     <div id="clientHeader">
       <h2>${escapeHtml(clientDisplayName(client))}</h2>
       <div class="client-header-actions">
-        <a class="header-icon-btn ${client.profile && client.profile.phone?'':'disabled'}" href="${waLink(client.profile && client.profile.phone)}" target="_blank" rel="noopener" title="WhatsApp">💬</a>
-        <a class="header-icon-btn ${client.profile && client.profile.phone?'':'disabled'}" href="${smsLink(client.profile && client.profile.phone)}" title="Mesaj">✉️</a>
-        <a class="header-icon-btn ${client.profile && client.profile.phone?'':'disabled'}" href="${telLink(client.profile && client.profile.phone)}" title="Ara">📞</a>
-        <a class="header-icon-btn ${client.profile && client.profile.email?'':'disabled'}" href="${mailtoLink(client.profile && client.profile.email)}" title="Email">📧</a>
+        <a class="header-icon-btn wa ${client.profile && client.profile.phone?'':'disabled'}" href="${waLink(client.profile && client.profile.phone)}" target="_blank" rel="noopener" title="WhatsApp">💬</a>
+        <a class="header-icon-btn sms ${client.profile && client.profile.phone?'':'disabled'}" href="${smsLink(client.profile && client.profile.phone)}" title="Mesaj">🗨️</a>
+        <a class="header-icon-btn call ${client.profile && client.profile.phone?'':'disabled'}" href="${telLink(client.profile && client.profile.phone)}" title="Ara">📞</a>
+        <a class="header-icon-btn gmail ${client.profile && client.profile.email?'':'disabled'}" href="${gmailWebLink(client.profile && client.profile.email)}" target="_blank" rel="noopener" title="Gmail">✉️</a>
         <button class="header-profile-btn" id="toggleProfileBtn">👤 Profil</button>
         <span class="status-pill ${status}">${statusText}</span>
       </div>
