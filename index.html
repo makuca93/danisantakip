@@ -3593,8 +3593,9 @@ function renderMain(){
   if(!client){ main.innerHTML=''; return; }
   if(!client.todos) client.todos = [];
   if(client.generalAdminNote == null) client.generalAdminNote = '';
-  const status = clientStatus(client);
-  const statusText = status==='green' ? 'Tamamlandı' : status==='red' ? 'Eksik var' : 'Kayıt yok';
+  const isTerminated = !!(client.profile && client.profile.terminated);
+  const status = isTerminated ? 'terminated' : clientStatus(client);
+  const statusText = isTerminated ? 'Sonlandı' : status==='green' ? 'Tamamlandı' : status==='red' ? 'Eksik var' : 'Kayıt yok';
 
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
