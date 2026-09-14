@@ -6211,14 +6211,14 @@ function renderNotificationPanel(){
 
 function maybeShowNewNotificationToasts(){
   let seenIds = [];
-  try{ seenIds = JSON.parse(sessionStorage.getItem('seenNotifIds')||'[]'); }catch(e){}
+  try{ seenIds = JSON.parse(localStorage.getItem('seenNotifIds')||'[]'); }catch(e){}
   const unseen = myNotifications().filter(n=>!seenIds.includes(n.id)).slice(0, 4);
   unseen.forEach((n,i)=>{
     setTimeout(()=>showToast(n.text), i*400);
   });
   try{
     const allIds = myNotifications().map(n=>n.id);
-    sessionStorage.setItem('seenNotifIds', JSON.stringify(allIds.slice(0,150)));
+    localStorage.setItem('seenNotifIds', JSON.stringify(allIds.slice(0,150)));
   }catch(e){}
 }
 
