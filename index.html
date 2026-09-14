@@ -2157,6 +2157,10 @@ let activeClientId = null;
 let openProfileOnNextRender = false;
 let editingClientId = null;
 let sortMode = 'lastSession';
+function getCalendarPrefs(){
+  return (state && state.calendarPrefs) ? state.calendarPrefs : { weekStartsMonday: true, use24HourTime: false };
+}
+
 let searchQuery = '';
 let sidebarListMode = 'clients';
 let prospectSearchQuery = '';
@@ -3577,8 +3581,12 @@ async function fetchDayEvents(dateStr){
 function formatEventTime(iso){
   if(!iso) return '';
   const d = new Date(iso);
-  let hour = d.getHours();
+  const hour24 = d.getHours();
   const minute = String(d.getMinutes()).padStart(2,'0');
+  if(getCalendarPrefs().use24HourTime){
+    return `${String(hour24).padStart(2,'0')}:${minute}`;
+  }
+  let hour = hour24;
   const meridiem = hour >= 12 ? 'PM' : 'AM';
   hour = hour % 12;
   if(hour === 0) hour = 12;
@@ -3602,7 +3610,16 @@ async function cancelCalendarEvent(eventId, calendarId){
 
 function parseAmPmTime(input){
   if(!input) return null;
-  const match = input.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/);
+  const trimmed = input.trim();
+  // 24-hour format: "H:MM" or "HH:MM", no AM/PM
+  const plain = trimmed.match(/^(\d{1,2}):(\d{2})$/);
+  if(plain){
+    const hour = parseInt(plain[1], 10);
+    const minute = plain[2];
+    if(hour < 0 || hour > 23 || Number(minute) > 59) return null;
+    return `${String(hour).padStart(2,'0')}:${minute}`;
+  }
+  const match = trimmed.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/);
   if(!match) return null;
   let hour = parseInt(match[1], 10);
   const minute = match[2];
@@ -3630,41 +3647,56 @@ function promptForTime(defaultText){
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 
-// Builds the <option> list for a 15-minute-interval time dropdown (12h AM/PM labels).
+// Builds the <option> list for a 15-minute-interval time dropdown (12h AM/PM or 24h, per preference).
 function timeSelectOptionsHtml(selectedLabel){
+  const use24 = getCalendarPrefs().use24HourTime;
   const opts = [];
   for(let h = 0; h < 24; h++){
     for(let m = 0; m < 60; m += 15){
-      let hour12 = h % 12;
-      if(hour12 === 0) hour12 = 12;
-      const meridiem = h >= 12 ? 'PM' : 'AM';
-      const label = `${hour12}:${pad2(m)} ${meridiem}`;
+      let label;
+      if(use24){
+        label = `${pad2(h)}:${pad2(m)}`;
+      }else{
+        let hour12 = h % 12;
+        if(hour12 === 0) hour12 = 12;
+        const meridiem = h >= 12 ? 'PM' : 'AM';
+        label = `${hour12}:${pad2(m)} ${meridiem}`;
+      }
       opts.push(`<option value="${label}" ${label===selectedLabel?'selected':''}>${label}</option>`);
     }
   }
   return opts.join('');
 }
 
-// Rounds an "H:MM AM/PM" label to the nearest 15-minute mark so it lines up with the dropdown.
+// Rounds a time label to the nearest 15-minute mark so it lines up with the dropdown.
 function nearestQuarterHourLabel(label){
   const parsed = parseAmPmTime(label);
-  if(!parsed) return '10:00 AM';
+  if(!parsed) return getCalendarPrefs().use24HourTime ? '10:00' : '10:00 AM';
   let [h, m] = parsed.split(':').map(Number);
   m = Math.round(m / 15) * 15;
   if(m === 60){ m = 0; h = (h + 1) % 24; }
+  if(getCalendarPrefs().use24HourTime){
+    return `${pad2(h)}:${pad2(m)}`;
+  }
   let hour12 = h % 12;
   if(hour12 === 0) hour12 = 12;
   const meridiem = h >= 12 ? 'PM' : 'AM';
   return `${hour12}:${pad2(m)} ${meridiem}`;
 }
 
-// Renders a single month grid (Monday-first) for the mini date picker.
+// Renders a single month grid for the mini date picker, respecting the week-start preference.
 function miniCalendarMonthHtml(year, month, selectedIso){
   const monthNames = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
-  const dayNames = ['Pt','Sa','Ça','Pe','Cu','Ct','Pz'];
+  const mondayFirst = getCalendarPrefs().weekStartsMonday;
+  const dayNames = mondayFirst ? ['Pt','Sa','Ça','Pe','Cu','Ct','Pz'] : ['Pz','Pt','Sa','Ça','Pe','Cu','Ct'];
   const firstOfMonth = new Date(year, month, 1);
-  let startOffset = firstOfMonth.getDay() - 1;
-  if(startOffset < 0) startOffset = 6;
+  let startOffset;
+  if(mondayFirst){
+    startOffset = firstOfMonth.getDay() - 1;
+    if(startOffset < 0) startOffset = 6;
+  }else{
+    startOffset = firstOfMonth.getDay();
+  }
   const daysInMonth = new Date(year, month+1, 0).getDate();
   const todayStr = todayIso();
   let cells = '';
@@ -6872,6 +6904,25 @@ function renderSettingsPage(){
     </div>
 
     <div class="settings-section">
+      <h3>🗓️ Takvim ve Saat Ayarları</h3>
+      <p>Bu ayar sadece senin hesabına özel — ${currentPersonId()==='kubilay' ? 'Duygu' : 'Kubilay'} kendi tercihini ayrı seçebilir.</p>
+      <div class="field-block" style="margin-bottom:12px;">
+        <label>Haftanın ilk günü</label>
+        <select id="settingsWeekStartSelect">
+          <option value="monday" ${getCalendarPrefs().weekStartsMonday ? 'selected' : ''}>Pazartesi</option>
+          <option value="sunday" ${!getCalendarPrefs().weekStartsMonday ? 'selected' : ''}>Pazar</option>
+        </select>
+      </div>
+      <div class="field-block">
+        <label>Saat formatı</label>
+        <select id="settingsTimeFormatSelect">
+          <option value="12" ${!getCalendarPrefs().use24HourTime ? 'selected' : ''}>12 saat (AM/PM)</option>
+          <option value="24" ${getCalendarPrefs().use24HourTime ? 'selected' : ''}>24 saat</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-section">
       <h3>📁 Fatura Kayıt Klasörü</h3>
       <p>"Drive'a Kaydet" ile bir fatura/makbuz indirdiğinde, her seferinde sormadan doğrudan seçtiğin bu klasöre kaydedilir. Bu ayar sadece senin hesabına özel — ${currentPersonId()==='kubilay' ? 'Duygu' : 'Kubilay'} kendi klasörünü ayrı seçebilir.</p>
       <div style="font-size:13px; color:var(--ink); margin-bottom:10px;">
@@ -6955,6 +7006,17 @@ function renderSettingsPage(){
     driveBackupStatus = ok ? 'success' : 'error';
     if(statusEl) statusEl.textContent = driveBackupStatusText();
     btn.disabled = false;
+  });
+
+  document.getElementById('settingsWeekStartSelect').addEventListener('change', (ev)=>{
+    if(!state.calendarPrefs) state.calendarPrefs = { weekStartsMonday: true, use24HourTime: false };
+    state.calendarPrefs.weekStartsMonday = (ev.target.value === 'monday');
+    saveState();
+  });
+  document.getElementById('settingsTimeFormatSelect').addEventListener('change', (ev)=>{
+    if(!state.calendarPrefs) state.calendarPrefs = { weekStartsMonday: true, use24HourTime: false };
+    state.calendarPrefs.use24HourTime = (ev.target.value === '24');
+    saveState();
   });
 
   document.getElementById('settingsPickDriveFolderBtn').addEventListener('click', openDriveFolderPicker);
