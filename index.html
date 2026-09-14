@@ -776,9 +776,10 @@
   .empty-state-full .empty-cta:hover{filter:brightness(0.97);}
   #clientHeader{
     display:flex;
-    align-items:baseline;
+    align-items:center;
     gap:14px;
     margin-bottom:6px;
+    flex-wrap:wrap;
   }
   #clientHeader h2{font-size:28px; margin:0;}
   .status-pill{
@@ -1605,6 +1606,20 @@
   }
   .session-link-badge.linked{background:#e3edfb; color:#3a6fb0;}
   .session-link-badge.manual{background:#f0f0f0; color:var(--muted);}
+  .session-resync-btn{
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-family:inherit;
+    font-size:10.5px;
+    font-weight:600;
+    padding:2px 7px;
+    border-radius:10px;
+    cursor:pointer;
+    flex-shrink:0;
+    white-space:nowrap;
+  }
+  .session-resync-btn:hover{color:var(--ink); border-color:var(--highlight-line);}
   .session-noshow-btn{
     background:none;
     border:1px solid var(--card-line);
@@ -3543,8 +3558,10 @@ function renderMain(){
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader">
       <h2>${escapeHtml(clientDisplayName(client))}</h2>
+      <button class="add-session-toggle" id="toggleProfileBtn">👤 Profil</button>
       <span class="status-pill ${status}">${statusText}</span>
     </div>
+    ${profilePanelHtml(client)}
     <div id="clientSub">${client.sessions.length} seans kaydı</div>
     ${(client.profile && client.profile.email) ? `<div id="nextApptInfo" class="next-appt-info">Google Takvim kontrol ediliyor…</div>` : ''}
     <div class="general-admin-note-block">
@@ -3552,12 +3569,10 @@ function renderMain(){
       <textarea class="general-admin-note" placeholder="Bu danışanla ilgili genel notlar (seansa özel olmayan)…">${escapeHtml(client.generalAdminNote||'')}</textarea>
     </div>
     <div class="action-row">
-      <button class="add-session-toggle" id="toggleProfileBtn">👤 Profil</button>
       <button class="add-session-toggle" id="toggleTodoBtn">✅ Yapılacaklar</button>
       <button class="add-session-toggle" id="toggleCalendarBtn">📅 Randevu</button>
       <button class="add-session-toggle" id="toggleFormBtn">+ Yeni seans kaydı ekle</button>
     </div>
-    ${profilePanelHtml(client)}
     ${todoPanelHtml(client)}
     ${calendarPanelHtml(client)}
     ${sessionFormHtml()}
@@ -4768,6 +4783,8 @@ async function loadNextAppointmentInfo(client){
     const startTime = ev.start && ev.start.dateTime ? ev.start.dateTime : null;
     const endTime = ev.end && ev.end.dateTime ? ev.end.dateTime : null;
     const calId = ev._calendarId || 'primary';
+    const wasDetached = liveClient.sessions.some(s => s.detachedFromEventId === ev.id);
+    if(wasDetached) return; // deliberately detached into manual mode — don't recreate
     let session = liveClient.sessions.find(s => s.calendarEventId === ev.id);
     if(session){
       if(session.date !== dateOnly){
@@ -5582,6 +5599,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
       <button class="session-collapse-toggle" type="button" title="Daralt/Genişlet">${collapsed ? '▸' : '▾'}</button>
       <button type="button" class="session-datetime-btn">${sessionDateTimeButtonLabel(session)}</button>
       <span class="session-link-badge ${isCalendarLinked?'linked':'manual'}" title="${isCalendarLinked?'Bu seans Google Takvim randevusuna bağlı':'Bu seans elle eklendi, Takvim ile bağlantısı yok'}">${isCalendarLinked?'📅 Takvim':'📝 Elle'}</span>
+      ${(!isCalendarLinked && session.detachedFromEventId) ? `<button type="button" class="session-resync-btn" title="Takvimdeki orijinal randevuyla yeniden eşitle">🔄 Senkronize Et</button>` : ''}
       <button class="session-noshow-btn ${session.noShow?'active':''}" type="button" title="Danışan gelmedi olarak işaretle">🚫 ${session.noShow?'Gelmedi':'Gelmedi mi?'}</button>
       <button class="session-del">Sil</button>
     </div>
@@ -5717,6 +5735,19 @@ function renderSessionCard(client, session, index, defaultOpenId){
     session.nextNote = ev.target.value;
     saveState();
   });
+  const resyncBtn = div.querySelector('.session-resync-btn');
+  if(resyncBtn){
+    resyncBtn.addEventListener('click', ()=>{
+      if(!confirm('Bu seans, Takvimdeki orijinal randevuyla yeniden eşitlensin mi? Elle yaptığın değişiklikler, Takvimdeki güncel bilgiyle değiştirilecek.')) return;
+      session.calendarEventId = session.detachedFromEventId;
+      session.calendarId = session.detachedFromCalendarId || 'primary';
+      session.detachedFromEventId = null;
+      session.detachedFromCalendarId = null;
+      saveState();
+      calendarCheckedClientIds.delete(client.id);
+      loadNextAppointmentInfo(client);
+    });
+  }
   div.querySelector('.session-datetime-btn').addEventListener('click', ()=>{
     const originalDate = session.date;
     const originalStartTime = session.calendarStartTime;
@@ -5751,6 +5782,8 @@ function renderSessionCard(client, session, index, defaultOpenId){
         }else if(choice === 'manual'){
           session.date = newDate;
           if(newStartIso) session.calendarStartTime = newStartIso;
+          session.detachedFromEventId = session.calendarEventId;
+          session.detachedFromCalendarId = session.calendarId;
           session.calendarEventId = null;
           session.calendarId = null;
           session.calendarEndTime = null;
