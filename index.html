@@ -1447,7 +1447,19 @@
     margin-bottom:12px;
     cursor:pointer;
   }
-  .session-card-top .session-date-input{flex:1;}
+  .session-datetime-btn{
+    flex:1;
+    text-align:left;
+    background:none;
+    border:1px solid var(--card-line);
+    border-radius:6px;
+    padding:6px 10px;
+    font-family:inherit;
+    font-size:13px;
+    color:var(--ink);
+    cursor:pointer;
+  }
+  .session-datetime-btn:hover{background:var(--neutral-bg);}
   .session-time-label{
     font-size:12px;
     color:var(--muted);
@@ -1525,23 +1537,6 @@
     cursor:pointer;
   }
   .future-cancel-btn:hover{color:var(--red); border-color:var(--red);}
-  .session-date-input{
-    font-family:inherit;
-    font-weight:600;
-    font-size:15px;
-    color:var(--ink);
-    border:1px solid transparent;
-    background:transparent;
-    border-radius:5px;
-    padding:2px 4px;
-    cursor:pointer;
-  }
-  .session-date-input:hover,
-  .session-date-input:focus{
-    border-color:var(--card-line);
-    background:#fdfcfd;
-    cursor:text;
-  }
   .session-del{
     background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;
   }
@@ -4186,7 +4181,7 @@ function askBillToName(client){
   });
 }
 
-function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName){
+function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName, isAssessment){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const amountStr = `CA$${rate.toFixed(2)}`;
@@ -4238,10 +4233,15 @@ function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName)
   }
 
   // item table
+  const lineDescription = isAssessment
+    ? 'Assessment for IFHP Prior Authorization (Interview and Report Writing - 4 hours)'
+    : 'Psychotherapy Session';
+  const lineQty = isAssessment ? '4' : '1';
+  const lineRateStr = isAssessment ? 'CA$205.00' : amountStr;
   doc.autoTable({
     startY: 82,
     head: [['Description','Qty','Rate','Amount']],
-    body: [['Psychotherapy Session','1', amountStr, amountStr]],
+    body: [[lineDescription, lineQty, lineRateStr, amountStr]],
     theme: 'striped',
     margin: { left: 16, right: 16 },
     styles: { fontSize: 10, textColor: [43,45,51], cellPadding: 4 },
@@ -4281,9 +4281,10 @@ function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName)
 
 async function resolveInvoiceDetails(client, session){
   const ifhp = !!(client.profile && client.profile.ifhp);
+  const isAssessment = ifhp && !!session.isAssessment;
   let rate;
   if(ifhp){
-    rate = 205;
+    rate = isAssessment ? 820 : 205;
   }else{
     rate = client.profile ? Number(client.profile.rate) : NaN;
     if(!rate || rate <= 0){
@@ -4308,7 +4309,7 @@ async function resolveInvoiceDetails(client, session){
 
   const billToName = await askBillToName(client);
 
-  const doc = buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName);
+  const doc = buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName, isAssessment);
   const filename = invoiceFilename(client, session);
 
   if(invoiceNumber && session.lastInvoiceNumber !== invoiceNumber){
@@ -4909,6 +4910,38 @@ function markPreviousSessionAsNext(client, newDateStr, title){
   saveState();
 }
 
+function askSyncLinkedSessionChange(){
+  return new Promise((resolve)=>{
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:380px;">
+        <div class="backups-box-header">
+          <h2>Bu seans Takvim ile bağlantılı</h2>
+        </div>
+        <div style="padding:0 20px 20px; display:flex; flex-direction:column; gap:8px;">
+          <p style="font-size:12.5px; color:var(--muted); margin:0 0 4px;">Bu değişiklik Google Takvim davetiyesine de yansısın mı?</p>
+          <button class="settings-btn del-choice-btn" data-choice="sync" style="width:100%;">Evet, Takvim'i de Güncelle</button>
+          <button class="settings-btn del-choice-btn" data-choice="manual" style="width:100%;">Hayır, Sadece Burada Değiştir (Elle Moduna Geç)</button>
+          <button class="reschedule-cancel-btn" data-choice="revert" style="width:100%; margin-top:4px;">Vazgeç, Takvimdeki Saate Dön</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelectorAll('[data-choice]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const choice = btn.getAttribute('data-choice');
+        modal.remove();
+        resolve(choice === 'revert' ? null : choice);
+      });
+    });
+    modal.addEventListener('click', (ev)=>{
+      if(ev.target === modal){ modal.remove(); resolve(null); }
+    });
+  });
+}
+
 function askDeleteLinkedSession(){
   return new Promise((resolve)=>{
     const modal = document.createElement('div');
@@ -4940,6 +4973,12 @@ function askDeleteLinkedSession(){
       if(ev.target === modal){ modal.remove(); resolve(null); }
     });
   });
+}
+
+function sessionDateTimeButtonLabel(session){
+  const dateLabel = session.date ? formatShortDate(session.date) : 'Tarih yok';
+  const timeLabel = session.calendarStartTime ? formatEventTime(session.calendarStartTime) : '';
+  return `📅 ${dateLabel}${timeLabel ? ', ' + timeLabel : ''}`;
 }
 
 function todoPanelHtml(client){
@@ -5385,6 +5424,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
   const div = document.createElement('div');
   div.className = `session-card ${session.noShow ? 'noshow' : ''}`;
   const noInvoice = !!(client.profile && client.profile.noInvoice);
+  const ifhpClient = !!(client.profile && client.profile.ifhp);
   const collapsed = isSessionCollapsed(session, index, defaultOpenId);
   const isFuture = !isSessionDue(session);
   const isCalendarLinked = !!session.calendarEventId;
@@ -5392,8 +5432,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
   div.innerHTML = `
     <div class="session-card-top">
       <button class="session-collapse-toggle" type="button" title="Daralt/Genişlet">${collapsed ? '▸' : '▾'}</button>
-      <input type="date" class="session-date-input" value="${session.date||''}">
-      ${session.calendarStartTime ? `<span class="session-time-label">${formatEventTime(session.calendarStartTime)}</span>` : ''}
+      <button type="button" class="session-datetime-btn">${sessionDateTimeButtonLabel(session)}</button>
       <span class="session-link-badge ${isCalendarLinked?'linked':'manual'}" title="${isCalendarLinked?'Bu seans Google Takvim randevusuna bağlı':'Bu seans elle eklendi, Takvim ile bağlantısı yok'}">${isCalendarLinked?'📅 Takvim':'📝 Elle'}</span>
       <button class="session-noshow-btn ${session.noShow?'active':''}" type="button" title="Danışan gelmedi olarak işaretle">🚫 ${session.noShow?'Gelmedi':'Gelmedi mi?'}</button>
       <button class="session-del">Sil</button>
@@ -5423,6 +5462,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
     </div>
     ${noInvoice ? `
     <div class="invoice-actions-blackout">Bu danışan için fatura/makbuz oluşturulmuyor</div>` : `
+    ${ifhpClient ? `<div class="tick-row" style="margin-bottom:10px;"><input type="checkbox" class="session-assessment-toggle" ${session.isAssessment?'checked':''}><span>🩺 Bu bir Değerlendirme Seansı (CA$820) — işaretli değilse normal Terapi Seansı (CA$205)</span></div>` : ''}
     <div class="invoice-actions-label">Fatura / Makbuz</div>
     <div class="invoice-actions">
       <button class="invoice-save-btn" type="button">💻 Bilgisayara İndir</button>
@@ -5447,7 +5487,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
     toggleCollapse();
   });
   div.querySelector('.session-card-top').addEventListener('click', (ev)=>{
-    if(ev.target.closest('.session-date-input') || ev.target.closest('.session-del')) return;
+    if(ev.target.closest('.session-datetime-btn') || ev.target.closest('.session-del')) return;
     toggleCollapse();
   });
 
@@ -5529,9 +5569,53 @@ function renderSessionCard(client, session, index, defaultOpenId){
     session.nextNote = ev.target.value;
     saveState();
   });
-  div.querySelector('.session-date-input').addEventListener('change', (ev)=>{
-    session.date = ev.target.value;
-    saveState();
+  div.querySelector('.session-datetime-btn').addEventListener('click', ()=>{
+    const originalDate = session.date;
+    const originalStartTime = session.calendarStartTime;
+    openReschedulePopover({
+      title: 'Seans Tarih ve Saatini Değiştir',
+      initialDate: session.date,
+      initialTimeLabel: session.calendarStartTime ? formatEventTime(session.calendarStartTime) : '10:00 AM',
+      onConfirm: async (newDate, newTimeLabel)=>{
+        const newTime24 = parseAmPmTime(newTimeLabel);
+        const newStartIso = newTime24 ? `${newDate}T${newTime24}:00` : null;
+
+        if(!isCalendarLinked){
+          session.date = newDate;
+          if(newStartIso) session.calendarStartTime = newStartIso;
+          saveState();
+          render();
+          return;
+        }
+
+        const choice = await askSyncLinkedSessionChange();
+        if(choice === 'sync'){
+          if(!newTime24) return;
+          const ok = await rescheduleCalendarEvent(session.calendarEventId, newDate, newTime24, session.calendarId || 'primary');
+          if(ok){
+            session.date = newDate;
+            session.calendarStartTime = newStartIso;
+            saveState();
+            render();
+          }else{
+            alert('Takvimdeki randevu güncellenemedi.');
+          }
+        }else if(choice === 'manual'){
+          session.date = newDate;
+          if(newStartIso) session.calendarStartTime = newStartIso;
+          session.calendarEventId = null;
+          session.calendarId = null;
+          session.calendarEndTime = null;
+          saveState();
+          render();
+        }else{
+          // Vazgeç: revert to the original calendar time, discard the edit
+          session.date = originalDate;
+          session.calendarStartTime = originalStartTime;
+          render();
+        }
+      }
+    });
   });
   div.querySelector('.session-noshow-btn').addEventListener('click', ()=>{
     session.noShow = !session.noShow;
@@ -5542,6 +5626,13 @@ function renderSessionCard(client, session, index, defaultOpenId){
     session.adminNote = ev.target.value;
     saveState();
   });
+  const assessmentToggle = div.querySelector('.session-assessment-toggle');
+  if(assessmentToggle){
+    assessmentToggle.addEventListener('change', (ev)=>{
+      session.isAssessment = ev.target.checked;
+      saveState();
+    });
+  }
   if(!noInvoice){
     div.querySelector('.invoice-save-btn').addEventListener('click', ()=>{
       generateInvoiceForSession(client, session, 'save');
@@ -5950,7 +6041,7 @@ function computePersonalStats(){
       if(s.date.startsWith(thisMonthStr)){
         sessionsThisMonth++;
         if(s.paymentDone){
-          const rate = (c.profile && c.profile.ifhp) ? (205 * 0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+          const rate = (c.profile && c.profile.ifhp) ? ((s.isAssessment ? 820 : 205) * 0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
           revenueThisMonth += rate;
         }
       }
@@ -5975,7 +6066,7 @@ function computeMonthlyRevenue(monthsBack){
       if(!s.date || !isSessionDue(s) || !s.paymentDone) return;
       const key = s.date.slice(0,7);
       if(bucketMap[key]){
-        const rate = (c.profile && c.profile.ifhp) ? (205*0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+        const rate = (c.profile && c.profile.ifhp) ? ((s.isAssessment ? 820 : 205)*0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
         bucketMap[key].total += rate;
       }
     });
@@ -6535,7 +6626,7 @@ function collectInvoicedSessions(){
     if(c.profile && c.profile.noInvoice) return;
     (c.sessions||[]).forEach(s=>{
       if(!s.invoiceDone) return;
-      const rate = (c.profile && c.profile.ifhp) ? (205 * 0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+      const rate = (c.profile && c.profile.ifhp) ? ((s.isAssessment ? 820 : 205) * 0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
       rows.push({ clientId: c.id, clientName: c.name, session: s, date: s.date, ifhp: !!(c.profile && c.profile.ifhp), rate });
     });
   });
@@ -7192,14 +7283,18 @@ function computeOwedList(){
   (state.clients||[]).forEach(c=>{
     if(c.profile && c.profile.terminated) return;
     let unpaidCount = 0;
+    let total = 0;
     (c.sessions||[]).forEach(s=>{
       if(!isSessionDue(s)) return;
       if((s.disabledChecks||[]).includes('paymentDone')) return;
-      if(!s.paymentDone) unpaidCount++;
+      if(!s.paymentDone){
+        unpaidCount++;
+        const sessionRate = (c.profile && c.profile.ifhp) ? (s.isAssessment ? 820 : 205) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+        total += sessionRate;
+      }
     });
     if(unpaidCount === 0) return;
-    const rate = (c.profile && c.profile.ifhp) ? 205 : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
-    rows.push({ id: c.id, name: c.name, unpaidCount, total: unpaidCount * rate });
+    rows.push({ id: c.id, name: c.name, unpaidCount, total });
   });
   rows.sort((a,b)=> b.total - a.total);
   return rows;
