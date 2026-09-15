@@ -1299,18 +1299,18 @@
     gap:3px;
   }
   .cal-big-cell{
-    aspect-ratio:1;
+    height:30px;
     display:flex;
     flex-direction:column;
     align-items:center;
     justify-content:center;
-    gap:2px;
+    gap:1px;
     background:none;
     border:1px solid transparent;
-    border-radius:7px;
+    border-radius:6px;
     cursor:pointer;
     font-family:inherit;
-    font-size:12px;
+    font-size:11px;
     color:var(--ink);
   }
   .cal-big-cell.empty{cursor:default;}
@@ -1356,6 +1356,21 @@
     padding:10px 0;
   }
   .cal-selected-list{border-top:1px dashed var(--card-line); padding-top:10px;}
+  .cal-week-toggle-btn{
+    display:block;
+    width:100%;
+    background:none;
+    border:1px solid var(--card-line);
+    color:var(--muted);
+    font-family:inherit;
+    font-size:11.5px;
+    font-weight:600;
+    padding:6px 8px;
+    border-radius:7px;
+    cursor:pointer;
+    margin-bottom:10px;
+  }
+  .cal-week-toggle-btn:hover{color:var(--ink); border-color:var(--highlight-line);}
   .agenda-day-group{margin-bottom:14px;}
   .agenda-day-group:last-child{margin-bottom:0;}
   .agenda-day-header{
@@ -7531,6 +7546,7 @@ let calendarViewMode = 'month'; // 'day' | 'week' | 'month'
 let calendarViewModeInitialized = false;
 let calendarAnchorDate = todayIso(); // date used to compute the visible day/week/month range
 let calendarSelectedDate = todayIso(); // the specific day highlighted below the grid
+let weekShowFullWeek = false; // week view: show just the selected day, or the whole week
 let calendarViewCache = {}; // keyed by "mode:startIso" -> matched events for that range
 
 function computeUpcomingBirthdays(){
@@ -7952,16 +7968,30 @@ function renderCalendarSelectedList(byDate){
   }).join('');
 
   if(calendarViewMode === 'week'){
-    const { start } = getCalendarRangeForView();
-    let html = '';
-    for(let i=0;i<7;i++){
-      const d = new Date(start.getTime() + i*24*60*60*1000);
-      const iso = isoDate(d);
-      const items = byDate[iso] || [];
-      if(!items.length) continue;
-      html += `<div class="agenda-day-group"><div class="agenda-day-header">${turkishDayName(iso)}, ${formatShortDate(iso)}</div>${dayRowHtml(items)}</div>`;
+    let html;
+    if(weekShowFullWeek){
+      const { start } = getCalendarRangeForView();
+      let inner = '';
+      for(let i=0;i<7;i++){
+        const d = new Date(start.getTime() + i*24*60*60*1000);
+        const iso = isoDate(d);
+        const items = byDate[iso] || [];
+        if(!items.length) continue;
+        inner += `<div class="agenda-day-group"><div class="agenda-day-header">${turkishDayName(iso)}, ${formatShortDate(iso)}</div>${dayRowHtml(items)}</div>`;
+      }
+      html = `<button type="button" class="cal-week-toggle-btn" id="calWeekToggleBtn">📅 Sadece seçili günü göster</button>${inner || '<div class="cal-day-empty">Bu hafta danışan randevusu yok.</div>'}`;
+    }else{
+      const items = byDate[calendarSelectedDate] || [];
+      const inner = items.length
+        ? `<div class="agenda-day-group">${dayRowHtml(items)}</div>`
+        : `<div class="cal-day-empty">${formatShortDate(calendarSelectedDate)} için randevu yok.</div>`;
+      html = `<button type="button" class="cal-week-toggle-btn" id="calWeekToggleBtn">📆 Tüm Haftayı Göster</button>${inner}`;
     }
-    listBox.innerHTML = html || `<div class="cal-day-empty">Bu hafta danışan randevusu yok.</div>`;
+    listBox.innerHTML = html;
+    document.getElementById('calWeekToggleBtn').addEventListener('click', ()=>{
+      weekShowFullWeek = !weekShowFullWeek;
+      renderCalendarSelectedList(byDate);
+    });
   }else{
     const items = byDate[calendarSelectedDate] || [];
     listBox.innerHTML = items.length
