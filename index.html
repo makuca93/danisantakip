@@ -4183,12 +4183,8 @@ async function createCalendarEvent(client, opts){
     event.location = sessionLink.trim();
     event.description = `You can join our session by clicking the link in the Location field.`;
   }
-  if(opts.inviteClient && client.profile && client.profile.email){
-    event.attendees = [{ email: client.profile.email.trim() }];
-    const sp = client.profile.secondPerson;
-    if(sp && sp.email && sp.email.trim()){
-      event.attendees.push({ email: sp.email.trim() });
-    }
+  if(opts.inviteEmails && opts.inviteEmails.length){
+    event.attendees = opts.inviteEmails.map(email => ({ email }));
   }
 
   try{
@@ -4779,9 +4775,14 @@ function calendarPanelHtml(client){
           <option value="60">60 dakika</option>
         </select>
       </div>
-      <div class="field-block">
-        <label>&nbsp;</label>
-        <div class="tick-row"><input type="checkbox" class="cal-invite" ${client.profile && client.profile.email ? 'checked' : ''}><span>Danışanı davet et (${client.profile && client.profile.email ? escapeHtml(client.profile.email) + (client.profile.secondPerson && client.profile.secondPerson.email ? ' + ' + escapeHtml(client.profile.secondPerson.email) : '') : 'email yok'})</span></div>
+      <div class="field-block full" id="calInviteBlock">
+        <label>Davet Edilecekler</label>
+        ${client.profile && client.profile.secondPerson && client.profile.secondPerson.email ? `
+          <div class="tick-row"><input type="checkbox" class="cal-invite-primary" ${client.profile.email?'checked':''} ${client.profile.email?'':'disabled'}><span>${escapeHtml(client.name)}${client.profile.email ? ' (' + escapeHtml(client.profile.email) + ')' : ' (email yok)'}</span></div>
+          <div class="tick-row" style="margin-top:6px;"><input type="checkbox" class="cal-invite-second" checked><span>${escapeHtml(client.profile.secondPerson.name || 'İkinci kişi')} (${escapeHtml(client.profile.secondPerson.email)})</span></div>
+        ` : `
+          <div class="tick-row"><input type="checkbox" class="cal-invite" ${client.profile && client.profile.email ? 'checked' : ''}><span>Danışanı davet et (${client.profile && client.profile.email ? escapeHtml(client.profile.email) : 'email yok'})</span></div>
+        `}
       </div>
       <div class="field-block full">
         <div class="tick-row"><input type="checkbox" class="cal-repeat"><span>Her hafta aynı gün/saatte tekrarla</span></div>
@@ -5065,7 +5066,19 @@ function wireCalendarPanel(client){
     const timeRaw = dtBtn.getAttribute('data-time');
     const timeStr = parseAmPmTime(timeRaw);
     const durationMinutes = Number(panel.querySelector('.cal-duration').value);
-    const inviteClient = panel.querySelector('.cal-invite').checked;
+    const inviteEmails = [];
+    const singleInviteCb = panel.querySelector('.cal-invite');
+    const primaryInviteCb = panel.querySelector('.cal-invite-primary');
+    const secondInviteCb = panel.querySelector('.cal-invite-second');
+    if(singleInviteCb && singleInviteCb.checked && client.profile && client.profile.email){
+      inviteEmails.push(client.profile.email.trim());
+    }
+    if(primaryInviteCb && primaryInviteCb.checked && client.profile && client.profile.email){
+      inviteEmails.push(client.profile.email.trim());
+    }
+    if(secondInviteCb && secondInviteCb.checked && client.profile && client.profile.secondPerson && client.profile.secondPerson.email){
+      inviteEmails.push(client.profile.secondPerson.email.trim());
+    }
     const repeatWeekly = panel.querySelector('.cal-repeat').checked;
     const repeatWeeks = Math.max(2, Math.min(52, Number(panel.querySelector('.cal-repeat-weeks').value) || 8));
     if(!title || !dateStr || !timeRaw){
@@ -5107,7 +5120,7 @@ function wireCalendarPanel(client){
         btn.textContent = `Oluşturuluyor… (${i+1}/${repeatWeeks})`;
         const d = new Date(baseDate.getTime() + i*7*24*60*60*1000);
         const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        const created = await createCalendarEvent(client, { title, dateStr: dStr, timeStr, durationMinutes, inviteClient });
+        const created = await createCalendarEvent(client, { title, dateStr: dStr, timeStr, durationMinutes, inviteEmails });
         if(created){
           successCount++;
           liveClient.sessions.push({
@@ -5133,7 +5146,7 @@ function wireCalendarPanel(client){
     }
 
     btn.textContent = 'Oluşturuluyor…';
-    const created = await createCalendarEvent(client, { title, dateStr, timeStr, durationMinutes, inviteClient });
+    const created = await createCalendarEvent(client, { title, dateStr, timeStr, durationMinutes, inviteEmails });
     btn.disabled = false; btn.textContent = 'Randevu Oluştur';
     if(created){
       alert('Randevu Google Takvimine eklendi.');
