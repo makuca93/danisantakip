@@ -1670,16 +1670,6 @@
   .history-row-action{font-size:13px; font-weight:600; color:var(--ink);}
   .history-row-time{font-size:11px; color:var(--muted); flex-shrink:0; white-space:nowrap;}
   .history-row-details{font-size:12px; color:var(--muted); margin-top:2px;}
-  .note-search-result{
-    padding:9px 10px;
-    border-radius:8px;
-    cursor:pointer;
-    margin-bottom:4px;
-  }
-  .note-search-result:hover{background:var(--neutral-bg);}
-  .note-search-result-top{display:flex; justify-content:space-between; gap:10px; font-size:13px;}
-  .note-search-result-type{font-size:11px; color:var(--muted); flex-shrink:0;}
-  .note-search-result-snippet{font-size:12px; color:var(--muted); margin-top:2px; line-height:1.4;}
   .session-resync-btn{
     background:none;
     border:1px solid var(--card-line);
@@ -7804,23 +7794,6 @@ function computeUpcomingBirthdays(){
   return results;
 }
 
-function searchAllNotes(query){
-  const q = normalizeForSearch(query.trim());
-  if(!q) return [];
-  const results = [];
-  (state.clients||[]).forEach(c=>{
-    if(c.generalAdminNote && normalizeForSearch(c.generalAdminNote).includes(q)){
-      results.push({ clientId: c.id, clientName: clientDisplayName(c), type: 'Genel Not', snippet: c.generalAdminNote });
-    }
-    (c.sessions||[]).forEach(s=>{
-      if(s.adminNote && normalizeForSearch(s.adminNote).includes(q)){
-        results.push({ clientId: c.id, clientName: clientDisplayName(c), type: `Seans Notu (${formatShortDate(s.date)})`, snippet: s.adminNote });
-      }
-    });
-  });
-  return results;
-}
-
 function birthdayBannerHtml(){
   const upcoming = computeUpcomingBirthdays();
   if(!upcoming.length) return '';
@@ -8156,11 +8129,6 @@ function renderHome(){
     <div id="clientHeader"><h2>Ana Sayfa</h2></div>
     <div id="clientSub">${tasks.length} bekleyen iş • sağda danışan randevuları</div>
     ${birthdayBannerHtml()}
-    <div class="settings-section" id="noteSearchSection">
-      <h3>🔍 Notlarda Ara</h3>
-      <input type="text" id="noteSearchInput" placeholder="Genel ve seans notlarında ara…" style="width:100%; font-family:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--card-line); border-radius:7px; background:#fdfcfd; color:var(--ink);">
-      <div id="noteSearchResults" style="margin-top:10px;"></div>
-    </div>
     <div class="home-mobile-tabs">
       <button class="home-tab-btn ${homeMobileTab==='tasks'?'active':''}" data-tab="tasks">✅ Görevler</button>
       <button class="home-tab-btn ${homeMobileTab==='calendar'?'active':''}" data-tab="calendar">📅 Takvim</button>
@@ -8209,26 +8177,6 @@ function renderHome(){
   `;
 
   loadHomeCalendarView();
-
-  document.getElementById('noteSearchInput').addEventListener('input', (ev)=>{
-    const box = document.getElementById('noteSearchResults');
-    const val = ev.target.value;
-    if(!val.trim()){ box.innerHTML = ''; return; }
-    const results = searchAllNotes(val);
-    box.innerHTML = results.length ? results.map(r=>`
-      <div class="note-search-result" data-client-id="${r.clientId}">
-        <div class="note-search-result-top"><strong>${escapeHtml(r.clientName)}</strong><span class="note-search-result-type">${escapeHtml(r.type)}</span></div>
-        <div class="note-search-result-snippet">${escapeHtml(r.snippet.slice(0,140))}${r.snippet.length>140?'…':''}</div>
-      </div>`).join('') : '<div class="todo-empty">Eşleşme yok.</div>';
-    box.querySelectorAll('.note-search-result').forEach(row=>{
-      row.addEventListener('click', ()=>{
-        activeClientId = row.getAttribute('data-client-id');
-        mainView = 'client';
-        document.body.classList.add('mobile-detail');
-        render();
-      });
-    });
-  });
 
   document.querySelectorAll('.owed-client-name.cal-client-link').forEach(link=>{
     link.addEventListener('click', ()=>{
