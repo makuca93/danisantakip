@@ -1644,13 +1644,6 @@
     cursor:pointer;
   }
   .session-datetime-btn:hover{background:var(--neutral-bg);}
-  .session-time-label{
-    font-size:12px;
-    color:var(--muted);
-    font-weight:600;
-    flex-shrink:0;
-    white-space:nowrap;
-  }
   .session-link-badge{
     font-size:10.5px;
     font-weight:600;
@@ -1661,6 +1654,32 @@
   }
   .session-link-badge.linked{background:#e3edfb; color:#3a6fb0;}
   .session-link-badge.manual{background:#f0f0f0; color:var(--muted);}
+  .client-history-panel{display:none;}
+  .client-history-panel.open{display:block; margin-bottom:16px;}
+  .client-history-list{
+    background:var(--card);
+    border:1px solid var(--card-line);
+    border-radius:10px;
+    padding:12px 14px;
+    max-height:320px;
+    overflow-y:auto;
+  }
+  .history-row{padding:8px 0; border-bottom:1px dashed var(--card-line);}
+  .history-row:last-child{border-bottom:none;}
+  .history-row-top{display:flex; justify-content:space-between; gap:10px; align-items:baseline;}
+  .history-row-action{font-size:13px; font-weight:600; color:var(--ink);}
+  .history-row-time{font-size:11px; color:var(--muted); flex-shrink:0; white-space:nowrap;}
+  .history-row-details{font-size:12px; color:var(--muted); margin-top:2px;}
+  .note-search-result{
+    padding:9px 10px;
+    border-radius:8px;
+    cursor:pointer;
+    margin-bottom:4px;
+  }
+  .note-search-result:hover{background:var(--neutral-bg);}
+  .note-search-result-top{display:flex; justify-content:space-between; gap:10px; font-size:13px;}
+  .note-search-result-type{font-size:11px; color:var(--muted); flex-shrink:0;}
+  .note-search-result-snippet{font-size:12px; color:var(--muted); margin-top:2px; line-height:1.4;}
   .session-resync-btn{
     background:none;
     border:1px solid var(--card-line);
@@ -2167,7 +2186,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut }
     from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp }
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs }
     from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -2191,6 +2210,7 @@
   window.FB = {
     auth, db, provider, signInWithPopup, signInWithRedirect, getRedirectResult,
     onAuthStateChanged, signOut, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp,
+    query, where, orderBy, limit, getDocs,
     credentialFromResult: GoogleAuthProvider.credentialFromResult
   };
   window.dispatchEvent(new Event('fb-ready'));
@@ -2913,7 +2933,44 @@ async function saveState(){
   }
 }
 
-async function logAudit(action, details){
+async function loadClientHistory(client){
+  const panel = document.getElementById('clientHistoryPanel');
+  if(!panel) return;
+  panel.innerHTML = '<div class="todo-empty">Yükleniyor…</div>';
+  try{
+    const personId = canonicalPersonId(currentUser.email);
+    const ref = window.FB.collection(window.FB.db, 'users', personId, 'auditLog');
+    const q = window.FB.query(ref, window.FB.where('clientId', '==', client.id), window.FB.limit(50));
+    const snap = await window.FB.getDocs(q);
+    const entries = [];
+    snap.forEach(docSnap => entries.push(docSnap.data()));
+    entries.sort((a,b)=>{
+      const ta = a.at && a.at.toMillis ? a.at.toMillis() : 0;
+      const tb = b.at && b.at.toMillis ? b.at.toMillis() : 0;
+      return tb - ta;
+    });
+    if(!entries.length){
+      panel.innerHTML = '<div class="todo-empty">Bu danışanla ilgili henüz bir geçmiş kaydı yok.</div>';
+      return;
+    }
+    panel.innerHTML = `<div class="client-history-list">${entries.map(e=>{
+      const when = e.at && e.at.toDate ? e.at.toDate() : null;
+      const whenLabel = when ? `${turkishDayName(isoDate(when))}, ${formatShortDate(isoDate(when))} — ${formatEventTime(when.toISOString())}` : '';
+      return `<div class="history-row">
+        <div class="history-row-top">
+          <span class="history-row-action">${escapeHtml(e.action)}</span>
+          <span class="history-row-time">${whenLabel}</span>
+        </div>
+        ${e.details ? `<div class="history-row-details">${escapeHtml(e.details)}</div>` : ''}
+      </div>`;
+    }).join('')}</div>`;
+  }catch(e){
+    console.error('Geçmiş yüklenemedi', e);
+    panel.innerHTML = '<div class="todo-empty">Geçmiş yüklenemedi.</div>';
+  }
+}
+
+async function logAudit(action, details, clientId){
   if(!currentUser) return;
   try{
     const personId = canonicalPersonId(currentUser.email);
@@ -2921,6 +2978,7 @@ async function logAudit(action, details){
     await window.FB.addDoc(ref, {
       action,
       details: details || '',
+      clientId: clientId || null,
       at: window.FB.serverTimestamp(),
       by: currentUser.email || ''
     });
@@ -3634,10 +3692,12 @@ function renderMain(){
     <div class="action-row">
       <button class="add-session-toggle" id="toggleTodoBtn">✅ Yapılacaklar</button>
       <button class="add-session-toggle" id="toggleCalendarBtn">📅 Randevu</button>
+      <button class="add-session-toggle" id="toggleHistoryBtn">🕐 Geçmiş</button>
       <button class="add-session-toggle" id="toggleFormBtn">+ Yeni seans kaydı ekle</button>
     </div>
     ${todoPanelHtml(client)}
     ${calendarPanelHtml(client)}
+    <div id="clientHistoryPanel" class="client-history-panel"></div>
     ${sessionFormHtml()}
     <div id="sessionsWrap"></div>
   `;
@@ -3660,6 +3720,7 @@ function renderMain(){
     document.getElementById('todoPanel').classList.remove('open');
     document.getElementById('calendarPanel').classList.remove('open');
     document.getElementById('sessionForm').classList.remove('open');
+    document.getElementById('clientHistoryPanel').classList.remove('open');
   }
 
   document.getElementById('toggleProfileBtn').addEventListener('click', ()=>{
@@ -3699,6 +3760,16 @@ function renderMain(){
     document.getElementById('calendarPanel').classList.add('open');
   }
   wireCalendarPanel(client);
+
+  document.getElementById('toggleHistoryBtn').addEventListener('click', ()=>{
+    const panel = document.getElementById('clientHistoryPanel');
+    const wasOpen = panel.classList.contains('open');
+    closeAllActionPanels();
+    if(!wasOpen){
+      panel.classList.add('open');
+      loadClientHistory(client);
+    }
+  });
 
   document.getElementById('toggleFormBtn').addEventListener('click', ()=>{
     const panel = document.getElementById('sessionForm');
@@ -3816,7 +3887,9 @@ async function cancelCalendarEvent(eventId, calendarId, sendUpdates){
       method: 'DELETE',
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    return res.ok || res.status === 410 || res.status === 404;
+    const ok = res.ok || res.status === 410 || res.status === 404;
+    if(ok) calendarViewCache = {};
+    return ok;
   }catch(e){
     return false;
   }
@@ -4016,7 +4089,9 @@ async function rescheduleCalendarEvent(eventId, dateStr, timeStr, calendarId){
         end: { dateTime: newEnd.toISOString() }
       })
     });
-    return res.ok;
+    const ok = res.ok;
+    if(ok) calendarViewCache = {};
+    return ok;
   }catch(e){
     return false;
   }
@@ -4199,6 +4274,7 @@ async function createCalendarEvent(client, opts){
       return null;
     }
     const data = await res.json();
+    calendarViewCache = {};
     return { id: data.id, startIso: start.toISOString(), endIso: end.toISOString() };
   }catch(e){
     alert('Randevu oluşturulamadı: ' + e.message);
@@ -4526,7 +4602,7 @@ async function resolveInvoiceDetails(client, session){
     saveState();
   }
 
-  logAudit('fatura/makbuz hazırlandı', `${client.name} - CA$${rate.toFixed(2)}${invoiceNumber ? ' - #'+invoiceNumber : ''}`);
+  logAudit('fatura/makbuz hazırlandı', `${client.name} - CA$${rate.toFixed(2)}${invoiceNumber ? ' - #'+invoiceNumber : ''}`, client.id);
 
   return { doc, filename, rate, invoiceNumber };
 }
@@ -5105,6 +5181,8 @@ function wireCalendarPanel(client){
       client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
       markPreviousSessionAsNext(client, dateStr, title);
       saveState();
+      logAudit('seans oluşturuldu (elle)', `${client.name} - ${formatShortDate(dateStr)}`, client.id);
+      calendarViewCache = {};
       btn.disabled = false; btn.textContent = 'Randevu Oluştur';
       alert('Geçmiş tarihli seans notu oluşturuldu (Takvim daveti gönderilmedi).');
       panel.classList.remove('open');
@@ -5135,6 +5213,8 @@ function wireCalendarPanel(client){
       }
       liveClient.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
       saveState();
+      if(successCount) logAudit('randevu oluşturuldu (haftalık tekrar)', `${client.name} - ${successCount} hafta`, client.id);
+      calendarViewCache = {};
       btn.disabled = false; btn.textContent = 'Randevu Oluştur';
       alert(`${successCount} / ${repeatWeeks} randevu Google Takvimine eklendi.`);
       calendarCheckedClientIds.delete(client.id);
@@ -5161,6 +5241,8 @@ function wireCalendarPanel(client){
       liveClient.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
       markPreviousSessionAsNext(client, dateStr, title);
       saveState();
+      logAudit('randevu oluşturuldu', `${client.name} - ${formatShortDate(dateStr)}`, client.id);
+      calendarViewCache = {};
       calendarCheckedClientIds.delete(client.id);
       panel.classList.remove('open');
       render();
@@ -5777,10 +5859,12 @@ function renderSessionCard(client, session, index, defaultOpenId){
       }
       client.sessions = client.sessions.filter(s=>s.id!==session.id);
       saveState(); render();
+      logAudit('seans silindi', `${client.name} - ${formatShortDate(session.date)}`, client.id);
     }else{
       if(confirm('Bu kayıt silinsin mi?')){
         client.sessions = client.sessions.filter(s=>s.id!==session.id);
         saveState(); render();
+        logAudit('seans silindi', `${client.name} - ${formatShortDate(session.date)}`, client.id);
       }
     }
   });
@@ -5998,7 +6082,7 @@ document.getElementById('newClientBtn').addEventListener('click', ()=>{
   document.body.classList.add('mobile-detail');
   openProfileOnNextRender = true;
   saveState();
-  logAudit('danışan eklendi', '(yeni)');
+  logAudit('danışan eklendi', '(yeni)', client.id);
   render();
 });
 
@@ -6336,7 +6420,7 @@ function computePersonalStats(){
       if(s.date.startsWith(thisYearStr)) sessionsThisYear++;
     });
   });
-  return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth, monthlyRevenue: computeMonthlyRevenue(12) };
+  return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth, monthlyRevenue: computeMonthlyRevenue(12), monthlyNoShowRate: computeMonthlyNoShowRate(12) };
 }
 
 function computeMonthlyRevenue(monthsBack){
@@ -6380,6 +6464,73 @@ function getFilteredMonthlyRevenue(filter){
     key: b.key, label: b.label,
     total: (kubilayBuckets ? kubilayBuckets[i].total : 0) + (duyguBuckets ? duyguBuckets[i].total : 0)
   }));
+}
+
+function computeMonthlyNoShowRate(monthsBack){
+  const now = new Date();
+  const buckets = [];
+  const monthNames = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  for(let i = monthsBack-1; i >= 0; i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    buckets.push({ key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: monthNames[d.getMonth()], total: 0, noShow: 0 });
+  }
+  const bucketMap = {};
+  buckets.forEach(b=>bucketMap[b.key]=b);
+  (state.clients||[]).forEach(c=>{
+    (c.sessions||[]).forEach(s=>{
+      if(!s.date || !isSessionDue(s)) return;
+      const key = s.date.slice(0,7);
+      if(bucketMap[key]){
+        bucketMap[key].total++;
+        if(s.noShow) bucketMap[key].noShow++;
+      }
+    });
+  });
+  return buckets.map(b => ({ key: b.key, label: b.label, total: (b.total > 0) ? Math.round((b.noShow / b.total) * 100) : 0, sessionCount: b.total }));
+}
+
+function getFilteredMonthlyNoShowRate(filter){
+  const shared = (practiceState && practiceState.stats) || {};
+  const me = currentPersonId();
+  const myBuckets = computeMonthlyNoShowRate(12);
+  const kubilayBuckets = (me === 'kubilay') ? myBuckets : (shared.kubilay && shared.kubilay.monthlyNoShowRate);
+  const duyguBuckets = (me === 'duygu') ? myBuckets : (shared.duygu && shared.duygu.monthlyNoShowRate);
+
+  if(filter === 'kubilay') return kubilayBuckets || null;
+  if(filter === 'duygu') return duyguBuckets || null;
+  if(!kubilayBuckets && !duyguBuckets) return null;
+  const base = kubilayBuckets || duyguBuckets;
+  return base.map((b,i)=>{
+    const kCount = kubilayBuckets ? (kubilayBuckets[i].sessionCount||0) : 0;
+    const dCount = duyguBuckets ? (duyguBuckets[i].sessionCount||0) : 0;
+    const kNoShow = kubilayBuckets ? Math.round(kubilayBuckets[i].total/100 * kCount) : 0;
+    const dNoShow = duyguBuckets ? Math.round(duyguBuckets[i].total/100 * dCount) : 0;
+    const totalCount = kCount + dCount;
+    return { key: b.key, label: b.label, total: totalCount > 0 ? Math.round((kNoShow+dNoShow)/totalCount*100) : 0, sessionCount: totalCount };
+  });
+}
+
+function noShowChartSvg(filter){
+  const buckets = getFilteredMonthlyNoShowRate(filter);
+  if(!buckets){
+    return `<div class="todo-empty">${filter==='kubilay'?'Kubilay':'Duygu'} henüz veri paylaşmadı.</div>`;
+  }
+  const max = Math.max(...buckets.map(b=>b.total), 10);
+  const width = 600, height = 190, barGap = 6;
+  const chartHeight = 130;
+  const topPad = 24;
+  const barWidth = (width - barGap*(buckets.length-1)) / buckets.length;
+  const bars = buckets.map((b,i)=>{
+    const barHeight = b.total > 0 ? Math.max(3, (b.total/max) * chartHeight) : 0;
+    const x = i * (barWidth + barGap);
+    const y = chartHeight - barHeight + topPad;
+    const label = b.total > 0 ? `<text x="${(x+barWidth/2).toFixed(1)}" y="${(y-6).toFixed(1)}" font-size="10" font-weight="600" fill="#2b2d33" text-anchor="middle">%${b.total}</text>` : '';
+    return `
+      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barHeight.toFixed(1)}" rx="3" fill="#f0c8c8"><title>${b.label}: %${b.total} (${b.sessionCount} seans)</title></rect>
+      ${label}
+      <text x="${(x+barWidth/2).toFixed(1)}" y="${height-8}" font-size="10" fill="#6b6f78" text-anchor="middle">${b.label}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${width} ${height}" style="width:100%; height:auto; display:block;">${bars}</svg>`;
 }
 
 function revenueChartSvg(filter){
@@ -6652,6 +6803,10 @@ function renderPracticeContent(){
           <h4 class="revenue-chart-title">📈 Son 12 Ay Gelir (${practiceStatsFilter==='toplam'?'toplam':practiceStatsFilter==='kubilay'?'Kubilay':'Duygu'})</h4>
           ${revenueChartSvg(practiceStatsFilter)}
         </div>
+        <div class="revenue-chart-block">
+          <h4 class="revenue-chart-title">🚫 Son 12 Ay Gelmedi Oranı (${practiceStatsFilter==='toplam'?'toplam':practiceStatsFilter==='kubilay'?'Kubilay':'Duygu'})</h4>
+          ${noShowChartSvg(practiceStatsFilter)}
+        </div>
       </div>
     </div>
 
@@ -6922,6 +7077,68 @@ function collectInvoicedSessions(){
   return rows;
 }
 
+function loadJsZipScript(){
+  return new Promise((resolve, reject)=>{
+    if(window.JSZip){ resolve(); return; }
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+}
+
+async function buildTaxPackageZip(rows, btn){
+  if(!rows.length){
+    alert('İndirilecek fatura yok.');
+    return;
+  }
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  try{
+    btn.textContent = '⏳ Hazırlanıyor…';
+    await loadJsZipScript();
+    const zip = new window.JSZip();
+    let done = 0;
+    for(const r of rows){
+      const c = state.clients.find(cl=>cl.id===r.clientId);
+      if(!c) continue;
+      const ifhp = !!(c.profile && c.profile.ifhp);
+      const isAssessment = ifhp && !!r.session.isAssessment;
+      const fullRate = ifhp ? (isAssessment ? 820 : 205) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+      const invoiceNumber = r.session.lastInvoiceNumber || '';
+      const doc = buildInvoiceDoc(c, r.session, ifhp, fullRate, invoiceNumber, c.name, isAssessment);
+      const filename = invoiceFilename(c, r.session);
+      zip.file(filename, doc.output('blob'));
+      done++;
+      btn.textContent = `⏳ Hazırlanıyor… (${done}/${rows.length})`;
+    }
+    const csvHeader = ['Tarih','Danışan','Tutar (CAD)','IFHP'];
+    const csvLines = [csvHeader.join(',')];
+    rows.forEach(r=>{
+      csvLines.push([r.date||'', `"${(r.clientName||'').replace(/"/g,'""')}"`, r.rate.toFixed(2), r.ifhp ? 'Evet' : 'Hayır'].join(','));
+    });
+    zip.file('faturalar-ozet.csv', csvLines.join('\n'));
+
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement('a');
+    const yearLabel = invoicesYearFilter === 'all' ? 'tum-yillar' : invoicesYearFilter;
+    a.href = url;
+    a.download = `vergi-paketi-${yearLabel}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }catch(e){
+    console.error('Vergi paketi oluşturulamadı', e);
+    alert('Vergi paketi oluşturulamadı, tekrar dener misin?');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
 function downloadInvoicesCsv(rows){
   const header = ['Tarih','Danışan','Tutar (CAD)','IFHP'];
   const lines = [header.join(',')];
@@ -7064,6 +7281,7 @@ function renderInvoicesPage(){
         </select>
         <input type="text" id="invoicesSearchInput" placeholder="Danışan ara…" value="${escapeAttr(invoicesSearchQuery)}">
         <button class="settings-btn" id="invoicesCsvBtn" style="width:auto;">📊 CSV İndir</button>
+        <button class="settings-btn" id="taxPackageBtn" style="width:auto;">📦 Vergi Paketi (ZIP)</button>
       </div>
       <div class="owed-total" style="margin-top:14px;">Toplam (${rows.length} fatura): <strong>CA$${grandTotal.toFixed(0)}</strong></div>
       <div class="invoices-bulk-row">
@@ -7217,6 +7435,9 @@ function wireInvoicesPage(rows){
   });
   document.getElementById('invoicesCsvBtn').addEventListener('click', ()=>{
     downloadInvoicesCsv(rows);
+  });
+  document.getElementById('taxPackageBtn').addEventListener('click', (ev)=>{
+    buildTaxPackageZip(rows, ev.target);
   });
 
   function updateInvoiceSelectionUI(){
@@ -7554,8 +7775,6 @@ function matchClientEvents(events){
   return matched;
 }
 
-let homeCalendarCache = null;
-let homePastCalendarCache = null;
 let calendarViewMode = 'month'; // 'day' | 'week' | 'month'
 let calendarViewModeInitialized = false;
 let calendarAnchorDate = todayIso(); // date used to compute the visible day/week/month range
@@ -7582,6 +7801,23 @@ function computeUpcomingBirthdays(){
     }
   });
   results.sort((a,b)=>a.diffDays-b.diffDays);
+  return results;
+}
+
+function searchAllNotes(query){
+  const q = normalizeForSearch(query.trim());
+  if(!q) return [];
+  const results = [];
+  (state.clients||[]).forEach(c=>{
+    if(c.generalAdminNote && normalizeForSearch(c.generalAdminNote).includes(q)){
+      results.push({ clientId: c.id, clientName: clientDisplayName(c), type: 'Genel Not', snippet: c.generalAdminNote });
+    }
+    (c.sessions||[]).forEach(s=>{
+      if(s.adminNote && normalizeForSearch(s.adminNote).includes(q)){
+        results.push({ clientId: c.id, clientName: clientDisplayName(c), type: `Seans Notu (${formatShortDate(s.date)})`, snippet: s.adminNote });
+      }
+    });
+  });
   return results;
 }
 
@@ -7633,131 +7869,6 @@ function owedListHtml(){
           <div class="owed-amount">CA$${r.total.toFixed(0)}</div>
         </div>`).join('')}
     </div>`;
-}
-
-async function loadHomeCalendarAgenda(retryCount){
-  retryCount = retryCount || 0;
-  const box = document.getElementById('homeCalendarList');
-  if(!box) return;
-
-  if(homeCalendarCache !== null){
-    box.innerHTML = homeCalendarCache;
-    wireHomeCalendarButtons(box);
-    return;
-  }
-
-  const emailMap = getKnownClientEmails();
-  if(!Object.keys(emailMap).length){
-    homeCalendarCache = `<div class="cal-day-empty">Email'i kayıtlı danışan yok — profilden email ekleyince burada görünür.</div>`;
-    box.innerHTML = homeCalendarCache;
-    return;
-  }
-
-  const events = await fetchUpcomingRangeEvents(30);
-  if(!document.getElementById('homeCalendarList')) return; // view changed while loading
-  if(events === null){
-    if(retryCount < 3){
-      // Right after login the Google access token may not be captured yet — retry silently a few times.
-      await new Promise(r => setTimeout(r, 1500));
-      if(!document.getElementById('homeCalendarList')) return;
-      return loadHomeCalendarAgenda(retryCount + 1);
-    }
-    box.innerHTML = `<div class="cal-day-empty" style="color:var(--muted);">Randevular yüklenemedi (Google bağlantısı gerekebilir).</div>`;
-    return; // don't cache a failure, allow retry on next tab/view
-  }
-
-  const matched = [];
-  events.forEach(ev=>{
-    const attendees = ev.attendees || [];
-    const hit = attendees.find(a => emailMap[(a.email||'').trim().toLowerCase()]);
-    if(hit){
-      matched.push({ ev, client: emailMap[hit.email.trim().toLowerCase()] });
-    }
-  });
-
-  if(!matched.length){
-    homeCalendarCache = `<div class="cal-day-empty">Önümüzdeki 30 günde danışan randevusu yok.</div>`;
-    box.innerHTML = homeCalendarCache;
-    return;
-  }
-
-  const byDate = {};
-  matched.forEach(({ev,client})=>{
-    const dt = ev.start && (ev.start.dateTime || ev.start.date);
-    if(!dt) return;
-    const dateStr = dt.slice(0,10);
-    if(!byDate[dateStr]) byDate[dateStr] = [];
-    byDate[dateStr].push({ ev, client });
-  });
-
-  homeCalendarCache = Object.keys(byDate).sort().map(dateStr=>{
-    const rows = byDate[dateStr].map(({ev,client})=>{
-      const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
-      return `<div class="cal-day-event-row" data-event-id="${ev.id}" data-event-date="${dateStr}" data-client-id="${client.id}" data-calendar-id="${escapeAttr(ev._calendarId||'primary')}">
-        <span class="cal-day-event-time">${timeLabel}</span>
-        <span class="cal-day-event-title cal-client-link" data-client-id="${client.id}">${escapeHtml(clientDisplayName(client))}</span>
-        <button class="cal-event-edit-btn" type="button" title="Yeniden planla">✏️</button>
-        <button class="cal-event-cancel-btn" type="button" title="İptal et">✕</button>
-      </div>`;
-    }).join('');
-    return `<div class="agenda-day-group"><div class="agenda-day-header">${turkishDayName(dateStr)}, ${formatShortDate(dateStr)}</div>${rows}</div>`;
-  }).join('');
-  box.innerHTML = homeCalendarCache;
-  wireHomeCalendarButtons(box);
-}
-
-async function loadHomePastAgenda(){
-  const box = document.getElementById('homeCalendarList');
-  if(!box) return;
-
-  if(homePastCalendarCache !== null){
-    box.innerHTML = homePastCalendarCache;
-    wirePastCalendarButtons(box);
-    return;
-  }
-
-  const emailMap = getKnownClientEmails();
-  if(!Object.keys(emailMap).length){
-    homePastCalendarCache = `<div class="cal-day-empty">Email'i kayıtlı danışan yok — profilden email ekleyince burada görünür.</div>`;
-    box.innerHTML = homePastCalendarCache;
-    return;
-  }
-
-  const events = await fetchPastRangeEvents(60);
-  if(!document.getElementById('homeCalendarList')) return;
-  if(events === null){
-    box.innerHTML = `<div class="cal-day-empty" style="color:var(--muted);">Randevular yüklenemedi (Google bağlantısı gerekebilir).</div>`;
-    return;
-  }
-
-  const matched = matchClientEvents(events);
-  if(!matched.length){
-    homePastCalendarCache = `<div class="cal-day-empty">Son 60 günde geçmiş danışan randevusu yok.</div>`;
-    box.innerHTML = homePastCalendarCache;
-    return;
-  }
-
-  const byDate = {};
-  matched.forEach(({ev,client})=>{
-    const dt = ev.start && (ev.start.dateTime || ev.start.date);
-    if(!dt) return;
-    const dateStr = dt.slice(0,10);
-    if(!byDate[dateStr]) byDate[dateStr] = [];
-    byDate[dateStr].push({ ev, client });
-  });
-
-  homePastCalendarCache = Object.keys(byDate).sort().reverse().map(dateStr=>{
-    const rows = byDate[dateStr].map(({ev,client})=>{
-      const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
-      return `<div class="cal-day-event-row" data-client-id="${client.id}">
-        <span class="cal-day-event-time">${timeLabel}</span>
-        <span class="cal-day-event-title cal-client-link" data-client-id="${client.id}">${escapeHtml(clientDisplayName(client))}</span>
-      </div>`;
-    }).join('');
-    return `<div class="agenda-day-group"><div class="agenda-day-header">${turkishDayName(dateStr)}, ${formatShortDate(dateStr)}</div>${rows}</div>`;
-  }).join('');
-  box.innerHTML = homePastCalendarCache;
-  wirePastCalendarButtons(box);
 }
 
 function wirePastCalendarButtons(box){
@@ -8015,70 +8126,6 @@ function renderCalendarSelectedList(byDate){
   wirePastCalendarButtons(listBox);
 }
 
-function wireHomeCalendarButtons(box){
-  box.querySelectorAll('.cal-client-link').forEach(link=>{
-    link.addEventListener('click', ()=>{
-      const clientId = link.getAttribute('data-client-id');
-      activeClientId = clientId;
-      mainView = 'client';
-      document.body.classList.add('mobile-detail');
-      render();
-    });
-  });
-
-  box.querySelectorAll('.cal-event-cancel-btn').forEach(btn=>{
-    btn.addEventListener('click', async (ev)=>{
-      const row = ev.target.closest('.cal-day-event-row');
-      const eventId = row.getAttribute('data-event-id');
-      const clientId = row.getAttribute('data-client-id');
-      const calendarId = row.getAttribute('data-calendar-id') || 'primary';
-      if(!confirm('Bu randevu iptal edilsin mi? Danışana bilgilendirme gider.')) return;
-      btn.disabled = true;
-      const ok = await cancelCalendarEvent(eventId, calendarId);
-      if(ok){
-        const client = state.clients.find(c=>c.id===clientId);
-        if(client) removeSessionForCalendarEvent(client, eventId);
-        homeCalendarCache = null;
-        loadHomeCalendarAgenda();
-      }else{
-        alert('Randevu iptal edilemedi.');
-        btn.disabled = false;
-      }
-    });
-  });
-  box.querySelectorAll('.cal-event-edit-btn').forEach(btn=>{
-    btn.addEventListener('click', (ev)=>{
-      const row = ev.target.closest('.cal-day-event-row');
-      const eventId = row.getAttribute('data-event-id');
-      const clientId = row.getAttribute('data-client-id');
-      const calendarId = row.getAttribute('data-calendar-id') || 'primary';
-      const currentDate = row.getAttribute('data-event-date');
-      const timeEl = row.querySelector('.cal-day-event-time');
-      const currentTimeLabel = (timeEl && timeEl.textContent !== 'Tüm gün') ? timeEl.textContent : '10:00 AM';
-
-      openReschedulePopover({
-        initialDate: currentDate,
-        initialTimeLabel: currentTimeLabel,
-        onConfirm: async (newDate, newTimeLabel)=>{
-          const newTime = parseAmPmTime(newTimeLabel);
-          if(!newTime) return;
-          btn.disabled = true;
-          const ok = await rescheduleCalendarEvent(eventId, newDate, newTime, calendarId);
-          if(ok){
-            const client = state.clients.find(c=>c.id===clientId);
-            if(client) syncSessionDateForCalendarEvent(client, eventId, newDate);
-            homeCalendarCache = null;
-            loadHomeCalendarAgenda();
-          }else{
-            alert('Randevu güncellenemedi.');
-            btn.disabled = false;
-          }
-        }
-      });
-    });
-  });
-}
-
 function renderHome(){
   const main = document.getElementById('main');
   if(!state.generalTodos) state.generalTodos = [];
@@ -8109,6 +8156,11 @@ function renderHome(){
     <div id="clientHeader"><h2>Ana Sayfa</h2></div>
     <div id="clientSub">${tasks.length} bekleyen iş • sağda danışan randevuları</div>
     ${birthdayBannerHtml()}
+    <div class="settings-section" id="noteSearchSection">
+      <h3>🔍 Notlarda Ara</h3>
+      <input type="text" id="noteSearchInput" placeholder="Genel ve seans notlarında ara…" style="width:100%; font-family:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--card-line); border-radius:7px; background:#fdfcfd; color:var(--ink);">
+      <div id="noteSearchResults" style="margin-top:10px;"></div>
+    </div>
     <div class="home-mobile-tabs">
       <button class="home-tab-btn ${homeMobileTab==='tasks'?'active':''}" data-tab="tasks">✅ Görevler</button>
       <button class="home-tab-btn ${homeMobileTab==='calendar'?'active':''}" data-tab="calendar">📅 Takvim</button>
@@ -8157,6 +8209,27 @@ function renderHome(){
   `;
 
   loadHomeCalendarView();
+
+  document.getElementById('noteSearchInput').addEventListener('input', (ev)=>{
+    const box = document.getElementById('noteSearchResults');
+    const val = ev.target.value;
+    if(!val.trim()){ box.innerHTML = ''; return; }
+    const results = searchAllNotes(val);
+    box.innerHTML = results.length ? results.map(r=>`
+      <div class="note-search-result" data-client-id="${r.clientId}">
+        <div class="note-search-result-top"><strong>${escapeHtml(r.clientName)}</strong><span class="note-search-result-type">${escapeHtml(r.type)}</span></div>
+        <div class="note-search-result-snippet">${escapeHtml(r.snippet.slice(0,140))}${r.snippet.length>140?'…':''}</div>
+      </div>`).join('') : '<div class="todo-empty">Eşleşme yok.</div>';
+    box.querySelectorAll('.note-search-result').forEach(row=>{
+      row.addEventListener('click', ()=>{
+        activeClientId = row.getAttribute('data-client-id');
+        mainView = 'client';
+        document.body.classList.add('mobile-detail');
+        render();
+      });
+    });
+  });
+
   document.querySelectorAll('.owed-client-name.cal-client-link').forEach(link=>{
     link.addEventListener('click', ()=>{
       const clientId = link.getAttribute('data-client-id');
