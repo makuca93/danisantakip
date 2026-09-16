@@ -4391,7 +4391,7 @@ function askInvoiceNumber(){
           ${recent.length ? `
           <div class="ifhp-recent-list">
             <p class="ifhp-recent-title">Son 3 fatura numarası:</p>
-            ${recent.map(r=>`<div class="ifhp-recent-row"><span>#${escapeHtml(r.invoiceNumber)}</span><span>${escapeHtml(r.clientName)} — ${formatShortDate(r.date)}</span></div>`).join('')}
+            ${recent.map(r=>`<div class="ifhp-recent-row"><span>#${escapeHtml(r.invoiceNumber)}</span><span>${escapeHtml(liveNameForInvoiceEntry(r))} — ${formatShortDate(r.date)}</span></div>`).join('')}
           </div>` : ''}
           <label style="display:block; font-size:12px; font-weight:600; color:var(--muted); margin:14px 0 5px;">Yeni Fatura Numarası</label>
           <input type="text" id="ifhpNumberInput" style="width:100%; font-family:inherit; font-size:14px; padding:9px 11px; border:1px solid var(--card-line); border-radius:7px;">
@@ -7173,18 +7173,26 @@ const MONTH_NAMES_TR = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmu
 
 let invoiceNumbersClientFilter = '';
 
+function liveNameForInvoiceEntry(r){
+  if(r.clientId){
+    const c = state.clients.find(cl=>cl.id===r.clientId);
+    if(c) return clientDisplayName(c);
+  }
+  return r.clientName;
+}
+
 function ifhpNumbersListHtml(){
   let entries = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
   if(invoiceNumbersClientFilter.trim()){
     const q = normalizeForSearch(invoiceNumbersClientFilter);
-    entries = entries.filter(r=>normalizeForSearch(r.clientName||'').includes(q));
+    entries = entries.filter(r=>normalizeForSearch(liveNameForInvoiceEntry(r)||'').includes(q));
   }
   const list = !entries.length
     ? '<div class="todo-empty">Kayıt yok.</div>'
     : `<div class="invoices-list">${entries.map(r=>`
       <div class="invoice-row" data-id="${r.id}">
         <div class="invoice-row-main">
-          <span class="invoice-client-name">${escapeHtml(r.clientName)}</span>
+          <span class="invoice-client-name">${escapeHtml(liveNameForInvoiceEntry(r))}</span>
           <span class="invoice-date">${formatShortDate(r.date)}</span>
         </div>
         <div class="invoice-row-actions">
