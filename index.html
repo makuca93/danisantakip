@@ -3711,7 +3711,8 @@ function renderMain(){
   });
   document.getElementById('saveSessionBtn').addEventListener('click', ()=>{
     const draft = readSessionForm();
-    client.sessions.unshift(draft);
+    client.sessions.push(draft);
+    client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
     saveState();
     render();
   });
