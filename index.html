@@ -4592,24 +4592,28 @@ async function resolveInvoiceDetails(client, session){
     saveState();
   }
 
-  logAudit('fatura/makbuz hazırlandı', `${client.name} - CA$${rate.toFixed(2)}${invoiceNumber ? ' - #'+invoiceNumber : ''}`, client.id);
-
   return { doc, filename, rate, invoiceNumber };
 }
 
 async function generateInvoiceForSession(client, session, action){
   const details = await resolveInvoiceDetails(client, session);
   if(!details) return;
-  const { doc, filename } = details;
+  const { doc, filename, rate, invoiceNumber } = details;
+  const amountLabel = `${client.name} - CA$${rate.toFixed(2)}${invoiceNumber ? ' - #'+invoiceNumber : ''}`;
 
   if(action === 'save'){
     await savePdfWithPicker(doc, filename);
+    logAudit('fatura bilgisayara indirildi', amountLabel, client.id);
   }else if(action === 'drive'){
-    return await uploadPdfToDriveFolder(doc, filename);
+    const ok = await uploadPdfToDriveFolder(doc, filename);
+    logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
+    return ok;
   }else if(action === 'share'){
     shareInvoiceFile(doc, filename, client);
+    logAudit('fatura paylaşıldı', amountLabel, client.id);
   }else if(action === 'gmail'){
     createGmailDraftWithAttachment(client, session, doc, filename);
+    logAudit('fatura Gmail taslağı olarak hazırlandı', amountLabel, client.id);
   }
 }
 
@@ -5171,7 +5175,7 @@ function wireCalendarPanel(client){
       client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
       markPreviousSessionAsNext(client, dateStr, title);
       saveState();
-      logAudit('seans oluşturuldu (elle)', `${client.name} - ${formatShortDate(dateStr)}`, client.id);
+      logAudit('seans elle oluşturuldu', `${client.name} - ${formatShortDate(dateStr)}`, client.id);
       calendarViewCache = {};
       btn.disabled = false; btn.textContent = 'Randevu Oluştur';
       alert('Geçmiş tarihli seans notu oluşturuldu (Takvim daveti gönderilmedi).');
@@ -6072,7 +6076,7 @@ document.getElementById('newClientBtn').addEventListener('click', ()=>{
   document.body.classList.add('mobile-detail');
   openProfileOnNextRender = true;
   saveState();
-  logAudit('danışan eklendi', '(yeni)', client.id);
+  logAudit('danışan profili oluşturuldu', client.name || '(isim henüz girilmedi)', client.id);
   render();
 });
 
