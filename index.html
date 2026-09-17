@@ -5071,6 +5071,7 @@ async function loadCalendarDayEvents(panel, client){
       const ok = await cancelCalendarEvent(eventId, calendarId);
       if(ok){
         const sessionRemoved = removeSessionForCalendarEvent(client, eventId);
+        logAudit('randevu iptal edildi', `${client.name} - ${dateStr}`, client.id);
         if(sessionRemoved){ render(); }
         else{ loadCalendarDayEvents(panel, client); }
       }else{
@@ -5096,6 +5097,7 @@ async function loadCalendarDayEvents(panel, client){
           const ok = await rescheduleCalendarEvent(eventId, newDate, newTime, calendarId);
           if(ok){
             const sessionUpdated = syncSessionDateForCalendarEvent(client, eventId, newDate);
+            logAudit('randevu yeniden planlandı', `${client.name} - ${dateStr} → ${formatShortDate(newDate)}`, client.id);
             if(sessionUpdated){ render(); }
             else{ loadCalendarDayEvents(panel, client); }
           }else{
@@ -5872,8 +5874,10 @@ function renderSessionCard(client, session, index, defaultOpenId){
           if(!newTime) return;
           const ok = await rescheduleCalendarEvent(session.calendarEventId, newDate, newTime, session.calendarId || 'primary');
           if(ok){
+            const oldDate = session.date;
             session.date = newDate;
             saveState();
+            logAudit('randevu yeniden planlandı', `${client.name} - ${formatShortDate(oldDate)} → ${formatShortDate(newDate)}`, client.id);
             render();
           }else{
             alert('Randevu güncellenemedi.');
@@ -5887,6 +5891,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
       if(ok){
         client.sessions = client.sessions.filter(s=>s.id!==session.id);
         saveState();
+        logAudit('randevu iptal edildi', `${client.name} - ${formatShortDate(session.date)}`, client.id);
         render();
       }else{
         alert('Randevu iptal edilemedi.');
@@ -5929,6 +5934,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
       session.detachedFromEventId = null;
       session.detachedFromCalendarId = null;
       saveState();
+      logAudit('seans Takvim ile yeniden senkronize edildi', `${client.name} - ${formatShortDate(session.date)}`, client.id);
       calendarCheckedClientIds.delete(client.id);
       loadNextAppointmentInfo(client);
     });
@@ -5960,6 +5966,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
             session.date = newDate;
             session.calendarStartTime = newStartIso;
             saveState();
+            logAudit('randevu yeniden planlandı', `${client.name} - ${formatShortDate(originalDate)} → ${formatShortDate(newDate)}`, client.id);
             render();
           }else{
             alert('Takvimdeki randevu güncellenemedi.');
@@ -5973,6 +5980,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
           session.calendarId = null;
           session.calendarEndTime = null;
           saveState();
+          logAudit('seans elle moduna alındı', `${client.name} - ${formatShortDate(newDate)}`, client.id);
           render();
         }else{
           // Vazgeç: revert to the original calendar time, discard the edit
