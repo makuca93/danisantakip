@@ -6013,6 +6013,8 @@ function renderSessionCard(client, session, index, defaultOpenId){
       btn.textContent = '⏳ Kaydediliyor…';
       const ok = await uploadPdfToDriveFolder(details.doc, details.filename);
       btn.textContent = ok ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene';
+      const amountLabel = `${client.name} - CA$${details.rate.toFixed(2)}${details.invoiceNumber ? ' - #'+details.invoiceNumber : ''}`;
+      logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
       setTimeout(()=>{
         btn.textContent = originalText;
         btn.disabled = false;
