@@ -2655,7 +2655,6 @@ function proceedToApp(){
   document.getElementById('appShell').classList.add('visible');
   document.getElementById('fileStatus').innerHTML = `<span class="dot"></span>${escapeHtml(currentUser.email || currentUser.displayName || 'Google hesabı')}`;
   mainView = 'home';
-  document.body.classList.add('mobile-detail');
   lastBackupTime = Date.now();
   saveBackupSnapshot(state);
   resetInactivityTimer();
@@ -3518,9 +3517,10 @@ function render(){
 }
 
 function renderSidebar(){
-  document.getElementById('homeNavBtn').classList.toggle('active', mainView==='home');
-  document.getElementById('practiceNavBtn').classList.toggle('active', mainView==='practice');
-  document.getElementById('invoicesNavBtn').classList.toggle('active', mainView==='invoices');
+  const isMobileBrowsingList = window.matchMedia('(max-width: 768px)').matches && !document.body.classList.contains('mobile-detail');
+  document.getElementById('homeNavBtn').classList.toggle('active', !isMobileBrowsingList && mainView==='home');
+  document.getElementById('practiceNavBtn').classList.toggle('active', !isMobileBrowsingList && mainView==='practice');
+  document.getElementById('invoicesNavBtn').classList.toggle('active', !isMobileBrowsingList && mainView==='invoices');
 
   document.getElementById('clientsListToggleBtn').classList.toggle('active', sidebarListMode==='clients');
   document.getElementById('prospectsListToggleBtn').classList.toggle('active', sidebarListMode==='prospects');
