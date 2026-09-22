@@ -1315,7 +1315,18 @@
   }
   .cal-big-cell.empty{cursor:default;}
   .cal-big-cell:not(.empty):hover{background:var(--neutral-bg);}
-  .cal-big-cell.today .cal-big-cell-num{font-weight:800; color:var(--green);}
+  .cal-big-cell.today .cal-big-cell-num{
+    background:var(--green);
+    color:#fff;
+    font-weight:700;
+    border-radius:50%;
+    width:18px;
+    height:18px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    line-height:1;
+  }
   .cal-big-cell.selected{background:var(--highlight); border-color:var(--highlight-line);}
   .cal-big-cell-dot{width:5px; height:5px; border-radius:50%; background:var(--green);}
   .cal-week-grid{
@@ -1336,7 +1347,18 @@
     font-family:inherit;
   }
   .cal-week-cell:hover{background:var(--neutral-bg);}
-  .cal-week-cell.today .cal-week-cell-num{color:var(--green); font-weight:800;}
+  .cal-week-cell.today .cal-week-cell-num{
+    background:var(--green);
+    color:#fff;
+    font-weight:700;
+    border-radius:50%;
+    width:24px;
+    height:24px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    line-height:1;
+  }
   .cal-week-cell.selected{background:var(--highlight); border-color:var(--highlight-line);}
   .cal-week-cell-day{font-size:10px; color:var(--muted); font-weight:600;}
   .cal-week-cell-num{font-size:14px; color:var(--ink); font-weight:700;}
