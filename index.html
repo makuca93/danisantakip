@@ -1738,18 +1738,6 @@
     border-radius:8px;
     margin-bottom:12px;
   }
-  .future-session-actions{display:flex; gap:8px;}
-  .future-reschedule-btn, .future-cancel-btn{
-    background:var(--card);
-    border:1px solid var(--card-line);
-    color:var(--ink);
-    font-size:12px;
-    font-weight:600;
-    padding:5px 10px;
-    border-radius:6px;
-    cursor:pointer;
-  }
-  .future-cancel-btn:hover{color:var(--red); border-color:var(--red);}
   .session-del{
     background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;
   }
@@ -5798,11 +5786,6 @@ function renderSessionCard(client, session, index, defaultOpenId){
     ${isFuture ? `
     <div class="future-session-banner">
       <span>📅 Bu randevu henüz gerçekleşmedi${isCalendarLinked ? ' — Takvim ile bağlantılı' : ''}.</span>
-      ${isCalendarLinked ? `
-      <div class="future-session-actions">
-        <button class="future-reschedule-btn" type="button">✏️ Yeniden Planla</button>
-        <button class="future-cancel-btn" type="button">✕ İptal Et</button>
-      </div>` : ''}
     </div>` : ''}
     <div class="session-card-body ${collapsed ? 'collapsed' : ''}">
     ${itemRow('Ödeme', boolLabel(session.paymentDone), 'paymentDone', session)}
@@ -5871,40 +5854,6 @@ function renderSessionCard(client, session, index, defaultOpenId){
       }
     }
   });
-  if(isFuture && isCalendarLinked){
-    div.querySelector('.future-reschedule-btn').addEventListener('click', ()=>{
-      openReschedulePopover({
-        initialDate: session.date,
-        initialTimeLabel: session.calendarEndTime ? formatEventTime(session.calendarEndTime) : '10:00 AM',
-        onConfirm: async (newDate, newTimeLabel)=>{
-          const newTime = parseAmPmTime(newTimeLabel);
-          if(!newTime) return;
-          const ok = await rescheduleCalendarEvent(session.calendarEventId, newDate, newTime, session.calendarId || 'primary');
-          if(ok){
-            const oldDate = session.date;
-            session.date = newDate;
-            saveState();
-            logAudit('randevu yeniden planlandı', `${client.name} - ${formatShortDate(oldDate)} → ${formatShortDate(newDate)}`, client.id);
-            render();
-          }else{
-            alert('Randevu güncellenemedi.');
-          }
-        }
-      });
-    });
-    div.querySelector('.future-cancel-btn').addEventListener('click', async ()=>{
-      if(!confirm('Bu randevu Takvim\'den iptal edilsin ve bu kayıt silinsin mi? Danışana bilgilendirme gider.')) return;
-      const ok = await cancelCalendarEvent(session.calendarEventId, session.calendarId || 'primary');
-      if(ok){
-        client.sessions = client.sessions.filter(s=>s.id!==session.id);
-        saveState();
-        logAudit('randevu iptal edildi', `${client.name} - ${formatShortDate(session.date)}`, client.id);
-        render();
-      }else{
-        alert('Randevu iptal edilemedi.');
-      }
-    });
-  }
   div.querySelectorAll('.item-row input[type="checkbox"]:not([disabled])').forEach(cb=>{
     cb.addEventListener('change', (ev)=>{
       const key = ev.target.getAttribute('data-key');
