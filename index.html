@@ -4675,7 +4675,7 @@ async function resolveInvoiceDetails(client, session){
 
   const billToName = await askBillToName(client);
   const doc = buildInvoiceDoc(client, session, ifhp, fullRate, invoiceNumber, billToName, isAssessment);
-  const filename = invoiceFilename(client, session);
+  const filename = invoiceFilename(client, session, billToName);
   return [{ doc, filename, rate: fullRate, invoiceNumber, billToName }];
 }
 
