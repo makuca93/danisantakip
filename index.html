@@ -3682,10 +3682,10 @@ function renderMain(){
     <div id="clientHeader">
       <h2><span class="seal ${status}" title="${statusText}" style="display:inline-block; margin-right:10px; vertical-align:middle;"></span>${escapeHtml(clientDisplayName(client))}</h2>
       <div class="client-header-actions">
-        <a class="header-icon-btn wa ${client.profile && client.profile.phone?'':'disabled'}" href="${waLink(client.profile && client.profile.phone)}" target="_blank" rel="noopener" title="WhatsApp"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.3A10 10 0 1 0 12 2z" fill="#fff"/></svg></a>
-        <a class="header-icon-btn sms ${client.profile && client.profile.phone?'':'disabled'}" href="${smsLink(client.profile && client.profile.phone)}" title="Mesaj"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="#6b7684"/><circle cx="8" cy="10.5" r="1.2" fill="#fff"/><circle cx="12" cy="10.5" r="1.2" fill="#fff"/><circle cx="16" cy="10.5" r="1.2" fill="#fff"/></svg></a>
-        <a class="header-icon-btn call ${client.profile && client.profile.phone?'':'disabled'}" href="${telLink(client.profile && client.profile.phone)}" title="Ara">📞</a>
-        <a class="header-icon-btn gmail ${client.profile && client.profile.email?'':'disabled'}" href="${gmailWebLink(client.profile && client.profile.email)}" target="_blank" rel="noopener" title="Gmail"><svg viewBox="0 0 24 24" width="15" height="15"><rect x="2" y="5" width="20" height="14" rx="2" fill="#fff" stroke="#EA4335" stroke-width="1.6"/><path d="M3 6.5l9 6.5 9-6.5" fill="none" stroke="#EA4335" stroke-width="1.6"/></svg></a>
+        <a class="header-icon-btn wa ${(client.profile && client.profile.phone) || (client.profile && client.profile.secondPerson && client.profile.secondPerson.phone) ? '' : 'disabled'}" data-kind="wa" href="${waLink(client.profile && client.profile.phone)}" target="_blank" rel="noopener" title="WhatsApp"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M12 2a10 10 0 0 0-8.5 15.2L2 22l4.9-1.3A10 10 0 1 0 12 2z" fill="#fff"/></svg></a>
+        <a class="header-icon-btn sms ${(client.profile && client.profile.phone) || (client.profile && client.profile.secondPerson && client.profile.secondPerson.phone) ? '' : 'disabled'}" data-kind="sms" href="${smsLink(client.profile && client.profile.phone)}" title="Mesaj"><svg viewBox="0 0 24 24" width="15" height="15"><path d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" fill="#6b7684"/><circle cx="8" cy="10.5" r="1.2" fill="#fff"/><circle cx="12" cy="10.5" r="1.2" fill="#fff"/><circle cx="16" cy="10.5" r="1.2" fill="#fff"/></svg></a>
+        <a class="header-icon-btn call ${(client.profile && client.profile.phone) || (client.profile && client.profile.secondPerson && client.profile.secondPerson.phone) ? '' : 'disabled'}" data-kind="call" href="${telLink(client.profile && client.profile.phone)}" title="Ara">📞</a>
+        <a class="header-icon-btn gmail ${(client.profile && client.profile.email) || (client.profile && client.profile.secondPerson && client.profile.secondPerson.email) ? '' : 'disabled'}" data-kind="gmail" href="${gmailWebLink(client.profile && client.profile.email)}" target="_blank" rel="noopener" title="Gmail"><svg viewBox="0 0 24 24" width="15" height="15"><rect x="2" y="5" width="20" height="14" rx="2" fill="#fff" stroke="#EA4335" stroke-width="1.6"/><path d="M3 6.5l9 6.5 9-6.5" fill="none" stroke="#EA4335" stroke-width="1.6"/></svg></a>
         <button class="header-profile-btn" id="toggleProfileBtn">👤 Profil</button>
       </div>
     </div>
@@ -3729,6 +3729,25 @@ function renderMain(){
     document.getElementById('sessionForm').classList.remove('open');
     document.getElementById('clientHistoryPanel').classList.remove('open');
   }
+
+  document.querySelectorAll('.header-icon-btn[data-kind]').forEach(btn=>{
+    btn.addEventListener('click', async (ev)=>{
+      const kind = btn.getAttribute('data-kind');
+      const field = (kind === 'gmail') ? 'email' : 'phone';
+      const options = personContactOptions(client, field);
+      if(options.length <= 1) return; // only one contact available — let the normal link work
+      ev.preventDefault();
+      const chosen = await askWhichPersonToContact(options);
+      if(!chosen) return;
+      let url;
+      if(kind === 'wa') url = waLink(chosen.value);
+      else if(kind === 'sms') url = smsLink(chosen.value);
+      else if(kind === 'call') url = telLink(chosen.value);
+      else if(kind === 'gmail') url = gmailWebLink(chosen.value);
+      if(kind === 'wa' || kind === 'gmail') window.open(url, '_blank', 'noopener');
+      else window.location.href = url;
+    });
+  });
 
   document.getElementById('toggleProfileBtn').addEventListener('click', ()=>{
     const panel = document.getElementById('profilePanel');
@@ -4381,8 +4400,8 @@ async function savePdfWithPicker(doc, filename){
   doc.save(filename);
 }
 
-function invoiceFilename(client, session){
-  const namePart = toAscii(client.name).replace(/\s+/g,'');
+function invoiceFilename(client, session, nameOverride){
+  const namePart = toAscii(nameOverride || client.name).replace(/\s+/g,'');
   let dd='00', mm='00', yy='00';
   if(session.date){
     const d = new Date(session.date + 'T00:00:00');
@@ -4427,6 +4446,45 @@ function askInvoiceNumber(){
     document.getElementById('ifhpCancelBtn').addEventListener('click', ()=> cleanup(null));
     input.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter') cleanup(input.value); });
     modal.addEventListener('click', (ev)=>{ if(ev.target === modal) cleanup(null); });
+  });
+}
+
+function personContactOptions(client, field){
+  const options = [];
+  if(client.profile && client.profile[field] && client.profile[field].trim()){
+    options.push({ name: client.name, value: client.profile[field].trim() });
+  }
+  const sp = client.profile && client.profile.secondPerson;
+  if(sp && sp.name && sp.name.trim() && sp[field] && sp[field].trim()){
+    options.push({ name: sp.name.trim(), value: sp[field].trim() });
+  }
+  return options;
+}
+
+function askWhichPersonToContact(options){
+  return new Promise((resolve)=>{
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:320px;">
+        <div class="backups-box-header"><h2>Kime ulaşmak istiyorsun?</h2></div>
+        <div style="padding:0 20px 20px; display:flex; flex-direction:column; gap:8px;">
+          ${options.map((o,i)=>`<button class="settings-btn contact-choice-btn" data-idx="${i}" style="width:100%;">${escapeHtml(o.name)}</button>`).join('')}
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    modal.querySelectorAll('.contact-choice-btn').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const idx = Number(btn.getAttribute('data-idx'));
+        modal.remove();
+        resolve(options[idx]);
+      });
+    });
+    modal.addEventListener('click', (ev)=>{
+      if(ev.target === modal){ modal.remove(); resolve(null); }
+    });
   });
 }
 
@@ -4569,16 +4627,12 @@ function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName,
 async function resolveInvoiceDetails(client, session){
   const ifhp = !!(client.profile && client.profile.ifhp);
   const isAssessment = ifhp && !!session.isAssessment;
-  let rate;
-  if(ifhp){
-    rate = isAssessment ? 820 : 205;
-  }else{
-    rate = client.profile ? Number(client.profile.rate) : NaN;
-    if(!rate || rate <= 0){
-      alert('Önce bu danışanın profiline seans ücretini girmelisin.');
-      return null;
-    }
+  const fullRate = getSessionFullRate(client, session);
+  if(!ifhp && (!fullRate || fullRate <= 0)){
+    alert('Önce bu danışanın profiline seans ücretini girmelisin.');
+    return null;
   }
+
   let invoiceNumber = session.lastInvoiceNumber || '';
   const wantsInvoiceNumber = ifhp || !!(client.profile && client.profile.useInvoiceNumber);
   if(wantsInvoiceNumber && !invoiceNumber){
@@ -4594,11 +4648,6 @@ async function resolveInvoiceDetails(client, session){
     }
   }
 
-  const billToName = await askBillToName(client);
-
-  const doc = buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName, isAssessment);
-  const filename = invoiceFilename(client, session);
-
   if(invoiceNumber && session.lastInvoiceNumber !== invoiceNumber){
     session.lastInvoiceNumber = invoiceNumber;
     if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
@@ -4609,29 +4658,50 @@ async function resolveInvoiceDetails(client, session){
     saveState();
   }
 
-  return { doc, filename, rate, invoiceNumber };
+  const shouldSplit = !ifhp && hasNamedSecondPerson(client) && !!client.profile.splitInvoice;
+
+  if(shouldSplit){
+    const halfRate = fullRate / 2;
+    const numA = invoiceNumber ? `${invoiceNumber}-A` : '';
+    const numB = invoiceNumber ? `${invoiceNumber}-B` : '';
+    const docA = buildInvoiceDoc(client, session, ifhp, halfRate, numA, client.name, isAssessment);
+    const docB = buildInvoiceDoc(client, session, ifhp, halfRate, numB, client.profile.secondPerson.name, isAssessment);
+    return [
+      { doc: docA, filename: invoiceFilename(client, session, client.name), rate: halfRate, invoiceNumber: numA, billToName: client.name },
+      { doc: docB, filename: invoiceFilename(client, session, client.profile.secondPerson.name), rate: halfRate, invoiceNumber: numB, billToName: client.profile.secondPerson.name }
+    ];
+  }
+
+  const billToName = await askBillToName(client);
+  const doc = buildInvoiceDoc(client, session, ifhp, fullRate, invoiceNumber, billToName, isAssessment);
+  const filename = invoiceFilename(client, session);
+  return [{ doc, filename, rate: fullRate, invoiceNumber, billToName }];
 }
 
 async function generateInvoiceForSession(client, session, action){
-  const details = await resolveInvoiceDetails(client, session);
-  if(!details) return;
-  const { doc, filename, rate, invoiceNumber } = details;
-  const amountLabel = `${client.name} - CA$${rate.toFixed(2)}${invoiceNumber ? ' - #'+invoiceNumber : ''}`;
+  const detailsList = await resolveInvoiceDetails(client, session);
+  if(!detailsList) return;
+  let lastOk = true;
+  for(const details of detailsList){
+    const { doc, filename, rate, invoiceNumber, billToName } = details;
+    const amountLabel = `${billToName || client.name} - CA$${rate.toFixed(2)}${invoiceNumber ? ' - #'+invoiceNumber : ''}`;
 
-  if(action === 'save'){
-    await savePdfWithPicker(doc, filename);
-    logAudit('fatura bilgisayara indirildi', amountLabel, client.id);
-  }else if(action === 'drive'){
-    const ok = await uploadPdfToDriveFolder(doc, filename);
-    logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
-    return ok;
-  }else if(action === 'share'){
-    shareInvoiceFile(doc, filename, client);
-    logAudit('fatura paylaşıldı', amountLabel, client.id);
-  }else if(action === 'gmail'){
-    createGmailDraftWithAttachment(client, session, doc, filename);
-    logAudit('fatura Gmail taslağı olarak hazırlandı', amountLabel, client.id);
+    if(action === 'save'){
+      await savePdfWithPicker(doc, filename);
+      logAudit('fatura bilgisayara indirildi', amountLabel, client.id);
+    }else if(action === 'drive'){
+      const ok = await uploadPdfToDriveFolder(doc, filename);
+      logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
+      lastOk = lastOk && ok;
+    }else if(action === 'share'){
+      shareInvoiceFile(doc, filename, client);
+      logAudit('fatura paylaşıldı', amountLabel, client.id);
+    }else if(action === 'gmail'){
+      createGmailDraftWithAttachment(client, session, doc, filename);
+      logAudit('fatura Gmail taslağı olarak hazırlandı', amountLabel, client.id);
+    }
   }
+  if(action === 'drive') return lastOk;
 }
 
 
@@ -4842,13 +4912,18 @@ function calDateTimeButtonLabel(dateStr, timeLabel){
 function calendarPanelHtml(client){
   const today = todayIso();
   const sessionLink = getProvider().sessionLink;
+  const defaultInviteNames = [];
+  if(client.profile && client.profile.email) defaultInviteNames.push(client.name);
+  if(client.profile && client.profile.secondPerson && client.profile.secondPerson.email) defaultInviteNames.push(client.profile.secondPerson.name || 'İkinci Kişi');
+  const defaultTitleName = defaultInviteNames.length ? defaultInviteNames.join(' & ') : client.name;
+
   return `
   <div id="calendarPanel">
     ${sessionLink ? `<p class="cal-link-hint">📍 Konum olarak PT bekleme odası linki otomatik eklenecek.</p>` : ''}
     <div class="form-grid">
       <div class="field-block full">
         <label>Başlık</label>
-        <input type="text" class="cal-title" value="${escapeAttr(client.name + '-Psychotherapy Session')}">
+        <input type="text" class="cal-title" value="${escapeAttr(defaultTitleName + '-Psychotherapy Session')}">
       </div>
       <div class="field-block full">
         <label>Tarih ve Saat</label>
@@ -5148,6 +5223,26 @@ function wireCalendarPanel(client){
   panel.querySelector('.cal-repeat').addEventListener('change', (ev)=>{
     panel.querySelector('.cal-repeat-options').style.display = ev.target.checked ? 'block' : 'none';
   });
+
+  const titleInput = panel.querySelector('.cal-title');
+  let titleManuallyEdited = false;
+  titleInput.addEventListener('input', ()=>{ titleManuallyEdited = true; });
+
+  function updateDefaultInviteTitle(){
+    if(titleManuallyEdited) return;
+    const names = [];
+    const singleCb = panel.querySelector('.cal-invite');
+    const primaryCb = panel.querySelector('.cal-invite-primary');
+    const secondCb = panel.querySelector('.cal-invite-second');
+    if(singleCb && singleCb.checked) names.push(client.name);
+    if(primaryCb && primaryCb.checked) names.push(client.name);
+    if(secondCb && secondCb.checked && client.profile.secondPerson) names.push(client.profile.secondPerson.name || 'İkinci Kişi');
+    const nameLabel = names.length ? names.join(' & ') : client.name;
+    titleInput.value = `${nameLabel}-Psychotherapy Session`;
+  }
+  [panel.querySelector('.cal-invite'), panel.querySelector('.cal-invite-primary'), panel.querySelector('.cal-invite-second')]
+    .filter(Boolean)
+    .forEach(cb => cb.addEventListener('change', updateDefaultInviteTitle));
 
   panel.querySelector('.cal-create-btn').addEventListener('click', async ()=>{
     const title = panel.querySelector('.cal-title').value.trim();
@@ -5546,7 +5641,19 @@ function profilePanelHtml(client){
       <div class="field-block full">
         <label>Faturalama</label>
         <div class="tick-row"><input type="checkbox" class="profile-ifhp" ${p.ifhp?'checked':''}><span>IFHP danışanı (seans ücreti sabit CA$205)</span></div>
+        ${(sp && sp.name && sp.name.trim()) ? `
+        <div class="field-block" style="margin-top:8px;">
+          <label>Çift Seansı Ücreti (CA$)</label>
+          <input type="number" class="profile-rate" placeholder="örn. 180" value="${p.rate!=null?p.rate:''}" ${p.ifhp?'disabled':''} style="max-width:180px;">
+        </div>
+        <div class="field-block" style="margin-top:8px;">
+          <label>Bireysel Seans Ücreti (CA$)</label>
+          <input type="number" class="profile-individual-rate" placeholder="örn. 150" value="${p.individualRate!=null?p.individualRate:''}" ${p.ifhp?'disabled':''} style="max-width:180px;">
+        </div>
+        <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-split-invoice" ${p.splitInvoice?'checked':''} ${p.ifhp?'disabled':''}><span>Fatura ücretini ikiye böl — her kişiye ayrı, yarı tutarlı fatura oluşturulsun</span></div>
+        ` : `
         <input type="number" class="profile-rate" placeholder="Seans ücreti (CA$)" value="${p.rate!=null?p.rate:''}" ${p.ifhp?'disabled':''} style="margin-top:8px; max-width:180px;">
+        `}
         <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-no-invoice" ${p.noInvoice?'checked':''}><span>Bu danışana fatura hazırlanmayacak</span></div>
         <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-use-invoice-number" ${p.useInvoiceNumber?'checked':''}><span>Bu danışan için fatura numarası eklensin</span></div>
       </div>
@@ -5673,15 +5780,31 @@ function wireProfilePanel(client){
 
   const ifhpCb = panel.querySelector('.profile-ifhp');
   const rateInput = panel.querySelector('.profile-rate');
+  const individualRateInput = panel.querySelector('.profile-individual-rate');
+  const splitInvoiceCb = panel.querySelector('.profile-split-invoice');
   ifhpCb.addEventListener('change', ()=>{
     client.profile.ifhp = ifhpCb.checked;
     rateInput.disabled = ifhpCb.checked;
+    if(individualRateInput) individualRateInput.disabled = ifhpCb.checked;
+    if(splitInvoiceCb) splitInvoiceCb.disabled = ifhpCb.checked;
     saveState();
   });
   rateInput.addEventListener('blur', ()=>{
     client.profile.rate = rateInput.value ? Number(rateInput.value) : null;
     saveState();
   });
+  if(individualRateInput){
+    individualRateInput.addEventListener('blur', ()=>{
+      client.profile.individualRate = individualRateInput.value ? Number(individualRateInput.value) : null;
+      saveState();
+    });
+  }
+  if(splitInvoiceCb){
+    splitInvoiceCb.addEventListener('change', ()=>{
+      client.profile.splitInvoice = splitInvoiceCb.checked;
+      saveState();
+    });
+  }
 
   const noInvoiceCb = panel.querySelector('.profile-no-invoice');
   noInvoiceCb.addEventListener('change', ()=>{
@@ -5758,6 +5881,21 @@ function readSessionForm(){
 
 let sessionCollapseOverrides = {};
 
+function hasNamedSecondPerson(client){
+  return !!(client.profile && client.profile.secondPerson && client.profile.secondPerson.name && client.profile.secondPerson.name.trim());
+}
+
+function getSessionFullRate(client, session){
+  const ifhp = !!(client.profile && client.profile.ifhp);
+  if(ifhp){
+    return (session && session.isAssessment) ? 820 : 205;
+  }
+  if(hasNamedSecondPerson(client) && session && session.sessionType === 'individual'){
+    return (client.profile.individualRate != null) ? Number(client.profile.individualRate) : 0;
+  }
+  return (client.profile && client.profile.rate != null) ? Number(client.profile.rate) : 0;
+}
+
 function isSessionFullyDone(session, client){
   const disabled = session.disabledChecks || [];
   const noInvoice = !!(client.profile && client.profile.noInvoice);
@@ -5826,6 +5964,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
     ${noInvoice ? `
     <div class="invoice-actions-blackout">Bu danışan için fatura/makbuz oluşturulmuyor</div>` : `
     ${ifhpClient ? `<div class="tick-row" style="margin-bottom:10px;"><input type="checkbox" class="session-assessment-toggle" ${session.isAssessment?'checked':''}><span>🩺 Bu bir Değerlendirme Seansı (CA$820) — işaretli değilse normal Terapi Seansı (CA$205)</span></div>` : ''}
+    ${(!ifhpClient && hasNamedSecondPerson(client)) ? `<div class="tick-row" style="margin-bottom:10px;"><input type="checkbox" class="session-individual-toggle" ${session.sessionType==='individual'?'checked':''}><span>👤 Bu bir Bireysel Seans — işaretli değilse Çift Seansı ücreti uygulanır</span></div>` : ''}
     <div class="invoice-actions-label">Fatura / Makbuz</div>
     <div class="invoice-actions">
       <button class="invoice-save-btn" type="button">💻 Bilgisayara İndir</button>
@@ -5985,6 +6124,13 @@ function renderSessionCard(client, session, index, defaultOpenId){
       saveState();
     });
   }
+  const individualToggle = div.querySelector('.session-individual-toggle');
+  if(individualToggle){
+    individualToggle.addEventListener('change', (ev)=>{
+      session.sessionType = ev.target.checked ? 'individual' : 'couple';
+      saveState();
+    });
+  }
   if(!noInvoice){
     div.querySelector('.invoice-save-btn').addEventListener('click', ()=>{
       generateInvoiceForSession(client, session, 'save');
@@ -5993,14 +6139,18 @@ function renderSessionCard(client, session, index, defaultOpenId){
       const btn = ev.target;
       if(btn.disabled) return;
       const originalText = btn.textContent;
-      const details = await resolveInvoiceDetails(client, session);
-      if(!details) return;
+      const detailsList = await resolveInvoiceDetails(client, session);
+      if(!detailsList) return;
       btn.disabled = true;
       btn.textContent = '⏳ Kaydediliyor…';
-      const ok = await uploadPdfToDriveFolder(details.doc, details.filename);
-      btn.textContent = ok ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene';
-      const amountLabel = `${client.name} - CA$${details.rate.toFixed(2)}${details.invoiceNumber ? ' - #'+details.invoiceNumber : ''}`;
-      logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
+      let allOk = true;
+      for(const details of detailsList){
+        const ok = await uploadPdfToDriveFolder(details.doc, details.filename);
+        allOk = allOk && ok;
+        const amountLabel = `${details.billToName || client.name} - CA$${details.rate.toFixed(2)}${details.invoiceNumber ? ' - #'+details.invoiceNumber : ''}`;
+        logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
+      }
+      btn.textContent = allOk ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene';
       setTimeout(()=>{
         btn.textContent = originalText;
         btn.disabled = false;
@@ -6395,7 +6545,7 @@ function computePersonalStats(){
       if(s.date.startsWith(thisMonthStr)){
         sessionsThisMonth++;
         if(s.paymentDone){
-          const rate = (c.profile && c.profile.ifhp) ? ((s.isAssessment ? 820 : 205) * 0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+          const rate = (c.profile && c.profile.ifhp) ? (getSessionFullRate(c, s) * 0.70) : getSessionFullRate(c, s);
           revenueThisMonth += rate;
         }
       }
@@ -6420,7 +6570,7 @@ function computeMonthlyRevenue(monthsBack){
       if(!s.date || !isSessionDue(s) || !s.paymentDone) return;
       const key = s.date.slice(0,7);
       if(bucketMap[key]){
-        const rate = (c.profile && c.profile.ifhp) ? ((s.isAssessment ? 820 : 205)*0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+        const rate = (c.profile && c.profile.ifhp) ? (getSessionFullRate(c, s) * 0.70) : getSessionFullRate(c, s);
         bucketMap[key].total += rate;
       }
     });
@@ -7059,7 +7209,7 @@ function collectInvoicedSessions(){
     if(c.profile && c.profile.noInvoice) return;
     (c.sessions||[]).forEach(s=>{
       if(!s.invoiceDone) return;
-      const rate = (c.profile && c.profile.ifhp) ? ((s.isAssessment ? 820 : 205) * 0.70) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+      const rate = (c.profile && c.profile.ifhp) ? (getSessionFullRate(c, s) * 0.70) : getSessionFullRate(c, s);
       rows.push({ clientId: c.id, clientName: c.name, session: s, date: s.date, ifhp: !!(c.profile && c.profile.ifhp), rate });
     });
   });
@@ -7095,7 +7245,7 @@ async function buildTaxPackageZip(rows, btn){
       if(!c) continue;
       const ifhp = !!(c.profile && c.profile.ifhp);
       const isAssessment = ifhp && !!r.session.isAssessment;
-      const fullRate = ifhp ? (isAssessment ? 820 : 205) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+      const fullRate = getSessionFullRate(c, r.session);
       const invoiceNumber = r.session.lastInvoiceNumber || '';
       const doc = buildInvoiceDoc(c, r.session, ifhp, fullRate, invoiceNumber, c.name, isAssessment);
       const filename = invoiceFilename(c, r.session);
@@ -7823,7 +7973,7 @@ function computeOwedList(){
       if((s.disabledChecks||[]).includes('paymentDone')) return;
       if(!s.paymentDone){
         unpaidCount++;
-        const sessionRate = (c.profile && c.profile.ifhp) ? (s.isAssessment ? 820 : 205) : (c.profile && c.profile.rate != null ? Number(c.profile.rate) : 0);
+        const sessionRate = getSessionFullRate(c, s);
         total += sessionRate;
       }
     });
