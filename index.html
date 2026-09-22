@@ -3808,6 +3808,7 @@ function renderMain(){
   });
   document.getElementById('saveSessionBtn').addEventListener('click', ()=>{
     const draft = readSessionForm();
+    if(hasNamedSecondPerson(client)) draft.invitedBoth = true;
     client.sessions.push(draft);
     client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
     saveState();
@@ -5288,7 +5289,8 @@ function wireCalendarPanel(client){
         paymentDone:false, invoiceDone:false, notesDone:false,
         nextNote:'', nextDone:false, adminNote:'',
         calendarEventId: null, calendarId: null, calendarEndTime: null,
-        calendarStartTime: timeStr ? `${dateStr}T${timeStr}:00` : null
+        calendarStartTime: timeStr ? `${dateStr}T${timeStr}:00` : null,
+        invitedBoth
       };
       client.sessions.push(newSession);
       client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
