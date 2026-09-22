@@ -4658,7 +4658,7 @@ async function resolveInvoiceDetails(client, session){
     saveState();
   }
 
-  const shouldSplit = !ifhp && hasNamedSecondPerson(client) && !!client.profile.splitInvoice;
+  const shouldSplit = !ifhp && hasNamedSecondPerson(client) && !!client.profile.splitInvoice && session.invitedBoth === true;
 
   if(shouldSplit){
     const halfRate = fullRate / 2;
@@ -5037,6 +5037,9 @@ async function loadNextAppointmentInfo(client){
         changed = true;
       }
     }else{
+      const attendeeEmails = (ev.attendees || []).map(a => (a.email||'').trim().toLowerCase());
+      const sp = liveClient.profile && liveClient.profile.secondPerson;
+      const invitedBoth = (sp && sp.email && sp.email.trim()) ? attendeeEmails.includes(sp.email.trim().toLowerCase()) : undefined;
       liveClient.sessions.push({
         id: uid(),
         date: dateOnly,
@@ -5046,7 +5049,8 @@ async function loadNextAppointmentInfo(client){
         calendarEventId: ev.id,
         calendarStartTime: startTime,
         calendarEndTime: endTime,
-        calendarId: calId
+        calendarId: calId,
+        invitedBoth
       });
       changed = true;
     }
@@ -5263,6 +5267,7 @@ function wireCalendarPanel(client){
     if(secondInviteCb && secondInviteCb.checked && client.profile && client.profile.secondPerson && client.profile.secondPerson.email){
       inviteEmails.push(client.profile.secondPerson.email.trim());
     }
+    const invitedBoth = secondInviteCb ? (!!(primaryInviteCb && primaryInviteCb.checked) && secondInviteCb.checked) : undefined;
     const repeatWeekly = panel.querySelector('.cal-repeat').checked;
     const repeatWeeks = Math.max(2, Math.min(52, Number(panel.querySelector('.cal-repeat-weeks').value) || 8));
     if(!title || !dateStr || !timeRaw){
@@ -5314,7 +5319,8 @@ function wireCalendarPanel(client){
             paymentDone:false, invoiceDone:false, notesDone:false,
             nextNote:'', nextDone:false, adminNote:'',
             calendarEventId: created.id, calendarId: 'primary',
-            calendarStartTime: created.startIso, calendarEndTime: created.endIso
+            calendarStartTime: created.startIso, calendarEndTime: created.endIso,
+            invitedBoth
           });
         }
         await new Promise(r => setTimeout(r, 300));
@@ -5344,7 +5350,8 @@ function wireCalendarPanel(client){
         paymentDone:false, invoiceDone:false, notesDone:false,
         nextNote:'', nextDone:false, adminNote:'',
         calendarEventId: created.id, calendarId: 'primary',
-        calendarStartTime: created.startIso, calendarEndTime: created.endIso
+        calendarStartTime: created.startIso, calendarEndTime: created.endIso,
+        invitedBoth
       });
       liveClient.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
       markPreviousSessionAsNext(client, dateStr, title);
@@ -5890,7 +5897,7 @@ function getSessionFullRate(client, session){
   if(ifhp){
     return (session && session.isAssessment) ? 820 : 205;
   }
-  if(hasNamedSecondPerson(client) && session && session.sessionType === 'individual'){
+  if(hasNamedSecondPerson(client) && session && session.invitedBoth === false){
     return (client.profile.individualRate != null) ? Number(client.profile.individualRate) : 0;
   }
   return (client.profile && client.profile.rate != null) ? Number(client.profile.rate) : 0;
@@ -5964,7 +5971,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
     ${noInvoice ? `
     <div class="invoice-actions-blackout">Bu danışan için fatura/makbuz oluşturulmuyor</div>` : `
     ${ifhpClient ? `<div class="tick-row" style="margin-bottom:10px;"><input type="checkbox" class="session-assessment-toggle" ${session.isAssessment?'checked':''}><span>🩺 Bu bir Değerlendirme Seansı (CA$820) — işaretli değilse normal Terapi Seansı (CA$205)</span></div>` : ''}
-    ${(!ifhpClient && hasNamedSecondPerson(client)) ? `<div class="tick-row" style="margin-bottom:10px;"><input type="checkbox" class="session-individual-toggle" ${session.sessionType==='individual'?'checked':''}><span>👤 Bu bir Bireysel Seans — işaretli değilse Çift Seansı ücreti uygulanır</span></div>` : ''}
+    ${(!ifhpClient && hasNamedSecondPerson(client)) ? `<div class="tick-row" style="margin-bottom:10px;"><input type="checkbox" class="session-individual-toggle" ${session.invitedBoth===false?'checked':''}><span>👤 Bu bir Bireysel Seans — işaretli değilse Çift Seansı ücreti uygulanır${session.invitedBoth!==undefined?' (Takvim davetine göre otomatik ayarlandı)':''}</span></div>` : ''}
     <div class="invoice-actions-label">Fatura / Makbuz</div>
     <div class="invoice-actions">
       <button class="invoice-save-btn" type="button">💻 Bilgisayara İndir</button>
@@ -6127,7 +6134,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
   const individualToggle = div.querySelector('.session-individual-toggle');
   if(individualToggle){
     individualToggle.addEventListener('change', (ev)=>{
-      session.sessionType = ev.target.checked ? 'individual' : 'couple';
+      session.invitedBoth = !ev.target.checked;
       saveState();
     });
   }
