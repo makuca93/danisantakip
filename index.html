@@ -2192,7 +2192,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut }
     from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs }
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, runTransaction }
     from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -2216,7 +2216,7 @@
   window.FB = {
     auth, db, provider, signInWithPopup, signInWithRedirect, getRedirectResult,
     onAuthStateChanged, signOut, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp,
-    query, where, orderBy, limit, getDocs,
+    query, where, orderBy, limit, getDocs, runTransaction,
     credentialFromResult: GoogleAuthProvider.credentialFromResult
   };
   window.dispatchEvent(new Event('fb-ready'));
@@ -2572,10 +2572,14 @@ function startAuthListener(){
       showingDenied = false;
       currentUser = user;
       hasLoadedOnce = false;
+      if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
       subscribeToData();
     }else{
       currentUser = null;
       if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+      if(practicePollTimer){ clearInterval(practicePollTimer); practicePollTimer = null; }
+      if(backupTrailingTimer){ clearTimeout(backupTrailingTimer); backupTrailingTimer = null; }
+      if(driveTrailingTimer){ clearTimeout(driveTrailingTimer); driveTrailingTimer = null; }
       document.getElementById('appShell').classList.remove('visible');
       document.getElementById('fileSetup').style.display = 'flex';
       if(!showingDenied){ showSignInScreen(); }
@@ -2609,6 +2613,15 @@ function subscribeToData(){
   const personId = canonicalPersonId(currentUser.email);
   const ref = window.FB.doc(window.FB.db, 'users', personId, 'appdata', 'main');
   unsubscribeSnapshot = window.FB.onSnapshot(ref, async (snap)=>{
+    if(!snap.exists() && snap.metadata.fromCache){
+      // Offline / not yet confirmed by the server: an empty cache result is NOT "no data".
+      // Wait for the server snapshot instead of falling back to empty example data
+      // (which would later overwrite the real document on the first save).
+      if(!hasLoadedOnce){
+        setupBoxContent.innerHTML = '<h2>Bağlantı bekleniyor…</h2><p>Sunucuya ulaşılamadı. İnternet bağlantısı gelince veriler otomatik yüklenecek.</p>';
+      }
+      return;
+    }
     if(snap.exists()){
       state = snap.data();
     }else{
@@ -2634,8 +2647,9 @@ function subscribeToData(){
     }
     if(!state.clients) state.clients = [];
     if(!state.generalTodos) state.generalTodos = [];
-      if(!state.prospects) state.prospects = [];
-      if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
+    if(!state.prospects) state.prospects = [];
+    if(!state.ifhpInvoiceNumbers) state.ifhpInvoiceNumbers = [];
+    state.clients.forEach(c=>{ if(!Array.isArray(c.sessions)) c.sessions = []; });
 
     if(!hasLoadedOnce){
       hasLoadedOnce = true;
@@ -2670,13 +2684,16 @@ function proceedToApp(){
   resetInactivityTimer();
   render();
   loadPracticeSharedForNotifications();
-  setInterval(loadPracticeSharedForNotifications, 3 * 60 * 1000); // her 3 dakikada bir yeni bildirim var mı kontrol et
+  if(practicePollTimer) clearInterval(practicePollTimer);
+  practicePollTimer = setInterval(loadPracticeSharedForNotifications, 3 * 60 * 1000); // her 3 dakikada bir yeni bildirim var mı kontrol et
 }
+let practicePollTimer = null;
 
 async function loadPracticeSharedForNotifications(){
   const loaded = await loadPracticeShared();
   if(!loaded) return;
-  practiceState = loaded;
+  if(practicePendingSaves > 0) return; // a save is in flight; it will bring back the merged server state
+  setPracticeFromServer(loaded);
   updateNotificationBell();
   checkDailyReminders();
   maybeShowNewNotificationToasts();
@@ -2739,11 +2756,22 @@ function finishSurprise(){
 let lastBackupTime = 0;
 const BACKUP_INTERVAL_MS = 3 * 60 * 1000; // at most one snapshot every 3 minutes
 
+let backupTrailingTimer = null;
 function maybeSnapshotBackup(){
   const now = Date.now();
-  if(now - lastBackupTime > BACKUP_INTERVAL_MS){
+  const elapsed = now - lastBackupTime;
+  if(elapsed > BACKUP_INTERVAL_MS){
     lastBackupTime = now;
+    if(backupTrailingTimer){ clearTimeout(backupTrailingTimer); backupTrailingTimer = null; }
     saveBackupSnapshot(state);
+  }else if(!backupTrailingTimer){
+    // Throttled: schedule one trailing snapshot so edits made inside the window are also backed up.
+    backupTrailingTimer = setTimeout(()=>{
+      backupTrailingTimer = null;
+      if(!currentUser || !state) return;
+      lastBackupTime = Date.now();
+      saveBackupSnapshot(state);
+    }, BACKUP_INTERVAL_MS - elapsed + 1000);
   }
 }
 
@@ -2908,9 +2936,20 @@ async function uploadDriveBackup(interactive){
 
 let driveBackupConsecutiveFailures = 0;
 
+let driveTrailingTimer = null;
 async function maybeDriveBackup(){
   const now = Date.now();
-  if(now - lastDriveBackupAt < DRIVE_BACKUP_MIN_INTERVAL_MS) return;
+  const elapsed = now - lastDriveBackupAt;
+  if(elapsed < DRIVE_BACKUP_MIN_INTERVAL_MS){
+    if(!driveTrailingTimer){
+      driveTrailingTimer = setTimeout(()=>{
+        driveTrailingTimer = null;
+        if(currentUser && state) maybeDriveBackup();
+      }, DRIVE_BACKUP_MIN_INTERVAL_MS - elapsed + 1000);
+    }
+    return;
+  }
+  if(driveTrailingTimer){ clearTimeout(driveTrailingTimer); driveTrailingTimer = null; }
   lastDriveBackupAt = now;
   driveBackupStatus = 'saving';
   const ok = await uploadDriveBackup(false); // silent only — never interrupts with a popup
@@ -2926,16 +2965,31 @@ async function maybeDriveBackup(){
   }
 }
 
+let lastSaveErrorToastAt = 0;
+let docSizeWarned = false;
+const FIRESTORE_DOC_LIMIT_BYTES = 1048576;
+
 async function saveState(){
+  if(!currentUser || !state || !hasLoadedOnce) return; // never write before real data has loaded
   maybeSnapshotBackup();
   maybeDriveBackup();
-  if(!currentUser) return;
   try{
     const personId = canonicalPersonId(currentUser.email);
     const ref = window.FB.doc(window.FB.db, 'users', personId, 'appdata', 'main');
-    await window.FB.setDoc(ref, JSON.parse(JSON.stringify(state)));
+    const json = JSON.stringify(state);
+    const approxBytes = new Blob([json]).size;
+    if(approxBytes > FIRESTORE_DOC_LIMIT_BYTES * 0.8 && !docSizeWarned){
+      docSizeWarned = true;
+      showToast(`⚠️ Veri boyutu Firestore sınırına yaklaşıyor (%${Math.round(approxBytes/FIRESTORE_DOC_LIMIT_BYTES*100)}). Kaydetme yakında başarısız olabilir.`);
+    }
+    await window.FB.setDoc(ref, JSON.parse(json));
   }catch(e){
     console.error('Kaydetme hatası', e);
+    const now = Date.now();
+    if(now - lastSaveErrorToastAt > 30000){
+      lastSaveErrorToastAt = now;
+      showToast('⚠️ Değişiklik sunucuya kaydedilemedi: ' + (e && e.message ? e.message : 'bilinmeyen hata'));
+    }
   }
 }
 
@@ -2946,8 +3000,16 @@ async function loadClientHistory(client){
   try{
     const personId = canonicalPersonId(currentUser.email);
     const ref = window.FB.collection(window.FB.db, 'users', personId, 'auditLog');
-    const q = window.FB.query(ref, window.FB.where('clientId', '==', client.id), window.FB.limit(50));
-    const snap = await window.FB.getDocs(q);
+    let snap;
+    try{
+      const q = window.FB.query(ref, window.FB.where('clientId', '==', client.id), window.FB.orderBy('at', 'desc'), window.FB.limit(50));
+      snap = await window.FB.getDocs(q);
+    }catch(err){
+      // Composite index (auditLog: clientId ASC, at DESC) not created yet — fall back to unordered fetch.
+      console.warn('auditLog index eksik, sırasız sorguya dönülüyor', err);
+      const q = window.FB.query(ref, window.FB.where('clientId', '==', client.id), window.FB.limit(200));
+      snap = await window.FB.getDocs(q);
+    }
     const entries = [];
     snap.forEach(docSnap => entries.push(docSnap.data()));
     entries.sort((a,b)=>{
@@ -2955,6 +3017,7 @@ async function loadClientHistory(client){
       const tb = b.at && b.at.toMillis ? b.at.toMillis() : 0;
       return tb - ta;
     });
+    entries.splice(50);
     if(!entries.length){
       panel.innerHTML = '<div class="todo-empty">Bu danışanla ilgili henüz bir geçmiş kaydı yok.</div>';
       return;
@@ -3013,22 +3076,39 @@ async function handleImportJsonFile(ev){
   }
   if(!confirm(`${importedClients.length} danışan bu hesaba eklenecek. Mevcut verilerin üzerine yazılmaz, üstüne eklenir. Devam edilsin mi?`)) return;
 
+  const existingClientIds = new Set(state.clients.map(c=>c.id));
+  const existingTodoIds = new Set((state.generalTodos||[]).map(t=>t.id));
+  const newClients = [];
+  let skippedClients = 0;
   importedClients.forEach(c=>{
+    if(c.id && existingClientIds.has(c.id)){ skippedClients++; return; } // already in this account (e.g. same backup imported twice)
     if(!c.id) c.id = uid();
+    existingClientIds.add(c.id);
+    if(!Array.isArray(c.sessions)) c.sessions = [];
     if(!c.todos) c.todos = [];
     if(c.generalAdminNote == null) c.generalAdminNote = '';
     if(!c.profile) c.profile = { info:'', address:'', phone:'', email:'', ifhp:false, rate:null, terminated:false };
-    (c.sessions||[]).forEach(s=>{ if(!s.id) s.id = uid(); });
+    c.sessions.forEach(s=>{ if(!s.id) s.id = uid(); });
+    newClients.push(c);
   });
-  importedTodos.forEach(t=>{ if(!t.id) t.id = uid(); });
+  const newTodos = importedTodos.filter(t=>{
+    if(t.id && existingTodoIds.has(t.id)) return false;
+    if(!t.id) t.id = uid();
+    existingTodoIds.add(t.id);
+    return true;
+  });
+  if(!newClients.length && !newTodos.length){
+    alert('Bu dosyadaki danışanların hepsi zaten bu hesapta var — hiçbir şey eklenmedi.');
+    return;
+  }
 
-  state.clients = [...state.clients, ...importedClients];
-  state.generalTodos = [...(state.generalTodos||[]), ...importedTodos];
+  state.clients = [...state.clients, ...newClients];
+  state.generalTodos = [...(state.generalTodos||[]), ...newTodos];
   if(!activeClientId && state.clients.length){ activeClientId = state.clients[0].id; }
   saveState();
-  logAudit('JSON içe aktarıldı', `${importedClients.length} danışan eklendi`);
+  logAudit('JSON içe aktarıldı', `${newClients.length} danışan eklendi`);
   render();
-  alert(`${importedClients.length} danışan başarıyla içe aktarıldı.`);
+  alert(`${newClients.length} danışan içe aktarıldı.` + (skippedClients ? ` ${skippedClients} danışan zaten mevcut olduğu için atlandı.` : ''));
 }
 
 document.getElementById('closeBackupsBtn').addEventListener('click', closeBackupsModal);
@@ -3148,7 +3228,7 @@ function isSessionDue(session){
 }
 
 function clientStatus(client){
-  if(!client.sessions.length) return 'neutral';
+  if(!client.sessions || !client.sessions.length) return 'neutral';
   const noInvoice = !!(client.profile && client.profile.noInvoice);
   const pastSessions = client.sessions.filter(s => isSessionDue(s));
   if(!pastSessions.length) return 'neutral';
@@ -3426,11 +3506,12 @@ function checkDailyReminders(){
   const today = todayIso();
   let lastCheck = null;
   try{ lastCheck = localStorage.getItem('lastDailyReminderCheck'); }catch(e){}
-  if(lastCheck === today) return;
+  if(lastCheck === today || (state && state.lastDailyReminderCheck === today)) return;
   try{ localStorage.setItem('lastDailyReminderCheck', today); }catch(e){}
 
   const me = currentPersonId();
   if(!me) return;
+  state.lastDailyReminderCheck = today; // synced via Firestore, so the other device skips today too
 
   // Doğum günü bugünse
   computeUpcomingBirthdays().filter(b=>b.diffDays===0).forEach(b=>{
@@ -4413,7 +4494,13 @@ function invoiceFilename(client, session, nameOverride){
   return `Invoice-${namePart}${yy}.${mm}.${dd}.pdf`;
 }
 
-function askInvoiceNumber(){
+function findInvoiceNumberUse(number, sessionId){
+  const n = String(number||'').trim().toLowerCase();
+  if(!n) return null;
+  return (state.ifhpInvoiceNumbers||[]).find(r => String(r.invoiceNumber||'').trim().toLowerCase() === n && r.sessionId !== sessionId) || null;
+}
+
+function askInvoiceNumber(sessionId){
   return new Promise((resolve)=>{
     const recent = (state.ifhpInvoiceNumbers||[]).slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,3);
     const modal = document.createElement('div');
@@ -4443,9 +4530,18 @@ function askInvoiceNumber(){
     const input = document.getElementById('ifhpNumberInput');
     input.focus();
     const cleanup = (value)=>{ modal.remove(); resolve(value); };
-    document.getElementById('ifhpConfirmBtn').addEventListener('click', ()=> cleanup(input.value));
+    const confirmValue = ()=>{
+      const used = findInvoiceNumberUse(input.value, sessionId);
+      if(used && !confirm(`#${input.value.trim()} numarası daha önce kullanılmış (${liveNameForInvoiceEntry(used)} — ${formatShortDate(used.date)}). Yine de bu numara kullanılsın mı?`)){
+        input.focus();
+        input.select();
+        return;
+      }
+      cleanup(input.value);
+    };
+    document.getElementById('ifhpConfirmBtn').addEventListener('click', confirmValue);
     document.getElementById('ifhpCancelBtn').addEventListener('click', ()=> cleanup(null));
-    input.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter') cleanup(input.value); });
+    input.addEventListener('keydown', (ev)=>{ if(ev.key==='Enter') confirmValue(); });
     modal.addEventListener('click', (ev)=>{ if(ev.target === modal) cleanup(null); });
   });
 }
@@ -4637,7 +4733,7 @@ async function resolveInvoiceDetails(client, session){
   let invoiceNumber = session.lastInvoiceNumber || '';
   const wantsInvoiceNumber = ifhp || !!(client.profile && client.profile.useInvoiceNumber);
   if(wantsInvoiceNumber && !invoiceNumber){
-    const entered = await askInvoiceNumber();
+    const entered = await askInvoiceNumber(session.id);
     if(!entered || !entered.trim()){
       if(ifhp){
         alert('Fatura numarası girilmeden IFHP faturası oluşturulamaz.');
@@ -4648,6 +4744,12 @@ async function resolveInvoiceDetails(client, session){
       invoiceNumber = entered.trim();
     }
   }
+
+  // The modal above awaited user input; state may have been replaced by a snapshot meanwhile.
+  const liveClientInv = state.clients.find(c => c.id === client.id);
+  const liveSessionInv = liveClientInv && (liveClientInv.sessions||[]).find(s => s.id === session.id);
+  if(liveClientInv) client = liveClientInv;
+  if(liveSessionInv) session = liveSessionInv;
 
   if(invoiceNumber && session.lastInvoiceNumber !== invoiceNumber){
     session.lastInvoiceNumber = invoiceNumber;
@@ -4682,6 +4784,14 @@ async function resolveInvoiceDetails(client, session){
 async function generateInvoiceForSession(client, session, action){
   const detailsList = await resolveInvoiceDetails(client, session);
   if(!detailsList) return;
+  if(action === 'share'){
+    const files = detailsList.map(d => ({ doc: d.doc, filename: d.filename }));
+    await shareInvoiceFiles(files, client);
+    detailsList.forEach(d=>{
+      logAudit('fatura paylaşıldı', `${d.billToName || client.name} - CA$${d.rate.toFixed(2)}${d.invoiceNumber ? ' - #'+d.invoiceNumber : ''}`, client.id);
+    });
+    return;
+  }
   let lastOk = true;
   for(const details of detailsList){
     const { doc, filename, rate, invoiceNumber, billToName } = details;
@@ -4694,9 +4804,6 @@ async function generateInvoiceForSession(client, session, action){
       const ok = await uploadPdfToDriveFolder(doc, filename);
       logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
       lastOk = lastOk && ok;
-    }else if(action === 'share'){
-      shareInvoiceFile(doc, filename, client);
-      logAudit('fatura paylaşıldı', amountLabel, client.id);
     }else if(action === 'gmail'){
       createGmailDraftWithAttachment(client, session, doc, filename);
       logAudit('fatura Gmail taslağı olarak hazırlandı', amountLabel, client.id);
@@ -4708,15 +4815,47 @@ async function generateInvoiceForSession(client, session, action){
 
 
 async function shareInvoiceFile(doc, filename, client){
+  return shareInvoiceFiles([{ doc, filename }], client);
+}
+
+async function shareInvoiceFiles(items, client){
+  const files = items.map(it => new File([it.doc.output('blob')], it.filename, { type:'application/pdf' }));
+  if(!(navigator.canShare && navigator.canShare({ files }))){
+    alert('Bu tarayıcı/cihaz dosya paylaşımını desteklemiyor. Bunun yerine "İndir" butonunu kullanabilirsin.');
+    return;
+  }
+  const payload = { files, title: files.length === 1 ? files[0].name : `${files.length} fatura`, text: `${client.name}` };
   try{
-    const blob = doc.output('blob');
-    const file = new File([blob], filename, { type:'application/pdf' });
-    if(navigator.canShare && navigator.canShare({ files:[file] })){
-      await navigator.share({ files:[file], title: filename, text: `${client.name}` });
+    await navigator.share(payload);
+  }catch(e){
+    if(e && e.name === 'AbortError') return; // user closed the share sheet
+    if(e && e.name === 'NotAllowedError'){
+      // The tap "expired" while the invoice-number modal was open (iOS). Ask for one more tap.
+      await new Promise((resolve)=>{
+        const modal = document.createElement('div');
+        modal.className = 'backups-modal';
+        modal.style.display = 'flex';
+        modal.innerHTML = `
+          <div class="backups-box" style="max-width:320px;">
+            <div class="backups-box-header"><h2>Fatura hazır</h2></div>
+            <div style="padding:0 20px 20px; display:flex; flex-direction:column; gap:8px;">
+              <button class="settings-btn" id="shareRetryBtn" style="width:100%;">Paylaş</button>
+              <button class="reschedule-cancel-btn" id="shareRetryCancelBtn" style="width:100%;">Vazgeç</button>
+            </div>
+          </div>`;
+        document.body.appendChild(modal);
+        document.getElementById('shareRetryBtn').addEventListener('click', ()=>{
+          modal.remove();
+          navigator.share(payload).catch(err=>{
+            if(!err || err.name !== 'AbortError') alert('Paylaşılamadı: ' + (err && err.message ? err.message : 'bilinmeyen hata'));
+          }).finally(resolve);
+        });
+        document.getElementById('shareRetryCancelBtn').addEventListener('click', ()=>{ modal.remove(); resolve(); });
+      });
       return;
     }
-  }catch(e){ /* user cancelled the share sheet */ }
-  alert('Bu tarayıcı/cihaz dosya paylaşımını desteklemiyor. Bunun yerine "İndir" butonunu kullanabilirsin.');
+    alert('Paylaşılamadı: ' + (e && e.message ? e.message : 'bilinmeyen hata'));
+  }
 }
 
 function clientDisplayName(client){
@@ -5282,8 +5421,9 @@ function wireCalendarPanel(client){
     const btn = panel.querySelector('.cal-create-btn');
     btn.disabled = true;
 
-    if(dateStr < todayIso()){
-      // Past date: don't send a real Calendar invite — just create a manual session note.
+    const startsInPast = dateStr < todayIso() || new Date(`${dateStr}T${timeStr}:00`).getTime() < Date.now();
+    if(startsInPast){
+      // Past date/time: don't send a real Calendar invite — just create a manual session note.
       const newSession = {
         id: uid(), date: dateStr,
         paymentDone:false, invoiceDone:false, notesDone:false,
@@ -5292,8 +5432,10 @@ function wireCalendarPanel(client){
         calendarStartTime: timeStr ? `${dateStr}T${timeStr}:00` : null,
         invitedBoth
       };
-      client.sessions.push(newSession);
-      client.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+      const liveClientPast = state.clients.find(c => c.id === client.id) || client;
+      if(!Array.isArray(liveClientPast.sessions)) liveClientPast.sessions = [];
+      liveClientPast.sessions.push(newSession);
+      liveClientPast.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
       markPreviousSessionAsNext(client, dateStr, title);
       saveState();
       logAudit('seans elle oluşturuldu', `${client.name} - ${formatShortDate(dateStr)}`, client.id);
@@ -5308,14 +5450,15 @@ function wireCalendarPanel(client){
     if(repeatWeekly){
       const baseDate = new Date(dateStr + 'T00:00:00');
       let successCount = 0;
-      const liveClient = state.clients.find(c => c.id === client.id) || client;
       for(let i = 0; i < repeatWeeks; i++){
         btn.textContent = `Oluşturuluyor… (${i+1}/${repeatWeeks})`;
-        const d = new Date(baseDate.getTime() + i*7*24*60*60*1000);
+        const d = addDaysLocal(baseDate, i*7);
         const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
         const created = await createCalendarEvent(client, { title, dateStr: dStr, timeStr, durationMinutes, inviteEmails });
         if(created){
           successCount++;
+          // Re-resolve every time: state may have been replaced by a snapshot during the awaits above.
+          const liveClient = state.clients.find(c => c.id === client.id) || client;
           liveClient.sessions.push({
             id: uid(), date: dStr,
             paymentDone:false, invoiceDone:false, notesDone:false,
@@ -5327,7 +5470,8 @@ function wireCalendarPanel(client){
         }
         await new Promise(r => setTimeout(r, 300));
       }
-      liveClient.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
+      const liveClientAfter = state.clients.find(c => c.id === client.id) || client;
+      liveClientAfter.sessions.sort((a,b)=> (b.date||'').localeCompare(a.date||''));
       saveState();
       if(successCount) logAudit('randevu oluşturuldu (haftalık tekrar)', `${client.name} - ${successCount} hafta`, client.id);
       calendarViewCache = {};
@@ -6488,12 +6632,15 @@ function showToast(text){
   }, 5000);
 }
 
-function notifyTaskEvent(type, task){
+async function notifyTaskEvent(type, task){
+  let idToken = null;
+  try{ idToken = currentUser ? await currentUser.getIdToken() : null; }catch(e){ console.error('ID token alınamadı', e); }
   fetch(TASK_NOTIFY_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      secret: TASK_NOTIFY_SECRET,
+      idToken, // sent in the body (not a header) so the existing CORS setup keeps working
+      secret: TASK_NOTIFY_SECRET, // TODO: remove once Cloud Run verifies idToken
       type,
       taskTitle: task.title,
       assignedTo: task.assignedTo,
@@ -6507,31 +6654,113 @@ function personLabel(id){
   return id === 'kubilay' ? 'Kubilay' : id === 'duygu' ? 'Duygu' : id === 'both' ? 'Ortak (Kubilay & Duygu)' : '?';
 }
 
+function normalizePracticeData(data){
+  data = data || {};
+  return { tasks: data.tasks||[], notes: data.notes||[], activity: data.activity||[], stats: data.stats||{}, notifications: data.notifications||[], notificationPrefs: data.notificationPrefs||{}, emailNotificationPrefs: data.emailNotificationPrefs||{} };
+}
+
 async function loadPracticeShared(){
   if(!currentUser) return null;
   try{
     const ref = window.FB.doc(window.FB.db, 'practiceShared', 'main');
     const snap = await window.FB.getDoc(ref);
-    if(snap.exists()){
-      const data = snap.data();
-      return { tasks: data.tasks||[], notes: data.notes||[], activity: data.activity||[], stats: data.stats||{}, notifications: data.notifications||[], notificationPrefs: data.notificationPrefs||{}, emailNotificationPrefs: data.emailNotificationPrefs||{} };
-    }
-    return { tasks:[], notes:[], activity:[], stats:{}, notifications:[], notificationPrefs:{}, emailNotificationPrefs:{} };
+    return normalizePracticeData(snap.exists() ? snap.data() : null);
   }catch(e){
     console.error('Ortaklık verisi yüklenemedi', e);
     return null;
   }
 }
 
-async function savePracticeShared(){
-  if(!currentUser || !practiceState) return;
-  try{
-    const ref = window.FB.doc(window.FB.db, 'practiceShared', 'main');
-    await window.FB.setDoc(ref, JSON.parse(JSON.stringify(practiceState)));
-  }catch(e){
-    console.error('Ortaklık verisi kaydedilemedi', e);
-    alert('Kaydedilemedi — Firestore kurallarına "practiceShared" izni eklenmiş mi kontrol et.');
-  }
+/* The shared doc is edited by two people. Instead of overwriting it with our local copy,
+   every save re-reads the server copy inside a transaction and applies only OUR changes
+   (local vs. the server version our copy was based on) on top of it. */
+let practiceBase = null;            // server version the current practiceState was derived from
+let practicePendingSaves = 0;
+let practiceSaveChain = Promise.resolve();
+const PRACTICE_ARRAY_FIELDS = { tasks:'append', notes:'append', activity:'prepend', notifications:'prepend' };
+const PRACTICE_OBJECT_FIELDS = ['stats', 'notificationPrefs', 'emailNotificationPrefs'];
+const PRACTICE_ARRAY_CAPS = { activity: 50, notifications: 100 };
+
+function jsonClone(v){ return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+
+function setPracticeFromServer(data){
+  practiceState = normalizePracticeData(data);
+  practiceBase = jsonClone(practiceState);
+}
+
+function practiceItemKey(item){ return (item && item.id != null) ? 'id:' + item.id : 'json:' + JSON.stringify(item); }
+
+function mergePracticeArray(baseArr, localArr, serverArr, mode){
+  const baseMap = new Map((baseArr||[]).map(i=>[practiceItemKey(i), i]));
+  const localMap = new Map((localArr||[]).map(i=>[practiceItemKey(i), i]));
+  const serverKeys = new Set((serverArr||[]).map(practiceItemKey));
+  const result = [];
+  (serverArr||[]).forEach(item=>{
+    const k = practiceItemKey(item);
+    if(baseMap.has(k) && !localMap.has(k)) return;                         // deleted by us
+    if(baseMap.has(k) && localMap.has(k) && JSON.stringify(localMap.get(k)) !== JSON.stringify(baseMap.get(k))){
+      result.push(localMap.get(k));                                        // edited by us
+    }else{
+      result.push(item);                                                   // untouched by us (may contain their edits)
+    }
+  });
+  const added = (localArr||[]).filter(i=>{ const k = practiceItemKey(i); return !baseMap.has(k) && !serverKeys.has(k); });
+  return mode === 'prepend' ? [...added, ...result] : [...result, ...added];
+}
+
+function mergePracticeObject(baseObj, localObj, serverObj){
+  const result = { ...(serverObj||{}) };
+  const keys = new Set([...Object.keys(baseObj||{}), ...Object.keys(localObj||{})]);
+  keys.forEach(k=>{
+    const b = (baseObj||{})[k], l = (localObj||{})[k];
+    if(JSON.stringify(b) === JSON.stringify(l)) return;                    // unchanged by us
+    if(localObj && Object.prototype.hasOwnProperty.call(localObj, k)) result[k] = l;
+    else delete result[k];
+  });
+  return result;
+}
+
+function mergePracticeData(base, local, server){
+  base = normalizePracticeData(base); local = normalizePracticeData(local); server = normalizePracticeData(server);
+  const out = {};
+  Object.keys(PRACTICE_ARRAY_FIELDS).forEach(f=>{
+    let arr = mergePracticeArray(base[f], local[f], server[f], PRACTICE_ARRAY_FIELDS[f]);
+    if(PRACTICE_ARRAY_CAPS[f] && arr.length > PRACTICE_ARRAY_CAPS[f]) arr = arr.slice(0, PRACTICE_ARRAY_CAPS[f]);
+    out[f] = arr;
+  });
+  PRACTICE_OBJECT_FIELDS.forEach(f=>{ out[f] = mergePracticeObject(base[f], local[f], server[f]); });
+  return jsonClone(out);
+}
+
+function savePracticeShared(){
+  if(!currentUser || !practiceState) return Promise.resolve();
+  // Capture our copy and the version it was based on right now (synchronously).
+  const local = jsonClone(practiceState);
+  const base = practiceBase ? jsonClone(practiceBase) : normalizePracticeData(null);
+  practicePendingSaves++;
+  practiceSaveChain = practiceSaveChain.then(async ()=>{
+    try{
+      const ref = window.FB.doc(window.FB.db, 'practiceShared', 'main');
+      const merged = await window.FB.runTransaction(window.FB.db, async (tx)=>{
+        const snap = await tx.get(ref);
+        const server = snap.exists() ? snap.data() : null;
+        const result = mergePracticeData(base, local, server);
+        tx.set(ref, result);
+        return result;
+      });
+      practicePendingSaves--;
+      if(practicePendingSaves === 0){
+        // Nothing newer queued: adopt the merged server state (includes the other person's changes).
+        setPracticeFromServer(merged);
+        updateNotificationBell();
+      }
+    }catch(e){
+      practicePendingSaves--;
+      console.error('Ortaklık verisi kaydedilemedi', e);
+      alert('Ortak veriler kaydedilemedi (' + (e && e.code ? e.code : 'hata') + '). İnternet bağlantısını ve Firestore "practiceShared" iznini kontrol et.');
+    }
+  });
+  return practiceSaveChain;
 }
 
 function logPracticeActivity(text){
@@ -6587,14 +6816,23 @@ function computeMonthlyRevenue(monthsBack){
   return buckets;
 }
 
+// Re-maps someone's published buckets onto the current 12-month window by month key,
+// so data they shared in an earlier month doesn't shift by one or more months.
+function alignBucketsToWindow(buckets, windowBuckets, emptyFields){
+  if(!buckets) return null;
+  const byKey = {};
+  buckets.forEach(b=>{ if(b && b.key) byKey[b.key] = b; });
+  return windowBuckets.map(w => byKey[w.key] ? { ...byKey[w.key], label: w.label } : { key: w.key, label: w.label, ...emptyFields });
+}
+
 function getFilteredMonthlyRevenue(filter){
   const shared = (practiceState && practiceState.stats) || {};
   const me = currentPersonId();
   // Whichever bucket represents "my own" data is always computed live from local state (freshest);
   // the other person's data comes from what they last published to the shared doc.
   const myBuckets = computeMonthlyRevenue(12);
-  const kubilayBuckets = (me === 'kubilay') ? myBuckets : (shared.kubilay && shared.kubilay.monthlyRevenue);
-  const duyguBuckets = (me === 'duygu') ? myBuckets : (shared.duygu && shared.duygu.monthlyRevenue);
+  const kubilayBuckets = (me === 'kubilay') ? myBuckets : alignBucketsToWindow(shared.kubilay && shared.kubilay.monthlyRevenue, myBuckets, { total: 0 });
+  const duyguBuckets = (me === 'duygu') ? myBuckets : alignBucketsToWindow(shared.duygu && shared.duygu.monthlyRevenue, myBuckets, { total: 0 });
 
   if(filter === 'kubilay') return kubilayBuckets || null;
   if(filter === 'duygu') return duyguBuckets || null;
@@ -6627,15 +6865,16 @@ function computeMonthlyNoShowRate(monthsBack){
       }
     });
   });
-  return buckets.map(b => ({ key: b.key, label: b.label, total: (b.total > 0) ? Math.round((b.noShow / b.total) * 100) : 0, sessionCount: b.total }));
+  return buckets.map(b => ({ key: b.key, label: b.label, total: (b.total > 0) ? Math.round((b.noShow / b.total) * 100) : 0, sessionCount: b.total, noShow: b.noShow }));
 }
 
 function getFilteredMonthlyNoShowRate(filter){
   const shared = (practiceState && practiceState.stats) || {};
   const me = currentPersonId();
   const myBuckets = computeMonthlyNoShowRate(12);
-  const kubilayBuckets = (me === 'kubilay') ? myBuckets : (shared.kubilay && shared.kubilay.monthlyNoShowRate);
-  const duyguBuckets = (me === 'duygu') ? myBuckets : (shared.duygu && shared.duygu.monthlyNoShowRate);
+  const empty = { total: 0, sessionCount: 0, noShow: 0 };
+  const kubilayBuckets = (me === 'kubilay') ? myBuckets : alignBucketsToWindow(shared.kubilay && shared.kubilay.monthlyNoShowRate, myBuckets, empty);
+  const duyguBuckets = (me === 'duygu') ? myBuckets : alignBucketsToWindow(shared.duygu && shared.duygu.monthlyNoShowRate, myBuckets, empty);
 
   if(filter === 'kubilay') return kubilayBuckets || null;
   if(filter === 'duygu') return duyguBuckets || null;
@@ -6644,8 +6883,9 @@ function getFilteredMonthlyNoShowRate(filter){
   return base.map((b,i)=>{
     const kCount = kubilayBuckets ? (kubilayBuckets[i].sessionCount||0) : 0;
     const dCount = duyguBuckets ? (duyguBuckets[i].sessionCount||0) : 0;
-    const kNoShow = kubilayBuckets ? Math.round(kubilayBuckets[i].total/100 * kCount) : 0;
-    const dNoShow = duyguBuckets ? Math.round(duyguBuckets[i].total/100 * dCount) : 0;
+    const noShowOf = (bk, count) => (bk.noShow != null) ? bk.noShow : Math.round(bk.total/100 * count); // older shared data has no raw count
+    const kNoShow = kubilayBuckets ? noShowOf(kubilayBuckets[i], kCount) : 0;
+    const dNoShow = duyguBuckets ? noShowOf(duyguBuckets[i], dCount) : 0;
     const totalCount = kCount + dCount;
     return { key: b.key, label: b.label, total: totalCount > 0 ? Math.round((kNoShow+dNoShow)/totalCount*100) : 0, sessionCount: totalCount };
   });
@@ -6847,7 +7087,7 @@ async function renderPracticePage(){
     if(box) box.textContent = 'Ortaklık verisi yüklenemedi — Google bağlantını ve Firestore izinlerini kontrol et.';
     return;
   }
-  practiceState = loaded;
+  if(practicePendingSaves === 0 || !practiceState) setPracticeFromServer(loaded);
   const me = currentPersonId();
   if(me){
     if(!practiceState.stats) practiceState.stats = {};
@@ -7910,14 +8150,14 @@ async function fetchEventsInRange(startDate, endDate){
 async function fetchUpcomingRangeEvents(days){
   const startOfToday = new Date();
   startOfToday.setHours(0,0,0,0);
-  const future = new Date(startOfToday.getTime() + days*24*60*60*1000);
+  const future = addDaysLocal(startOfToday, days);
   return fetchEventsInRange(startOfToday, future);
 }
 
 async function fetchPastRangeEvents(days){
   const startOfToday = new Date();
   startOfToday.setHours(0,0,0,0);
-  const past = new Date(startOfToday.getTime() - days*24*60*60*1000);
+  const past = addDaysLocal(startOfToday, -days);
   return fetchEventsInRange(past, startOfToday);
 }
 
@@ -8027,6 +8267,11 @@ function isoDate(d){
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
 
+// Adds calendar days in local time. Unlike "+ n*24h" this stays on the right date across DST changes.
+function addDaysLocal(date, n){
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + n, date.getHours(), date.getMinutes(), date.getSeconds(), date.getMilliseconds());
+}
+
 function getCalendarRangeForView(){
   const d = new Date(calendarAnchorDate + 'T00:00:00');
   if(calendarViewMode === 'month'){
@@ -8044,11 +8289,11 @@ function getCalendarRangeForView(){
       offset = d.getDay();
     }
     const start = new Date(d.getFullYear(), d.getMonth(), d.getDate() - offset);
-    const end = new Date(start.getTime() + 7*24*60*60*1000);
+    const end = addDaysLocal(start, 7);
     return { start, end };
   }
   const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const end = new Date(start.getTime() + 24*60*60*1000);
+  const end = addDaysLocal(start, 1);
   return { start, end };
 }
 
@@ -8058,7 +8303,7 @@ function calendarRangeLabel(start, end){
     return `${monthNames[start.getMonth()]} ${start.getFullYear()}`;
   }
   if(calendarViewMode === 'week'){
-    const endDisplay = new Date(end.getTime() - 24*60*60*1000);
+    const endDisplay = addDaysLocal(end, -1);
     return `${formatShortDate(isoDate(start))} – ${formatShortDate(isoDate(endDisplay))}`;
   }
   return `${turkishDayName(isoDate(start))}, ${formatShortDate(isoDate(start))}`;
@@ -8188,7 +8433,7 @@ function renderWeekGrid(weekStart, byDate){
   const todayStr = todayIso();
   let cells = '';
   for(let i=0;i<7;i++){
-    const d = new Date(weekStart.getTime() + i*24*60*60*1000);
+    const d = addDaysLocal(weekStart, i);
     const iso = isoDate(d);
     const count = (byDate[iso]||[]).length;
     const cls = ['cal-week-cell'];
@@ -8238,7 +8483,7 @@ function renderCalendarSelectedList(byDate){
       const { start } = getCalendarRangeForView();
       let inner = '';
       for(let i=0;i<7;i++){
-        const d = new Date(start.getTime() + i*24*60*60*1000);
+        const d = addDaysLocal(start, i);
         const iso = isoDate(d);
         const items = byDate[iso] || [];
         if(!items.length) continue;
