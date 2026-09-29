@@ -3816,9 +3816,11 @@ function renderMain(){
       const kind = btn.getAttribute('data-kind');
       const field = (kind === 'gmail') ? 'email' : 'phone';
       const options = personContactOptions(client, field);
-      if(options.length <= 1) return; // only one contact available — let the normal link work
+      if(!options.length){ ev.preventDefault(); return; }
       ev.preventDefault();
-      const chosen = await askWhichPersonToContact(options);
+      // One option: use it directly (the static link only knows the first person, so it was empty
+      // when only the second person had a phone/email).
+      const chosen = options.length === 1 ? options[0] : await askWhichPersonToContact(options);
       if(!chosen) return;
       let url;
       if(kind === 'wa') url = waLink(chosen.value);
@@ -4417,13 +4419,16 @@ function arrayBufferToBinaryString(buffer){
   return binary;
 }
 
-async function createGmailDraftWithAttachment(client, session, doc, filename){
+// Returns { ok, to, error }. The draft goes only to the person named on the invoice.
+async function createGmailDraftWithAttachment(client, session, doc, filename, recipient){
   const token = await ensureGoogleAccessToken();
-  if(!token) return false;
+  if(!token) return { ok:false, to:'', error:'Google bağlantısı yok' };
 
-  const to = clientEmailList(client);
+  recipient = recipient || invoiceRecipient(client, 'primary');
+  const to = recipient.email;
   const subject = `Your Receipt from ${getProvider().name} - ${formatInvoiceDate(session.date)}`;
-  const bodyText = `Hello ${client.name},\n\nPlease find your receipt for the session on ${formatInvoiceDate(session.date)} attached.\n\nBest regards,`;
+  const bodyText = `Hello ${recipient.name || client.name},\n\nPlease find your receipt for the session on ${formatInvoiceDate(session.date)} attached.\n\nBest regards,`;
+  const safeName = filename.replace(/[^\x20-\x7E]|"/g, '_');
 
   const pdfBase64 = btoa(arrayBufferToBinaryString(doc.output('arraybuffer')));
   const boundary = 'boundary_' + Date.now();
@@ -4438,8 +4443,8 @@ async function createGmailDraftWithAttachment(client, session, doc, filename){
     `Content-Transfer-Encoding: base64\r\n\r\n` +
     `${utf8ToBase64(bodyText)}\r\n\r\n` +
     `--${boundary}\r\n` +
-    `Content-Type: application/pdf; name="${filename}"\r\n` +
-    `Content-Disposition: attachment; filename="${filename}"\r\n` +
+    `Content-Type: application/pdf; name="${safeName}"\r\n` +
+    `Content-Disposition: attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(filename)}\r\n` +
     `Content-Transfer-Encoding: base64\r\n\r\n` +
     `${pdfBase64}\r\n\r\n` +
     `--${boundary}--`;
@@ -4452,14 +4457,11 @@ async function createGmailDraftWithAttachment(client, session, doc, filename){
     });
     if(!res.ok){
       const err = await res.json().catch(()=>({}));
-      alert('Taslak oluşturulamadı: ' + (err.error && err.error.message ? err.error.message : res.status));
-      return false;
+      return { ok:false, to, error: 'Taslak oluşturulamadı: ' + (err.error && err.error.message ? err.error.message : res.status) };
     }
-    alert('Taslak Gmail\'de oluşturuldu — Gmail\'i açıp gözden geçirip gönderebilirsin.');
-    return true;
+    return { ok:true, to, error:'' };
   }catch(e){
-    alert('Taslak oluşturulamadı: ' + e.message);
-    return false;
+    return { ok:false, to, error: 'Taslak oluşturulamadı: ' + e.message };
   }
 }
 
@@ -4585,11 +4587,22 @@ function askWhichPersonToContact(options){
   });
 }
 
+// Who an invoice is addressed to: name + that person's own contact details.
+function invoiceRecipient(client, who){
+  const p = client.profile || {};
+  if(who === 'second' && p.secondPerson){
+    const sp = p.secondPerson;
+    return { who: 'second', name: (sp.name||'').trim(), email: (sp.email||'').trim(), phone: (sp.phone||'').trim() };
+  }
+  return { who: 'primary', name: client.name, email: (p.email||'').trim(), phone: (p.phone||'').trim() };
+}
+
+// Resolves to 'primary', 'second', or null (cancelled).
 function askBillToName(client){
   return new Promise((resolve)=>{
     const sp = client.profile && client.profile.secondPerson;
     if(!sp || !sp.name || !sp.name.trim()){
-      resolve(client.name);
+      resolve('primary');
       return;
     }
     const modal = document.createElement('div');
@@ -4601,23 +4614,26 @@ function askBillToName(client){
           <h2>Kimin adına kesilsin?</h2>
         </div>
         <div style="padding:0 20px 20px; display:flex; flex-direction:column; gap:10px;">
-          <button class="settings-btn bill-to-choice" data-name="${escapeAttr(client.name)}" style="width:100%;">${escapeHtml(client.name)}</button>
-          <button class="settings-btn bill-to-choice" data-name="${escapeAttr(sp.name)}" style="width:100%;">${escapeHtml(sp.name)}</button>
+          <button class="settings-btn bill-to-choice" data-who="primary" style="width:100%;">${escapeHtml(client.name)}</button>
+          <button class="settings-btn bill-to-choice" data-who="second" style="width:100%;">${escapeHtml(sp.name)}</button>
+          <button class="reschedule-cancel-btn bill-to-cancel" style="width:100%;">Vazgeç</button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
     modal.querySelectorAll('.bill-to-choice').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        const name = btn.getAttribute('data-name');
+        const who = btn.getAttribute('data-who');
         modal.remove();
-        resolve(name);
+        resolve(who);
       });
     });
+    modal.querySelector('.bill-to-cancel').addEventListener('click', ()=>{ modal.remove(); resolve(null); });
     modal.addEventListener('click', (ev)=>{
+      // Tapping outside used to silently bill the first person; now it cancels.
       if(ev.target === modal){
         modal.remove();
-        resolve(client.name);
+        resolve(null);
       }
     });
   });
@@ -4761,7 +4777,8 @@ async function resolveInvoiceDetails(client, session){
     saveState();
   }
 
-  const shouldSplit = !ifhp && hasNamedSecondPerson(client) && !!client.profile.splitInvoice && session.invitedBoth === true;
+  // Same rule as the rate: only an explicit "Bireysel Seans" (invitedBoth === false) is a single-person session.
+  const shouldSplit = !ifhp && hasNamedSecondPerson(client) && !!client.profile.splitInvoice && session.invitedBoth !== false;
 
   if(shouldSplit){
     const halfRate = fullRate / 2;
@@ -4769,27 +4786,48 @@ async function resolveInvoiceDetails(client, session){
     const numB = invoiceNumber ? `${invoiceNumber}-B` : '';
     const docA = buildInvoiceDoc(client, session, ifhp, halfRate, numA, client.name, isAssessment);
     const docB = buildInvoiceDoc(client, session, ifhp, halfRate, numB, client.profile.secondPerson.name, isAssessment);
+    const recA = invoiceRecipient(client, 'primary');
+    const recB = invoiceRecipient(client, 'second');
     return [
-      { doc: docA, filename: invoiceFilename(client, session, client.name), rate: halfRate, invoiceNumber: numA, billToName: client.name },
-      { doc: docB, filename: invoiceFilename(client, session, client.profile.secondPerson.name), rate: halfRate, invoiceNumber: numB, billToName: client.profile.secondPerson.name }
+      { doc: docA, filename: invoiceFilename(client, session, recA.name), rate: halfRate, invoiceNumber: numA, billToName: recA.name, recipient: recA },
+      { doc: docB, filename: invoiceFilename(client, session, recB.name), rate: halfRate, invoiceNumber: numB, billToName: recB.name, recipient: recB }
     ];
   }
 
-  const billToName = await askBillToName(client);
+  const who = await askBillToName(client);
+  if(!who) return null; // cancelled
+  const recipient = invoiceRecipient(client, who);
+  const billToName = recipient.name;
   const doc = buildInvoiceDoc(client, session, ifhp, fullRate, invoiceNumber, billToName, isAssessment);
   const filename = invoiceFilename(client, session, billToName);
-  return [{ doc, filename, rate: fullRate, invoiceNumber, billToName }];
+  return [{ doc, filename, rate: fullRate, invoiceNumber, billToName, recipient }];
 }
 
 async function generateInvoiceForSession(client, session, action){
   const detailsList = await resolveInvoiceDetails(client, session);
   if(!detailsList) return;
+  const labelOf = d => `${d.billToName || client.name} - CA$${d.rate.toFixed(2)}${d.invoiceNumber ? ' - #'+d.invoiceNumber : ''}`;
   if(action === 'share'){
-    const files = detailsList.map(d => ({ doc: d.doc, filename: d.filename }));
-    await shareInvoiceFiles(files, client);
-    detailsList.forEach(d=>{
-      logAudit('fatura paylaşıldı', `${d.billToName || client.name} - CA$${d.rate.toFixed(2)}${d.invoiceNumber ? ' - #'+d.invoiceNumber : ''}`, client.id);
-    });
+    if(detailsList.length === 1){
+      const d = detailsList[0];
+      const shared = await shareInvoiceFiles([{ doc: d.doc, filename: d.filename }], d.recipient ? d.recipient.name : client.name);
+      if(shared) logAudit('fatura paylaşıldı', labelOf(d), client.id);
+    }else{
+      await askSharePerPerson(detailsList, client, labelOf);
+    }
+    return;
+  }
+  if(action === 'gmail'){
+    const results = [];
+    for(const d of detailsList){
+      const r = await createGmailDraftWithAttachment(client, session, d.doc, d.filename, d.recipient || invoiceRecipient(client, 'primary'));
+      results.push({ d, r });
+      logAudit(r.ok ? 'fatura Gmail taslağı olarak hazırlandı' : 'fatura Gmail taslağı oluşturulamadı', labelOf(d) + (r.ok && r.to ? ` → ${r.to}` : ''), client.id);
+    }
+    const lines = results.map(({d, r}) => r.ok
+      ? `✅ ${d.billToName}: taslak hazır${r.to ? ' (' + r.to + ')' : ' — ALICI BOŞ, bu kişinin e-postası profilde yok'}`
+      : `❌ ${d.billToName}: ${r.error}`);
+    alert(lines.join('\n') + (results.some(x=>x.r.ok) ? '\n\nGmail\'i açıp gözden geçirip gönderebilirsin.' : ''));
     return;
   }
   let lastOk = true;
@@ -4804,9 +4842,6 @@ async function generateInvoiceForSession(client, session, action){
       const ok = await uploadPdfToDriveFolder(doc, filename);
       logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
       lastOk = lastOk && ok;
-    }else if(action === 'gmail'){
-      createGmailDraftWithAttachment(client, session, doc, filename);
-      logAudit('fatura Gmail taslağı olarak hazırlandı', amountLabel, client.id);
     }
   }
   if(action === 'drive') return lastOk;
@@ -4814,22 +4849,58 @@ async function generateInvoiceForSession(client, session, action){
 
 
 
-async function shareInvoiceFile(doc, filename, client){
-  return shareInvoiceFiles([{ doc, filename }], client);
+// Split invoices: one share button per person, so each PDF goes to its own person
+// (each tap is a fresh user gesture, which iOS requires for navigator.share).
+function askSharePerPerson(detailsList, client, labelOf){
+  return new Promise((resolve)=>{
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:340px;">
+        <div class="backups-box-header"><h2>Faturaları gönder</h2></div>
+        <div style="padding:0 20px 20px; display:flex; flex-direction:column; gap:8px;">
+          <p style="margin:0 0 4px; font-size:13px; color:var(--muted);">Her fatura yalnızca üzerindeki kişiye gönderilmeli.</p>
+          ${detailsList.map((d,i)=>`<button class="settings-btn share-person-btn" data-idx="${i}" style="width:100%;">📤 ${escapeHtml(d.billToName)} faturasını gönder</button>`).join('')}
+          <button class="reschedule-cancel-btn" id="sharePersonDoneBtn" style="width:100%;">Bitti</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const close = ()=>{ modal.remove(); resolve(); };
+    modal.querySelectorAll('.share-person-btn').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const d = detailsList[Number(btn.getAttribute('data-idx'))];
+        const shared = await shareInvoiceFiles([{ doc: d.doc, filename: d.filename }], d.billToName, true);
+        if(shared){
+          logAudit('fatura paylaşıldı', labelOf(d), client.id);
+          btn.textContent = `✅ ${d.billToName} — gönderildi`;
+        }
+      });
+    });
+    document.getElementById('sharePersonDoneBtn').addEventListener('click', close);
+    modal.addEventListener('click', (ev)=>{ if(ev.target === modal) close(); });
+  });
 }
 
-async function shareInvoiceFiles(items, client){
+async function shareInvoiceFile(doc, filename, recipientName){
+  return shareInvoiceFiles([{ doc, filename }], recipientName);
+}
+
+// Returns true if the share sheet completed.
+async function shareInvoiceFiles(items, recipientName, fromDirectTap){
   const files = items.map(it => new File([it.doc.output('blob')], it.filename, { type:'application/pdf' }));
   if(!(navigator.canShare && navigator.canShare({ files }))){
     alert('Bu tarayıcı/cihaz dosya paylaşımını desteklemiyor. Bunun yerine "İndir" butonunu kullanabilirsin.');
-    return;
+    return false;
   }
-  const payload = { files, title: files.length === 1 ? files[0].name : `${files.length} fatura`, text: `${client.name}` };
+  const payload = { files, title: files.length === 1 ? files[0].name : `${files.length} fatura`, text: recipientName || '' };
   try{
     await navigator.share(payload);
+    return true;
   }catch(e){
-    if(e && e.name === 'AbortError') return; // user closed the share sheet
-    if(e && e.name === 'NotAllowedError'){
+    if(e && e.name === 'AbortError') return false; // user closed the share sheet
+    if(e && e.name === 'NotAllowedError' && !fromDirectTap){
+      let shared = false;
       // The tap "expired" while the invoice-number modal was open (iOS). Ask for one more tap.
       await new Promise((resolve)=>{
         const modal = document.createElement('div');
@@ -4846,15 +4917,16 @@ async function shareInvoiceFiles(items, client){
         document.body.appendChild(modal);
         document.getElementById('shareRetryBtn').addEventListener('click', ()=>{
           modal.remove();
-          navigator.share(payload).catch(err=>{
+          navigator.share(payload).then(()=>{ shared = true; }).catch(err=>{
             if(!err || err.name !== 'AbortError') alert('Paylaşılamadı: ' + (err && err.message ? err.message : 'bilinmeyen hata'));
           }).finally(resolve);
         });
         document.getElementById('shareRetryCancelBtn').addEventListener('click', ()=>{ modal.remove(); resolve(); });
       });
-      return;
+      return shared;
     }
     alert('Paylaşılamadı: ' + (e && e.message ? e.message : 'bilinmeyen hata'));
+    return false;
   }
 }
 
