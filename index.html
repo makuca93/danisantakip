@@ -2426,9 +2426,18 @@ function initGisTokenClient(){
   gisTokenClient = window.google.accounts.oauth2.initTokenClient({
     client_id: GIS_CLIENT_ID,
     scope: GOOGLE_API_SCOPES,
-    callback: ()=>{} // overridden per-call in trySilentGisRefresh
+    callback: ()=>{}, // overridden per-call in trySilentGisRefresh
+    // Popup blocked / closed: without this the pending request waited forever.
+    error_callback: (err)=>{
+      lastGisError = err && err.type ? err.type : 'unknown';
+      const h = gisErrorHandler;
+      gisErrorHandler = null;
+      if(h) h(err);
+    }
   });
 }
+let gisErrorHandler = null;
+let lastGisError = null;
 initGisTokenClient();
 
 function storeGoogleAccessToken(token){
@@ -2452,9 +2461,12 @@ function captureAccessTokenFromResult(result){
 function trySilentGisRefresh(){
   return new Promise((resolve)=>{
     if(!gisTokenClient){ resolve(null); return; }
+    lastGisError = null;
     const timeout = setTimeout(()=>resolve(null), 4000);
+    gisErrorHandler = ()=>{ clearTimeout(timeout); resolve(null); };
     gisTokenClient.callback = (tokenResponse)=>{
       clearTimeout(timeout);
+      gisErrorHandler = null;
       if(tokenResponse && tokenResponse.access_token){
         storeGoogleAccessToken(tokenResponse.access_token);
         resolve(googleAccessToken);
@@ -2491,8 +2503,38 @@ async function ensureGoogleAccessToken(){
   if(silent) return silent;
   const interactive = await tryInteractiveGisRequest();
   if(interactive) return interactive;
+  if(lastGisError === 'popup_failed_to_open'){
+    // The browser blocked the popup (the original tap "expired" behind a modal). Ask for one fresh tap.
+    const viaTap = await askGoogleReconnectTap();
+    if(viaTap) return viaTap;
+    return null;
+  }
+  if(lastGisError === 'popup_closed') return null; // user closed the Google window themselves
   alert('Google izinleri alınamadı.');
   return null;
+}
+
+function askGoogleReconnectTap(){
+  return new Promise((resolve)=>{
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:340px;">
+        <div class="backups-box-header"><h2>Google bağlantısı yenilenmeli</h2></div>
+        <div style="padding:0 20px 20px; display:flex; flex-direction:column; gap:8px;">
+          <p style="margin:0 0 4px; font-size:13px; color:var(--muted);">Tarayıcı Google izin penceresini engelledi. Devam etmek için dokun.</p>
+          <button class="settings-btn" id="gisReconnectBtn" style="width:100%;">Google'a Bağlan</button>
+          <button class="reschedule-cancel-btn" id="gisReconnectCancelBtn" style="width:100%;">Vazgeç</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    document.getElementById('gisReconnectBtn').addEventListener('click', ()=>{
+      modal.remove();
+      tryInteractiveGisRequest().then(resolve); // runs inside this tap, so the popup is allowed
+    });
+    document.getElementById('gisReconnectCancelBtn').addEventListener('click', ()=>{ modal.remove(); resolve(null); });
+  });
 }
 
 async function getTokenSilentOnly(){
@@ -2505,7 +2547,12 @@ async function getTokenSilentOnly(){
 function tryInteractiveGisRequest(){
   return new Promise((resolve)=>{
     if(!gisTokenClient){ resolve(null); return; }
+    lastGisError = null;
+    const timeout = setTimeout(()=>{ gisErrorHandler = null; resolve(null); }, 3*60*1000); // safety net
+    gisErrorHandler = ()=>{ clearTimeout(timeout); resolve(null); };
     gisTokenClient.callback = (tokenResponse)=>{
+      clearTimeout(timeout);
+      gisErrorHandler = null;
       if(tokenResponse && tokenResponse.access_token){
         storeGoogleAccessToken(tokenResponse.access_token);
         resolve(googleAccessToken);
@@ -6193,7 +6240,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
     <div class="invoice-actions-label">Fatura / Makbuz</div>
     <div class="invoice-actions">
       <button class="invoice-save-btn" type="button">💻 Bilgisayara İndir</button>
-      <button class="invoice-drive-btn" type="button">☁️ Drive'a Kaydet</button>
+      <button class="invoice-drive-btn" type="button" data-session-id="${escapeAttr(session.id)}">☁️ Drive'a Kaydet</button>
       <button class="invoice-share-btn" type="button">📤 Gönder</button>
       <div class="invoice-email-group">
         <button class="invoice-gmail-btn" type="button" title="Gmail'de ekli taslak oluştur">📧 Gmail Taslağı</button>
@@ -6360,26 +6407,30 @@ function renderSessionCard(client, session, index, defaultOpenId){
     div.querySelector('.invoice-save-btn').addEventListener('click', ()=>{
       generateInvoiceForSession(client, session, 'save');
     });
-    div.querySelector('.invoice-drive-btn').addEventListener('click', async (ev)=>{
-      const btn = ev.target;
-      if(btn.disabled) return;
-      const originalText = btn.textContent;
-      const detailsList = await resolveInvoiceDetails(client, session);
-      if(!detailsList) return;
-      btn.disabled = true;
-      btn.textContent = '⏳ Kaydediliyor…';
-      let allOk = true;
-      for(const details of detailsList){
-        const ok = await uploadPdfToDriveFolder(details.doc, details.filename);
-        allOk = allOk && ok;
-        const amountLabel = `${details.billToName || client.name} - CA$${details.rate.toFixed(2)}${details.invoiceNumber ? ' - #'+details.invoiceNumber : ''}`;
-        logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
+    const driveBtn = div.querySelector('.invoice-drive-btn');
+    applyDriveInvoiceBtnState(driveBtn, session.id); // keep "Kaydediliyor…/Kaydedildi" across re-renders
+    driveBtn.addEventListener('click', async ()=>{
+      const sid = session.id;
+      if(driveInvoiceBtnState[sid]) return; // already running for this session
+      setDriveInvoiceBtnState(sid, { text: '⏳ Hazırlanıyor…', disabled: true });
+      let allOk = false;
+      try{
+        const detailsList = await resolveInvoiceDetails(client, session);
+        if(!detailsList){ setDriveInvoiceBtnState(sid, null); return; } // cancelled
+        setDriveInvoiceBtnState(sid, { text: '⏳ Kaydediliyor…', disabled: true });
+        allOk = true;
+        for(const details of detailsList){
+          const ok = await uploadPdfToDriveFolder(details.doc, details.filename);
+          allOk = allOk && ok;
+          const amountLabel = `${details.billToName || client.name} - CA$${details.rate.toFixed(2)}${details.invoiceNumber ? ' - #'+details.invoiceNumber : ''}`;
+          logAudit(ok ? "fatura Drive'a kaydedildi" : "fatura Drive'a kaydedilemedi", amountLabel, client.id);
+        }
+      }catch(e){
+        console.error("Drive'a kaydetme hatası", e);
+        allOk = false;
       }
-      btn.textContent = allOk ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene';
-      setTimeout(()=>{
-        btn.textContent = originalText;
-        btn.disabled = false;
-      }, 2500);
+      setDriveInvoiceBtnState(sid, { text: allOk ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene', disabled: true });
+      setTimeout(()=> setDriveInvoiceBtnState(sid, null), allOk ? 3000 : 4000);
     });
     div.querySelector('.invoice-share-btn').addEventListener('click', ()=>{
       generateInvoiceForSession(client, session, 'share');
@@ -6389,6 +6440,27 @@ function renderSessionCard(client, session, index, defaultOpenId){
     });
   }
   return div;
+}
+
+// Saving an invoice number calls saveState(), whose snapshot re-renders the page and replaces
+// the button element. The status therefore lives here (per session) and is applied to whichever
+// button is currently on screen, instead of to the element that was clicked.
+const driveInvoiceBtnState = {};
+const DRIVE_INVOICE_BTN_DEFAULT = "☁️ Drive'a Kaydet";
+
+function applyDriveInvoiceBtnState(btn, sessionId){
+  if(!btn) return;
+  const st = driveInvoiceBtnState[sessionId];
+  btn.textContent = st ? st.text : DRIVE_INVOICE_BTN_DEFAULT;
+  btn.disabled = !!(st && st.disabled);
+}
+
+function setDriveInvoiceBtnState(sessionId, st){
+  if(st) driveInvoiceBtnState[sessionId] = st;
+  else delete driveInvoiceBtnState[sessionId];
+  document.querySelectorAll('.invoice-drive-btn').forEach(b=>{
+    if(b.getAttribute('data-session-id') === sessionId) applyDriveInvoiceBtnState(b, sessionId);
+  });
 }
 
 function boolLabel(v){ return v ? 'Evet' : 'Hayır'; }
@@ -7910,11 +7982,7 @@ function wireInvoicesPage(rows){
   });
 
   function updateInvoiceSelectionUI(){
-    const checked = document.querySelectorAll('.invoice-select-check:checked');
-    const countEl = document.getElementById('invoicesSelectedCount');
-    const bulkBtn = document.getElementById('invoicesBulkDownloadBtn');
-    if(countEl) countEl.textContent = checked.length;
-    if(bulkBtn) bulkBtn.disabled = checked.length === 0;
+    applyBulkInvoiceBtn();
   }
 
   document.querySelectorAll('.invoice-select-check').forEach(cb=>{
@@ -7932,26 +8000,43 @@ function wireInvoicesPage(rows){
   const bulkBtn = document.getElementById('invoicesBulkDownloadBtn');
   if(bulkBtn){
     bulkBtn.addEventListener('click', async ()=>{
-      const checkedRows = Array.from(document.querySelectorAll('.invoice-select-check:checked')).map(cb=>cb.closest('.invoice-row'));
-      if(!checkedRows.length) return;
-      bulkBtn.disabled = true;
-      const originalText = bulkBtn.innerHTML;
-      for(let i=0; i<checkedRows.length; i++){
-        bulkBtn.textContent = `İndiriliyor… (${i+1}/${checkedRows.length})`;
-        const row = checkedRows[i];
-        const clientId = row.getAttribute('data-client-id');
-        const sessionId = row.getAttribute('data-session-id');
-        const client = state.clients.find(c=>c.id===clientId);
-        const session = client && client.sessions.find(s=>s.id===sessionId);
-        if(client && session){
-          await generateInvoiceForSession(client, session, 'save');
-          await new Promise(r=>setTimeout(r, 400));
+      if(bulkInvoiceProgress) return; // already running
+      const targets = Array.from(document.querySelectorAll('.invoice-select-check:checked'))
+        .map(cb=>cb.closest('.invoice-row'))
+        .map(row=>({ clientId: row.getAttribute('data-client-id'), sessionId: row.getAttribute('data-session-id') }));
+      if(!targets.length) return;
+      try{
+        for(let i=0; i<targets.length; i++){
+          bulkInvoiceProgress = `İndiriliyor… (${i+1}/${targets.length})`;
+          applyBulkInvoiceBtn();
+          const client = state.clients.find(c=>c.id===targets[i].clientId);
+          const session = client && (client.sessions||[]).find(s=>s.id===targets[i].sessionId);
+          if(client && session){
+            await generateInvoiceForSession(client, session, 'save');
+            await new Promise(r=>setTimeout(r, 400));
+          }
         }
+      }finally{
+        bulkInvoiceProgress = null;
+        applyBulkInvoiceBtn();
       }
-      bulkBtn.innerHTML = originalText;
-      bulkBtn.disabled = false;
     });
   }
+  applyBulkInvoiceBtn(); // re-apply progress if the page was re-rendered mid-download
+}
+
+let bulkInvoiceProgress = null;
+function applyBulkInvoiceBtn(){
+  const b = document.getElementById('invoicesBulkDownloadBtn');
+  if(!b) return;
+  if(bulkInvoiceProgress){
+    b.textContent = bulkInvoiceProgress;
+    b.disabled = true;
+    return;
+  }
+  const n = document.querySelectorAll('.invoice-select-check:checked').length;
+  b.innerHTML = `📄 Seçilenleri İndir (<span id="invoicesSelectedCount">${n}</span>)`;
+  b.disabled = n === 0;
 }
 
 function driveBackupStatusText(){
