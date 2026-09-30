@@ -622,6 +622,14 @@
   .practice-stats-note{font-size:12px; color:var(--muted); margin:0 0 10px; font-style:italic;}
   .practice-task-edit-btn{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:2px 4px; flex-shrink:0;}
   .practice-task-edit-btn:hover{color:var(--ink);}
+  .practice-task-remind-btn{
+    background:var(--highlight); border:1px solid var(--highlight-line); color:var(--ink);
+    font-family:inherit; font-size:12px; font-weight:600;
+    padding:3px 10px; border-radius:999px; cursor:pointer; white-space:nowrap;
+  }
+  .practice-task-remind-btn:hover{filter:brightness(0.97);}
+  .practice-task-remind-btn:disabled{opacity:.6; cursor:default;}
+  .practice-task-reminded{font-size:11.5px; color:var(--muted);}
   .practice-task-editing{background:var(--paper); border-radius:8px; padding:10px;}
   .practice-task-edit-form{width:100%; display:flex; flex-direction:column; gap:8px;}
   .practice-task-edit-form input, .practice-task-edit-form select{
@@ -985,7 +993,7 @@
   }
   .client-picker-item:hover{background:var(--highlight);}
   .client-picker-empty{padding:8px 12px; font-size:13px; color:var(--muted); font-style:italic;}
-  .todo-add-btn, .home-todo-add-btn{
+  .todo-add-btn, .home-todo-add-btn, .practice-task-add-btn{
     padding:8px 16px;
     border-radius:6px;
     border:none;
@@ -996,7 +1004,7 @@
     font-size:13.5px;
     cursor:pointer;
   }
-  .todo-add-btn:hover, .home-todo-add-btn:hover{filter:brightness(1.08);}
+  .todo-add-btn:hover, .home-todo-add-btn:hover, .practice-task-add-btn:hover{filter:brightness(1.08);}
   .todo-sort-row{
     display:flex;
     align-items:center;
@@ -1940,15 +1948,20 @@
     }
     .todo-add-row .todo-text, .todo-add-row .home-todo-text,
     .todo-add-row .client-picker,
-    .todo-add-row .todo-add-btn, .todo-add-row .home-todo-add-btn{
+    .todo-add-row .todo-add-btn, .todo-add-row .home-todo-add-btn,
+    .todo-add-row .practice-task-add-btn{
       grid-column: 1 / -1;
+      min-height:46px;
+      font-size:16px;
     }
+    .todo-add-row .practice-task-text{ grid-column: 1 / -1; }
     .action-row{ flex-direction:column; }
     #clientHeader{ flex-direction:column; align-items:flex-start; gap:8px; }
     #clientHeader h2{ font-size:24px; }
     .client-header-actions{ margin-left:0; width:100%; }
     .session-card{ padding:16px; }
     .home-task-meta{ gap:6px; }
+    .practice-task-remind-btn{ font-size:13px; padding:6px 12px; min-height:34px; }
     .home-mobile-tabs{
       display:flex;
       gap:8px;
@@ -6671,6 +6684,120 @@ function currentPersonId(){
   return canonicalPersonId(currentUser.email);
 }
 
+/* ---------- Manual task reminder e-mail (sent from the signed-in user's Gmail) ---------- */
+const APP_URL = 'https://admin.ikitherapy.ca';
+const PERSON_WORK_EMAIL = { kubilay: 'malik@ikitherapy.ca', duygu: 'duygu@ikitherapy.ca' };
+const practiceRemindersSending = new Set();
+
+function personDative(id){
+  return id === 'kubilay' ? "Kubilay'a" : id === 'duygu' ? "Duygu'ya" : personLabel(id);
+}
+
+// Who gets reminded: only tasks I assigned to someone else (or shared tasks I created), not done.
+function taskReminderTarget(task, me){
+  if(!task || task.done || !me || task.assignedBy !== me) return null;
+  if(task.assignedTo === 'both') return me === 'kubilay' ? 'duygu' : 'kubilay';
+  if(task.assignedTo && task.assignedTo !== me) return task.assignedTo;
+  return null;
+}
+
+function daysBetweenIso(fromIso, toIso){
+  return Math.round((new Date(toIso + 'T00:00:00') - new Date(fromIso + 'T00:00:00')) / (24*60*60*1000));
+}
+
+function buildTaskReminderEmail(task, me, target){
+  const importanceLabel = { 1:'⭐ Düşük', 2:'⭐⭐ Orta', 3:'⭐⭐⭐ Yüksek' }[task.importance] || '⭐⭐ Orta';
+  const today = todayIso();
+  const createdIso = task.createdAt ? isoDate(new Date(task.createdAt)) : null;
+  const lines = [];
+  lines.push(`Merhaba ${personLabel(target)},`, '');
+  lines.push(`Bu otomatik bir hatırlatma mesajıdır. ${personLabel(me)}, ${task.assignedTo === 'both' ? 'ortak iş olarak atadığı' : 'sana atadığı'} aşağıdaki işi hatırlatmak için Danışan Takip uygulaması üzerinden gönderdi.`, '');
+  lines.push(`İş: ${task.title}`);
+  lines.push(`Önem: ${importanceLabel}`);
+  if(task.dueDate){
+    const diff = daysBetweenIso(today, task.dueDate);
+    const when = diff > 1 ? `${diff} gün kaldı` : diff === 1 ? 'yarın' : diff === 0 ? 'bugün' : `${-diff} gün geçti`;
+    lines.push(`Son tarih: ${formatShortDate(task.dueDate)} (${when})`);
+  }
+  if(createdIso){
+    const waiting = daysBetweenIso(createdIso, today);
+    lines.push(`Atanma tarihi: ${formatShortDate(createdIso)}${!task.dueDate && waiting > 0 ? ` (${waiting} gündür bekliyor)` : ''}`);
+  }
+  const openSubtasks = (task.subtasks||[]).filter(st => !st.done && st.text);
+  if(openSubtasks.length){
+    lines.push('', 'Kalan alt görevler:');
+    openSubtasks.forEach(st => lines.push(`  - ${st.text}`));
+  }
+  lines.push('', 'İşi tamamladığında uygulamada işaretlemen yeterli.');
+  lines.push(`Danışan Takip'i aç: ${APP_URL}`, '', '— Danışan Takip');
+  return { subject: `🔔 Hatırlatma: ${task.title}`, body: lines.join('\n') };
+}
+
+async function sendTaskReminder(taskId){
+  if(practiceRemindersSending.has(taskId)) return;
+  const me = currentPersonId();
+  const task = (practiceState && practiceState.tasks || []).find(t=>t.id===taskId);
+  const target = taskReminderTarget(task, me);
+  if(!target) return;
+  const toEmail = PERSON_WORK_EMAIL[target];
+  const sinceMin = task.lastReminderAt ? Math.round((Date.now() - task.lastReminderAt) / 60000) : null;
+  const question = (sinceMin !== null && sinceMin < 60)
+    ? `Bu iş için ${Math.max(1, sinceMin)} dakika önce zaten hatırlatma gönderdin. Yine de ${personDative(target)} tekrar gönderilsin mi?`
+    : `"${task.title}" için ${personDative(target)} (${toEmail}) hatırlatma maili gönderilsin mi?`;
+  if(!confirm(question)) return;
+
+  const { subject, body } = buildTaskReminderEmail(task, me, target);
+  practiceRemindersSending.add(taskId);
+  if(mainView === 'practice') renderPracticeContent();
+
+  let ok = false, errText = '';
+  try{
+    const token = await ensureGoogleAccessToken();
+    if(!token){
+      errText = 'Google bağlantısı kurulamadı.';
+    }else{
+      const mime =
+        `To: ${toEmail}\r\n` +
+        `Subject: ${encodeMimeSubject(subject)}\r\n` +
+        `MIME-Version: 1.0\r\n` +
+        `Content-Type: text/plain; charset="UTF-8"\r\n` +
+        `Content-Transfer-Encoding: base64\r\n\r\n` +
+        utf8ToBase64(body);
+      const res = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw: base64UrlEncode(mime) })
+      });
+      if(res.ok){
+        ok = true;
+      }else{
+        const err = await res.json().catch(()=>({}));
+        errText = err.error && err.error.message ? err.error.message : `HTTP ${res.status}`;
+      }
+    }
+  }catch(e){
+    errText = e && e.message ? e.message : 'bilinmeyen hata';
+  }
+  practiceRemindersSending.delete(taskId);
+
+  if(ok){
+    // practiceState may have been refreshed while sending — update the live copy of the task.
+    const live = (practiceState.tasks||[]).find(t=>t.id===taskId);
+    if(live){
+      live.lastReminderAt = Date.now();
+      live.lastReminderBy = me;
+      live.reminderCount = (live.reminderCount || 0) + 1;
+    }
+    logPracticeActivity(`${personLabel(me)}, "${task.title}" işi için ${personDative(target)} hatırlatma gönderdi.`);
+    pushInAppNotification(target, `🔔 ${personLabel(me)}, "${task.title}" işini hatırlattı.`, 'taskReminder');
+    await savePracticeShared();
+    showToast(`🔔 Hatırlatma gönderildi → ${toEmail}`);
+  }else{
+    alert('Hatırlatma gönderilemedi: ' + errText);
+  }
+  if(mainView === 'practice') renderPracticeContent();
+}
+
 const TASK_NOTIFY_URL = 'https://tasknotify-171012588947.us-central1.run.app/';
 const TASK_NOTIFY_SECRET = 'iki-therapy-notify-2026';
 
@@ -7176,6 +7303,10 @@ function practiceTaskRowHtml(t){
         ${t.dueDate ? `<span>${formatShortDate(t.dueDate)}</span>` : ''}
         <span>${stars(t.importance)}</span>
         ${taskExtrasToggleHtml(t)}
+        ${taskReminderTarget(t, currentPersonId()) ? (practiceRemindersSending.has(t.id)
+          ? `<button class="practice-task-remind-btn" type="button" disabled>⏳ Gönderiliyor…</button>`
+          : `<button class="practice-task-remind-btn" type="button" title="${escapeAttr(personLabel(taskReminderTarget(t, currentPersonId())))} kişisine hatırlatma maili gönder">🔔 Hatırlat</button>`) : ''}
+        ${(!t.done && t.reminderCount) ? `<span class="practice-task-reminded">🔔 ${t.reminderCount} kez hatırlatıldı · son: ${formatBackupTime(t.lastReminderAt)}</span>` : ''}
       </div>
       ${taskExtrasBodyHtml(t)}
     </div>
@@ -7279,7 +7410,7 @@ function renderPracticeContent(){
             <option value="3">⭐⭐⭐ Yüksek</option>
           </select>
           <input type="date" class="practice-task-duedate">
-          <button class="practice-task-add-btn" type="button">Ekle</button>
+          <button class="practice-task-add-btn" type="button">+ İş Ekle</button>
         </div>
         <div class="practice-stats-filter" style="margin-bottom:12px;">
           <button class="practice-task-filter-btn ${practiceTaskAssigneeFilter==='all'?'active':''}" data-filter="all">Tümü</button>
@@ -7485,6 +7616,13 @@ function wirePracticePage(){
       const row = ev.target.closest('[data-id]');
       editingPracticeTaskId = row.getAttribute('data-id');
       renderPracticeContent();
+    });
+  });
+
+  document.querySelectorAll('.practice-task-remind-btn').forEach(btn=>{
+    btn.addEventListener('click', (ev)=>{
+      const row = ev.target.closest('[data-id]');
+      if(row) sendTaskReminder(row.getAttribute('data-id'));
     });
   });
 
