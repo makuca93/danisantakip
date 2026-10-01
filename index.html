@@ -2783,6 +2783,7 @@ async function loadPracticeSharedForNotifications(){
   if(!loaded) return;
   if(practicePendingSaves > 0) return; // a save is in flight; it will bring back the merged server state
   setPracticeFromServer(loaded);
+  publishMyStatsIfNeeded(false);
   updateNotificationBell();
   checkDailyReminders();
   maybeShowNewNotificationToasts();
@@ -7196,7 +7197,23 @@ function computePersonalStats(){
       if(s.date.startsWith(thisYearStr)) sessionsThisYear++;
     });
   });
-  return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth, monthlyRevenue: computeMonthlyRevenue(12), monthlyNoShowRate: computeMonthlyNoShowRate(12) };
+  return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth, monthKey: thisMonthStr, yearKey: thisYearStr, monthlyRevenue: computeMonthlyRevenue(12), monthlyNoShowRate: computeMonthlyNoShowRate(12) };
+}
+
+// Publishes my stats to the shared doc. Previously this only happened when opening Yönetim,
+// so the other person kept seeing last month's "this month" numbers until then.
+function publishMyStatsIfNeeded(force){
+  const me = currentPersonId();
+  if(!me || !practiceState || !state) return false;
+  const fresh = computePersonalStats();
+  const prev = (practiceState.stats || {})[me];
+  const comparable = o => { if(!o) return null; const { updatedAt, ...rest } = o; return JSON.stringify(rest); };
+  const old = !prev || !prev.updatedAt || (Date.now() - prev.updatedAt > 6*60*60*1000);
+  if(!force && !old && comparable(prev) === comparable(fresh)) return false;
+  if(!practiceState.stats) practiceState.stats = {};
+  practiceState.stats[me] = { ...fresh, updatedAt: Date.now() };
+  savePracticeShared();
+  return true;
 }
 
 function computeMonthlyRevenue(monthsBack){
@@ -7345,8 +7362,36 @@ function revenueChartSvg(filter){
 
 function practiceStatsHtml(){
   const shared = (practiceState && practiceState.stats) || {};
-  const kubilay = shared.kubilay;
-  const duygu = shared.duygu;
+  const me = currentPersonId();
+  const nowMonth = todayIso().slice(0,7);
+  const nowYear = nowMonth.slice(0,4);
+  const monthNames = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+
+  // My own numbers are always computed live. For the other person, month/year figures that were
+  // published in an earlier month/year are hidden instead of being shown as "this month".
+  function view(id){
+    if(id === me && state) return { ...computePersonalStats(), updatedAt: Date.now(), monthStale:false };
+    const e = shared[id];
+    if(!e) return null;
+    const mk = e.monthKey || (e.updatedAt ? isoDate(new Date(e.updatedAt)).slice(0,7) : null);
+    const monthOk = mk === nowMonth;
+    const yearOk = !!mk && mk.slice(0,4) === nowYear;
+    return { ...e,
+      sessionsThisMonth: monthOk ? e.sessionsThisMonth : null,
+      revenueThisMonth: monthOk ? e.revenueThisMonth : null,
+      sessionsThisYear: yearOk ? e.sessionsThisYear : null,
+      monthStale: !monthOk };
+  }
+  const kubilay = view('kubilay');
+  const duygu = view('duygu');
+
+  const num = v => v == null ? '—' : v;
+  const money = v => v == null ? '—' : 'CA$' + Number(v).toFixed(0);
+  function staleMonthNote(name, entry){
+    if(!entry || !entry.monthStale) return '';
+    const last = entry.updatedAt ? formatShortDate(isoDate(new Date(entry.updatedAt))) : '?';
+    return `<p class="practice-stats-note">⚠️ ${name} ${monthNames[Number(nowMonth.slice(5,7))-1]} ayında uygulamayı henüz açmadığı için bu ayın verisi yok (son güncelleme: ${last}). Açtığında otomatik güncellenir.</p>`;
+  }
 
   function box(num, label){
     return `<div class="practice-stat-box"><div class="practice-stat-num">${num}</div><div class="practice-stat-label">${label}</div></div>`;
@@ -7360,22 +7405,22 @@ function practiceStatsHtml(){
 
   if(practiceStatsFilter === 'kubilay'){
     if(!kubilay) return `<div class="todo-empty">Kubilay henüz Yönetim sayfasını açıp veri paylaşmadı.</div>`;
-    return `<p class="practice-stats-note">Kubilay ${staleness(kubilay)}</p><div class="practice-stats-grid">
+    return `<p class="practice-stats-note">Kubilay ${staleness(kubilay)}</p>${staleMonthNote('Kubilay', kubilay)}<div class="practice-stats-grid">
       ${box(kubilay.activeClients,'Aktif danışan')}
       ${box(kubilay.terminatedClients,'Sonlanmış danışan')}
-      ${box(kubilay.sessionsThisMonth,'Bu ay seans')}
-      ${box(kubilay.sessionsThisYear,'Bu yıl seans')}
-      ${box('CA$'+kubilay.revenueThisMonth.toFixed(0),'Bu ay tahsil edilen')}
+      ${box(num(kubilay.sessionsThisMonth),'Bu ay seans')}
+      ${box(num(kubilay.sessionsThisYear),'Bu yıl seans')}
+      ${box(money(kubilay.revenueThisMonth),'Bu ay tahsil edilen')}
     </div>`;
   }
   if(practiceStatsFilter === 'duygu'){
     if(!duygu) return `<div class="todo-empty">Duygu henüz Yönetim sayfasını açıp veri paylaşmadı.</div>`;
-    return `<p class="practice-stats-note">Duygu ${staleness(duygu)}</p><div class="practice-stats-grid">
+    return `<p class="practice-stats-note">Duygu ${staleness(duygu)}</p>${staleMonthNote('Duygu', duygu)}<div class="practice-stats-grid">
       ${box(duygu.activeClients,'Aktif danışan')}
       ${box(duygu.terminatedClients,'Sonlanmış danışan')}
-      ${box(duygu.sessionsThisMonth,'Bu ay seans')}
-      ${box(duygu.sessionsThisYear,'Bu yıl seans')}
-      ${box('CA$'+duygu.revenueThisMonth.toFixed(0),'Bu ay tahsil edilen')}
+      ${box(num(duygu.sessionsThisMonth),'Bu ay seans')}
+      ${box(num(duygu.sessionsThisYear),'Bu yıl seans')}
+      ${box(money(duygu.revenueThisMonth),'Bu ay tahsil edilen')}
     </div>`;
   }
   // toplam
@@ -7385,12 +7430,18 @@ function practiceStatsHtml(){
   const k = kubilay || { activeClients:0, terminatedClients:0, sessionsThisMonth:0, sessionsThisYear:0, revenueThisMonth:0 };
   const d = duygu || { activeClients:0, terminatedClients:0, sessionsThisMonth:0, sessionsThisYear:0, revenueThisMonth:0 };
   const missingNote = (!kubilay || !duygu) ? `<p class="practice-stats-note">${!kubilay?'Kubilay':'Duygu'} henüz veri paylaşmadı, toplam eksik olabilir.</p>` : '';
-  return `${missingNote}<div class="practice-stats-grid">
+  // Sum what is known; mark with * when one side's month/year figure is missing.
+  const sum = (a, b) => (a == null && b == null) ? null : (a || 0) + (b || 0);
+  const partial = (a, b) => (a == null) !== (b == null);
+  const star = (a, b) => partial(a, b) ? '*' : '';
+  const anyPartial = partial(k.sessionsThisMonth, d.sessionsThisMonth) || partial(k.sessionsThisYear, d.sessionsThisYear) || partial(k.revenueThisMonth, d.revenueThisMonth);
+  const partialNote = anyPartial ? `<p class="practice-stats-note">* ${(k.monthStale ? 'Kubilay' : 'Duygu')} bu ay uygulamayı henüz açmadığı için bu değerler yalnızca ${(k.monthStale ? "Duygu'nun" : "Kubilay'ın")} verisini içeriyor.</p>` : '';
+  return `${missingNote}${partialNote}<div class="practice-stats-grid">
     ${box(k.activeClients + d.activeClients,'Aktif danışan')}
     ${box(k.terminatedClients + d.terminatedClients,'Sonlanmış danışan')}
-    ${box(k.sessionsThisMonth + d.sessionsThisMonth,'Bu ay seans')}
-    ${box(k.sessionsThisYear + d.sessionsThisYear,'Bu yıl seans')}
-    ${box('CA$'+(k.revenueThisMonth + d.revenueThisMonth).toFixed(0),'Bu ay tahsil edilen')}
+    ${box(num(sum(k.sessionsThisMonth, d.sessionsThisMonth)) + star(k.sessionsThisMonth, d.sessionsThisMonth),'Bu ay seans')}
+    ${box(num(sum(k.sessionsThisYear, d.sessionsThisYear)) + star(k.sessionsThisYear, d.sessionsThisYear),'Bu yıl seans')}
+    ${box(money(sum(k.revenueThisMonth, d.revenueThisMonth)) + star(k.revenueThisMonth, d.revenueThisMonth),'Bu ay tahsil edilen')}
   </div>`;
 }
 
@@ -7498,12 +7549,7 @@ async function renderPracticePage(){
     return;
   }
   if(practicePendingSaves === 0 || !practiceState) setPracticeFromServer(loaded);
-  const me = currentPersonId();
-  if(me){
-    if(!practiceState.stats) practiceState.stats = {};
-    practiceState.stats[me] = { ...computePersonalStats(), updatedAt: Date.now() };
-    savePracticeShared();
-  }
+  publishMyStatsIfNeeded(true);
   renderPracticeContent();
 }
 
