@@ -1509,6 +1509,16 @@
     color:var(--muted);
   }
   .task-subtask-add-input:focus{border-color:var(--card-line); background:#fdfcfd; color:var(--ink);}
+  /* Note + subtasks while creating a new task (add forms) */
+  .todo-add-row .new-task-extras{flex-basis:100%; width:100%;}
+  .new-task-extras-toggle{
+    background:none; border:1px dashed var(--card-line); color:var(--muted);
+    font-family:inherit; font-size:12.5px; padding:6px 12px; border-radius:7px; cursor:pointer;
+  }
+  .new-task-extras-toggle.has-content{background:var(--highlight); border:1px solid var(--highlight-line); color:var(--ink);}
+  .new-task-extras-body{margin-top:8px; padding:10px; border:1px solid var(--card-line); border-radius:8px; background:var(--paper);}
+  .new-task-extras-body.collapsed{display:none;}
+  .new-task-extras-body .task-subtask-row{padding:2px 0;}
   .home-task-client{
     font-size:12px; font-weight:600; color:var(--ink);
     background:var(--highlight); padding:2px 9px; border-radius:10px; cursor:pointer;
@@ -1955,6 +1965,9 @@
       font-size:16px;
     }
     .todo-add-row .practice-task-text{ grid-column: 1 / -1; }
+    .todo-add-row .new-task-extras{ grid-column: 1 / -1; }
+    .new-task-extras-toggle{ width:100%; min-height:40px; font-size:14px; }
+    .new-task-note{ font-size:16px; }
     .action-row{ flex-direction:column; }
     #clientHeader{ flex-direction:column; align-items:flex-start; gap:8px; }
     #clientHeader h2{ font-size:24px; }
@@ -5089,6 +5102,87 @@ function taskExtrasBodyHtml(item){
   </div>`;
 }
 
+/* Drafts for the add forms, kept outside the DOM so a re-render doesn't lose them.
+   Keys: 'client:<id>', 'home', 'practice'. */
+const newTaskDrafts = {};
+
+function getNewTaskDraft(key){
+  if(!newTaskDrafts[key]) newTaskDrafts[key] = { open:false, note:'', subtasks:[], pendingSubtask:'' };
+  return newTaskDrafts[key];
+}
+
+function newTaskExtrasHtml(key){
+  const d = getNewTaskDraft(key);
+  const parts = [];
+  if(d.note.trim()) parts.push('not');
+  if(d.subtasks.length) parts.push(`${d.subtasks.length} alt görev`);
+  const label = d.open ? '📝 Not ve alt görevleri gizle' : `📝 Not / alt görev ekle${parts.length ? ` (${parts.join(', ')})` : ''}`;
+  return `
+  <div class="new-task-extras" data-draft-key="${escapeAttr(key)}">
+    <button type="button" class="new-task-extras-toggle ${parts.length ? 'has-content' : ''}">${label}</button>
+    <div class="new-task-extras-body ${d.open ? '' : 'collapsed'}">
+      <textarea class="task-note-input new-task-note" placeholder="Not ekle…">${escapeHtml(d.note)}</textarea>
+      <div class="task-subtasks">
+        ${d.subtasks.map((text,i)=>`
+          <div class="task-subtask-row">
+            <span class="task-subtask-text">• ${escapeHtml(text)}</span>
+            <button type="button" class="task-subtask-del new-task-subtask-del" data-idx="${i}" title="Sil">✕</button>
+          </div>`).join('')}
+        <div class="task-subtask-add-row">
+          <input type="text" class="new-task-subtask-input" placeholder="+ Alt görev yaz, Enter'a bas…" value="${escapeAttr(d.pendingSubtask)}">
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function wireNewTaskExtras(root, key){
+  const el = Array.from(root.querySelectorAll('.new-task-extras')).find(x => x.getAttribute('data-draft-key') === key);
+  if(!el) return;
+  const d = getNewTaskDraft(key);
+  const redraw = (focusSubtaskInput)=>{
+    el.outerHTML = newTaskExtrasHtml(key);
+    wireNewTaskExtras(root, key);
+    if(focusSubtaskInput){
+      const fresh = Array.from(root.querySelectorAll('.new-task-extras')).find(x => x.getAttribute('data-draft-key') === key);
+      const input = fresh && fresh.querySelector('.new-task-subtask-input');
+      if(input) input.focus();
+    }
+  };
+  el.querySelector('.new-task-extras-toggle').addEventListener('click', ()=>{ d.open = !d.open; redraw(); });
+  el.querySelector('.new-task-note').addEventListener('input', (ev)=>{ d.note = ev.target.value; });
+  const subInput = el.querySelector('.new-task-subtask-input');
+  subInput.addEventListener('input', (ev)=>{ d.pendingSubtask = ev.target.value; });
+  subInput.addEventListener('keydown', (ev)=>{
+    if(ev.key !== 'Enter') return;
+    ev.preventDefault();
+    const text = subInput.value.trim();
+    if(!text) return;
+    d.subtasks.push(text);
+    d.pendingSubtask = '';
+    redraw(true);
+  });
+  el.querySelectorAll('.new-task-subtask-del').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      d.subtasks.splice(Number(btn.getAttribute('data-idx')), 1);
+      redraw();
+    });
+  });
+}
+
+// Returns { note?, subtasks? } for the new item and clears the draft.
+// A subtask typed but not yet confirmed with Enter is included too.
+function takeNewTaskExtras(key){
+  const d = getNewTaskDraft(key);
+  const texts = [...d.subtasks];
+  if(d.pendingSubtask.trim()) texts.push(d.pendingSubtask.trim());
+  const out = {};
+  if(d.note.trim()) out.note = d.note.trim();
+  if(texts.length) out.subtasks = texts.map(text => ({ id: uid(), text, done:false }));
+  delete newTaskDrafts[key];
+  return out;
+}
+
 function wireTaskExtras(row, item, onSave, onRerender){
   const toggle = row.querySelector('.task-extras-toggle');
   if(toggle){
@@ -5742,6 +5836,7 @@ function todoPanelHtml(client){
             <option value="3">⭐⭐⭐ Yüksek</option>
       </select>
       <input type="date" class="todo-duedate">
+      ${newTaskExtrasHtml('client:' + client.id)}
       <button class="todo-add-btn" type="button">Ekle</button>
     </div>
     <div class="todo-sort-row">
@@ -5771,14 +5866,16 @@ function wireTodoPanel(client){
     if(wasOpen) document.getElementById('todoPanel').classList.add('open');
   };
 
+  wireNewTaskExtras(panel, 'client:' + client.id);
   panel.querySelector('.todo-add-btn').addEventListener('click', ()=>{
     const textInput = panel.querySelector('.todo-text');
     const text = textInput.value.trim();
     if(!text) return;
     const importance = Number(panel.querySelector('.todo-importance').value);
     const dueDate = panel.querySelector('.todo-duedate').value;
+    const extras = takeNewTaskExtras('client:' + client.id);
     client.todos = client.todos || [];
-    client.todos.push({ id: uid(), text, importance, dueDate, done:false, doneAt:null });
+    client.todos.push({ id: uid(), text, importance, dueDate, done:false, doneAt:null, ...extras });
     saveState();
     panel.classList.add('open');
     renderMain();
@@ -7410,6 +7507,7 @@ function renderPracticeContent(){
             <option value="3">⭐⭐⭐ Yüksek</option>
           </select>
           <input type="date" class="practice-task-duedate">
+          ${newTaskExtrasHtml('practice')}
           <button class="practice-task-add-btn" type="button">+ İş Ekle</button>
         </div>
         <div class="practice-stats-filter" style="margin-bottom:12px;">
@@ -7533,6 +7631,7 @@ function wirePracticePage(){
     });
   }
 
+  wireNewTaskExtras(document, 'practice');
   document.querySelector('.practice-task-add-btn').addEventListener('click', async ()=>{
     const textInput = document.querySelector('.practice-task-text');
     const title = textInput.value.trim();
@@ -7541,8 +7640,9 @@ function wirePracticePage(){
     const importance = Number(document.querySelector('.practice-task-importance').value);
     const dueDate = document.querySelector('.practice-task-duedate').value;
     const me = currentPersonId();
+    const extras = takeNewTaskExtras('practice');
     if(!practiceState.tasks) practiceState.tasks = [];
-    practiceState.tasks.push({ id: uid(), title, assignedTo, assignedBy: me, importance, dueDate, done:false, createdAt: Date.now() });
+    practiceState.tasks.push({ id: uid(), title, assignedTo, assignedBy: me, importance, dueDate, done:false, createdAt: Date.now(), ...extras });
     logPracticeActivity(`${personLabel(me)}, ${personLabel(assignedTo)}'a bir iş atadı: "${title}"`);
     notifyTaskEvent('assigned', { title, assignedTo, assignedBy: me });
     if(assignedTo === 'both'){
@@ -8855,6 +8955,7 @@ function renderHome(){
             <input type="hidden" class="home-todo-client-id" value="">
             <div class="client-picker-list"></div>
           </div>
+          ${newTaskExtrasHtml('home')}
           <button class="home-todo-add-btn" type="button">Ekle</button>
         </div>
         <div class="home-sort-row">
@@ -8931,6 +9032,7 @@ function renderHome(){
 
   wireHomeClientPicker();
 
+  wireNewTaskExtras(document, 'home');
   document.querySelector('.home-todo-add-btn').addEventListener('click', ()=>{
     const textInput = document.querySelector('.home-todo-text');
     const text = textInput.value.trim();
@@ -8938,7 +9040,7 @@ function renderHome(){
     const importance = Number(document.querySelector('.home-todo-importance').value);
     const dueDate = document.querySelector('.home-todo-duedate').value;
     const clientId = document.querySelector('.home-todo-client-id').value;
-    const newTodo = { id: uid(), text, importance, dueDate, done:false, doneAt:null };
+    const newTodo = { id: uid(), text, importance, dueDate, done:false, doneAt:null, ...takeNewTaskExtras('home') };
     if(clientId){
       const client = state.clients.find(c=>c.id===clientId);
       client.todos = client.todos || [];
