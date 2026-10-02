@@ -7361,9 +7361,14 @@ async function wireFormsSettings(){
 function newFormToken(){
   const b = new Uint8Array(24);
   crypto.getRandomValues(b);
-  return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  // The leading letter tells the form page whose record this is, so the link needs no name in it.
+  return FORM_OWNER_CODES[currentPersonId()] + '.' + btoa(String.fromCharCode.apply(null, b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function formLinkForToken(token){ return `${FORM_PAGE_URL}#p=${currentPersonId()}&t=${token}`; }
+const FORM_OWNER_CODES = { kubilay: 'a', duygu: 'b' };
+function formLinkForToken(token){
+  // Links made before the owner code existed still need the old "p" parameter.
+  return token.indexOf('.') === 1 ? `${FORM_PAGE_URL}#t=${token}` : `${FORM_PAGE_URL}#p=${currentPersonId()}&t=${token}`;
+}
 // Couple requests have one part (own link, own device) per person; everything else is a single link.
 function formTokens(entry){ return entry.parts ? entry.parts.map(p => p.token) : [entry.token]; }
 function formRequestRef(token){ return window.FB.doc(window.FB.db, 'users', currentPersonId(), 'formRequests', token); }
@@ -7790,6 +7795,7 @@ function wireFormsPanel(client){
           const targets = entry.parts ? entry.parts.map(pt => ({ token: pt.token, key: pt.key })) : [{ token: entry.token, key: entry.key }];
           for(const t of targets){
             try{ await window.FB.deleteDoc(formResponseRef(t.token)); }catch(e){ /* no response yet */ }
+            try{ await window.FB.deleteDoc(window.FB.doc(window.FB.db, 'users', currentPersonId(), 'formRequests', t.token, 'status', 'done')); }catch(e){ /* no marker */ }
             if(t.key) await window.FB.deleteDoc(formContentRef(t.token, t.key));
             await window.FB.deleteDoc(formRequestRef(t.token));
           }

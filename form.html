@@ -112,7 +112,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-  import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-lite.js";
+  import { getFirestore, doc, getDoc, writeBatch, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-lite.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyBgK5VzCmfQUqhftug3D5ULZEfMvdkjdNA",
@@ -162,8 +162,10 @@
   const app = document.getElementById('app');
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const params = new URLSearchParams(location.hash.replace(/^#/, ''));
-  const personId = params.get('p');
   const token = params.get('t');
+  // The first letter of the code says whose record it is; older links carried it as a separate "p" value.
+  const OWNER_CODES = { a: 'kubilay', b: 'duygu' };
+  const personId = (token && token[1] === '.' && OWNER_CODES[token[0]]) || params.get('p');
 
   function message(title, text){
     app.innerHTML = `<section class="card center"><h2>${esc(title)}</h2><p class="sub">${esc(text)}</p></section>`;
@@ -193,12 +195,21 @@
   const pads = [];
 
   async function start(){
-    if(!personId || !token || !/^[a-z]+$/.test(personId) || !/^[A-Za-z0-9_-]{20,}$/.test(token)){
+    if(!personId || !token || !/^[a-z]+$/.test(personId) || !/^([a-z]\.)?[A-Za-z0-9_-]{20,}$/.test(token)){
       message('This link is not valid', 'Please open the link exactly as it was sent to you, or ask your therapist for a new one.');
       return;
     }
     try{
-      const snap = await getDoc(doc(db, 'users', personId, 'formRequests', token));
+      // "done" marker: written together with the answers, so a used link shows a clear message
+      // instead of opening the form again.
+      const [snap, doneSnap] = await Promise.all([
+        getDoc(doc(db, 'users', personId, 'formRequests', token)),
+        getDoc(doc(db, 'users', personId, 'formRequests', token, 'status', 'done'))
+      ]);
+      if(doneSnap.exists()){
+        message('These forms have already been submitted', 'Thank you. There is nothing more to do. If you need to change something, please contact your therapist.');
+        return;
+      }
       if(!snap.exists()){
         message('This link is no longer available', 'It may have been cancelled. Please ask your therapist for a new link.');
         return;
@@ -474,9 +485,13 @@
 
     btn.disabled = true; btn.textContent = 'Sending…';
     try{
-      await setDoc(doc(db, 'users', personId, 'formRequests', token, 'responses', 'main'), {
+      // Answers and the "done" marker are saved together: either both are stored or neither.
+      const batch = writeBatch(db);
+      batch.set(doc(db, 'users', personId, 'formRequests', token, 'responses', 'main'), {
         v: 1, submittedAt: serverTimestamp(), payload: JSON.stringify(payload), key: contentKey || 'open'
       });
+      batch.set(doc(db, 'users', personId, 'formRequests', token, 'status', 'done'), { done: true });
+      await batch.commit();
     }catch(e){
       btn.disabled = false; btn.textContent = req.consent ? 'Sign and submit' : 'Submit';
       const denied = e && (e.code === 'permission-denied' || /permission/i.test(e.message || ''));
