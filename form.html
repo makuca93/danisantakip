@@ -307,7 +307,8 @@
       </div>
       <label class="field" for="name_${i}">${isGuardian ? 'Parent / guardian full name' : 'Full name'}</label>
       <input type="text" id="name_${i}" autocomplete="name" ${i > 0 ? 'disabled' : ''}>
-      ${isGuardian ? `<label class="field" for="rel_${i}">Relationship to the client</label><input type="text" id="rel_${i}" placeholder="e.g. mother, father, legal guardian">` : ''}
+      ${isGuardian ? `<label class="field" for="rel_${i}">Relationship to the client</label><input type="text" id="rel_${i}" placeholder="e.g. mother, father, legal guardian">
+      <label class="field" for="cname_${i}">Client's full name (the young person receiving therapy)</label><input type="text" id="cname_${i}">` : ''}
       <label class="field">Sign in the box with your finger or mouse</label>
       <div class="pad-wrap"><canvas id="pad_${i}"></canvas><div class="pad-hint">Sign here</div></div>
       <div class="pad-actions"><span>Date: ${new Date().toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' })}</span><button type="button" class="link-btn" data-clear="${i}">Clear</button></div>
@@ -324,14 +325,13 @@
       html += `
       <section class="card" id="consentCard">
         <h2>${esc(c.title || 'Consent form')}</h2>
-        ${req.clientLabel ? `<p class="sub">Client: ${esc(req.clientLabel)}</p>` : ''}
         <div class="consent-text">${sanitizeConsentHtml(c.html)}</div>
         <div class="sign-title">Agreement and signature</div>
         <div id="checks">
           ${(c.checks||[]).map((t,i)=>`<label class="check-row"><input type="checkbox" data-check="${i}"><span>${esc(t)}</span></label>`).join('')}
         </div>
         ${req.signers.length > 1 ? `<p class="sub" style="margin-top:12px;">Each person signs in turn. The second signature opens once the first is complete.</p>` : ''}
-        ${req.coSignerName ? `<p class="sub" style="margin-top:12px;">This form is signed by two people. ${esc(req.coSignerName)} signs separately, using their own link.</p>` : ''}
+        ${(req.twoSigners || req.coSignerName) ? `<p class="sub" style="margin-top:12px;">This form is signed by two people. Your partner signs separately, using their own link.</p>` : ''}
         ${req.signers.map(signerHtml).join('')}
       </section>`;
     }
@@ -346,8 +346,7 @@
       req.signers.forEach((s,i)=>{
         pads[i] = makePad(document.getElementById(`pad_${i}`), ()=>updateSigners());
         document.getElementById(`name_${i}`).addEventListener('input', updateSigners);
-        const rel = document.getElementById(`rel_${i}`);
-        if(rel) rel.addEventListener('input', updateSigners);
+        ['rel_', 'cname_'].forEach(pre => { const el = document.getElementById(pre + i); if(el) el.addEventListener('input', updateSigners); });
       });
       app.querySelectorAll('[data-clear]').forEach(b=> b.addEventListener('click', ()=>{ pads[Number(b.dataset.clear)].clear(); updateSigners(); }));
       updateSigners();
@@ -359,7 +358,8 @@
   function signerComplete(i){
     const name = document.getElementById(`name_${i}`).value.trim();
     const rel = document.getElementById(`rel_${i}`);
-    return name.length >= 3 && (!rel || rel.value.trim().length >= 2) && pads[i].hasInk();
+    const cname = document.getElementById(`cname_${i}`);
+    return name.length >= 3 && (!rel || rel.value.trim().length >= 2) && (!cname || cname.value.trim().length >= 3) && pads[i].hasInk();
   }
 
   // Sequential signing: signer N+1 unlocks only when signer N has a name and a signature.
@@ -444,7 +444,7 @@
       if(unchecked){ showError('Please tick every statement in the consent form to continue.', unchecked.closest('.check-row')); return; }
       for(let i = 0; i < req.signers.length; i++){
         if(!signerComplete(i)){
-          showError(req.signers.length > 1 ? `Signature ${i+1} is not complete: a full name and a signature are both needed.` : 'Please enter your full name and sign in the box.', app.querySelector(`[data-signer="${i}"]`));
+          showError(req.signers.length > 1 ? `Signature ${i+1} is not complete: a full name and a signature are both needed.` : 'Please fill in every name field and sign in the box.', app.querySelector(`[data-signer="${i}"]`));
           return;
         }
       }
@@ -456,6 +456,7 @@
           expectedName: s.name || '',
           name: document.getElementById(`name_${i}`).value.trim(),
           relationship: document.getElementById(`rel_${i}`) ? document.getElementById(`rel_${i}`).value.trim() : '',
+          clientName: document.getElementById(`cname_${i}`) ? document.getElementById(`cname_${i}`).value.trim() : '',
           signature: pads[i].toDataUrl(),
           signedAt: new Date().toISOString()
         }))

@@ -2654,8 +2654,8 @@ function tryInteractiveGisRequest(){
 // Each real person may sign in with either of their email addresses;
 // both map to the same canonical data bucket so their data stays unified.
 const PERSON_EMAILS = {
-  kubilay: ['psk.kubilay@gmail.com', 'malik@ikitherapy.ca'],
-  duygu: ['duygu.rp@gmail.com', 'duygu@ikitherapy.ca']
+  kubilay: ['malik@ikitherapy.ca'],
+  duygu: ['duygu@ikitherapy.ca']
 };
 
 function canonicalPersonId(email){
@@ -2677,9 +2677,7 @@ function otherPersonEmail(){
 }
 
 const ALLOWED_EMAILS = [
-  'duygu.rp@gmail.com',
   'duygu@ikitherapy.ca',
-  'psk.kubilay@gmail.com',
   'malik@ikitherapy.ca'
 ];
 
@@ -7422,16 +7420,16 @@ async function createFormRequest(client, opts){
   if(opts.consentType === 'couple'){
     // Each person gets their own link and signs on their own device.
     const names = [client.name, sp.name.trim()];
-    const clientLabel = `${names[0]} & ${names[1]}`;
     entry.parts = [];
     for(let i = 0; i < 2; i++){
-      const w = await write({ clientLabel, part: i + 1, coSignerName: names[1 - i], signers: [{ role: 'client', name: names[i] }], respondents: [{ name: names[i] }] }, dobs[i]);
+      // No names are stored in the form itself: each person types their own name when signing.
+      const w = await write({ part: i + 1, twoSigners: true, signers: [{ role: 'client' }], respondents: [{}] }, dobs[i]);
       entry.parts.push({ token: w.token, key: w.key, name: names[i], status: 'open' });
     }
     entry.token = entry.parts[0].token; // identifies the entry in lists
   }else{
-    const signers = consent ? [opts.consentType === 'minor' ? { role: 'guardian', name: '' } : { role: 'client', name: client.name }] : [];
-    const w = await write({ clientLabel: client.name, signers, respondents: [{ name: client.name }] }, dobs[0]);
+    const signers = consent ? [{ role: opts.consentType === 'minor' ? 'guardian' : 'client' }] : [];
+    const w = await write({ signers, respondents: [{}] }, dobs[0]);
     entry.token = w.token;
     entry.key = w.key;
   }
@@ -7660,6 +7658,7 @@ async function checkOpenFormRequests(){
         try{ payload = JSON.parse(d.payload); }catch(e){ console.error('Form yanıtı okunamadı', e); continue; }
         target.status = 'done';
         target.submittedAt = d.submittedAt && d.submittedAt.toMillis ? d.submittedAt.toMillis() : Date.now();
+        (payload.scales || []).forEach(sc => { sc.respondentName = o.part === null ? client.name : target.name; });
         target.result = summarizeFormPayload(payload);
         if(o.part === null){
           entry.reviewed = !entry.result.flag;
@@ -7816,7 +7815,7 @@ function wireFormsPanel(client){
       // Everything below needs the stored answers.
       busy('⏳ Yükleniyor…');
       let rec;
-      try{ rec = await loadFormRecord(entry); }
+      try{ rec = await loadFormRecord(entry, live()); }
       catch(e){ console.error('Form kaydı yüklenemedi', e); alert('Form kaydı yüklenemedi, bağlantını kontrol et.'); done(original, 10); return; }
       if(act === 'view'){ done(original, 10); openFormResponseModal(client, entry, rec); return; }
       try{
@@ -7844,8 +7843,13 @@ function wireFormsPanel(client){
 }
 
 const formRecordCache = new Map();
-async function loadFormRecord(entry){
+async function loadFormRecord(entry, client){
   if(entry.status === 'done' && formRecordCache.has(entry.token)) return formRecordCache.get(entry.token);
+  // The stored forms carry no names; they are added here from the therapist's own client record.
+  const label = (rec)=>{
+    rec.request = { ...rec.request, clientLabel: entry.parts ? entry.parts.map(pt => pt.name).join(' & ') : client.name };
+    return rec;
+  };
   const loadOne = async (token, key)=>{
     const [reqSnap, resSnap, contentSnap] = await Promise.all([
       window.FB.getDoc(formRequestRef(token)), window.FB.getDoc(formResponseRef(token)),
@@ -7859,6 +7863,7 @@ async function loadFormRecord(entry){
   if(entry.parts){
     // Couple: one stored record per person; combine them into one document (signatures in profile order).
     const parts = await Promise.all(entry.parts.map(pt => loadOne(pt.token, pt.key)));
+    parts.forEach((pt, i) => { if(pt.payload) (pt.payload.scales || []).forEach(sc => { sc.respondentName = entry.parts[i].name; }); });
     const done = parts.filter(pt => pt.payload);
     if(!done.length) throw new Error('Kayıt bulunamadı');
     const consentDef = parts[0].request.consent;
@@ -7878,8 +7883,10 @@ async function loadFormRecord(entry){
   }else{
     const one = await loadOne(entry.token, entry.key);
     if(!one.payload) throw new Error('Kayıt bulunamadı');
+    (one.payload.scales || []).forEach(sc => { sc.respondentName = client.name; });
     rec = { request: one.request, payload: one.payload, submittedAt: one.submittedAt || entry.submittedAt, tokens: [entry.token] };
   }
+  label(rec);
   if(entry.status === 'done') formRecordCache.set(entry.token, rec);
   return rec;
 }
@@ -7897,7 +7904,7 @@ function openFormResponseModal(client, entry, rec){
       <div class="form-view-signer"><div><strong>${escapeHtml(s.name)}</strong><br><span>Henüz imzalamadı</span></div></div>` : `
       <div class="form-view-signer">
         <img src="${escapeAttr(/^data:image\/png;base64,/.test(s.signature || '') ? s.signature : '')}" alt="İmza">
-        <div><strong>${escapeHtml(s.name)}</strong>${s.relationship ? ` (${escapeHtml(s.relationship)})` : ''}${s.role === 'guardian' ? ' — veli' : ''}<br><span>${escapeHtml(formDateTimeEn(new Date(s.signedAt).getTime()))}</span></div>
+        <div><strong>${escapeHtml(s.name)}</strong>${s.relationship ? ` (${escapeHtml(s.relationship)})` : ''}${s.role === 'guardian' ? ' — veli' : ''}${s.clientName ? `<br><span>Danışan adı (velinin yazdığı): ${escapeHtml(s.clientName)}</span>` : ''}<br><span>${escapeHtml(formDateTimeEn(new Date(s.signedAt).getTime()))}</span></div>
       </div>`).join('')}` : '';
   const scalesHtml = (p.scales || []).filter(s => FORM_SCALES[s.id]).map(s=>{
     const sc = FORM_SCALES[s.id];
@@ -8048,7 +8055,8 @@ async function buildConsentPdf(client, entry, rec){
       return;
     }
     if(/^data:image\/png;base64,/.test(s.signature || '')) w.image(s.signature, 62);
-    w.text(`Name: ${s.name}${s.relationship ? ` (${s.relationship} of ${rec.request.clientLabel})` : ''}`, { size:10, gap:0.8 });
+    w.text(`Name: ${s.name}${s.relationship ? ` (${s.relationship} of the client)` : ''}`, { size:10, gap:0.8 });
+    if(s.clientName) w.text(`Client's name as entered by the signer: ${s.clientName}`, { size:10, gap:0.8 });
     w.text(`Signed electronically: ${formDateTimeEn(new Date(s.signedAt).getTime())}`, { size:9.5, color:80, gap:2 });
   });
   if(state.providerSignature){
