@@ -7641,7 +7641,7 @@ async function createFormLinkDraft(client, entry){
   const sp = client.profile && client.profile.secondPerson;
   const primaryEmail = (client.profile && client.profile.email || '').trim();
   const until = new Date(entry.expiresAt).toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' });
-  const body = (name, token) => `Hello${name ? ' ' + name : ''},\n\nPlease complete your forms before our next session using the secure link below. It takes about 5 to 10 minutes and works on a phone.\n\n${formLinkForToken(token)}\n\nThis link is personal: it can be used once and is valid until ${until}.\n\nBest regards,\n${getProvider().name || ''}`;
+  const body = (name, token) => `Hello${name ? ' ' + name : ''},\n\nPlease complete your forms before our next session using the secure link below. It takes about 3 to 5 minutes and works on a phone.\n\n${formLinkForToken(token)}\n\nThis link is personal: it can be used once and is valid until ${until}.\n\nBest regards,\n${getProvider().name || ''}`;
   // Couples: one separate draft per person, each to that person's own address with their own link.
   const targets = entry.parts
     ? entry.parts.map((pt, i) => ({ name: pt.name, token: pt.token, email: i === 0 ? primaryEmail : ((sp && sp.email) || '').trim(), skip: pt.status !== 'open' }))
