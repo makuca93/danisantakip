@@ -1718,6 +1718,48 @@
   .session-link-badge.manual{background:#f0f0f0; color:var(--muted);}
   .client-history-panel{display:none;}
   .client-history-panel.open{display:block; margin-bottom:16px;}
+  /* Client forms */
+  .forms-panel{display:none;}
+  .forms-panel.open{display:block; margin-bottom:16px;}
+  .form-entry{background:var(--card); border:1px solid var(--card-line); border-radius:10px; padding:12px 14px; margin-bottom:8px;}
+  .form-entry.flagged{border-color:#e0a3ad; background:#fdf3f5;}
+  .form-entry-top{display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap; font-size:13.5px;}
+  .form-entry-meta{font-size:12px; color:var(--muted); margin-top:3px;}
+  .form-pill{font-size:11.5px; font-weight:600; padding:2px 9px; border-radius:10px; white-space:nowrap;}
+  .form-pill.open{background:var(--highlight); color:var(--ink);}
+  .form-pill.done{background:var(--green-bg); color:var(--green);}
+  .form-pill.expired{background:#eeeef2; color:var(--muted);}
+  .form-result{font-size:13px; margin-top:8px; display:flex; flex-direction:column; gap:3px;}
+  .form-flag{color:#a33a4c; font-weight:600;}
+  .form-entry-actions{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
+  .form-act{background:#fff; border:1px solid var(--card-line); color:var(--ink); font-family:inherit; font-size:12.5px; padding:6px 10px; border-radius:7px; cursor:pointer;}
+  .form-act:hover{background:var(--paper);}
+  .form-act:disabled{opacity:.6; cursor:default;}
+  .form-alert-banner{background:#fdf3f5; border:1px solid #e0a3ad; border-radius:10px; padding:12px 14px; margin-bottom:14px; font-size:13.5px;}
+  .form-alert-banner p{margin:4px 0 8px; color:#6b3a43;}
+  .form-alert-open{display:block; width:100%; text-align:left; background:#fff; border:1px solid #e0a3ad; color:#8a3644; font-family:inherit; font-size:13.5px; font-weight:600; padding:9px 12px; border-radius:8px; cursor:pointer; margin-top:6px;}
+  .form-view-h{font-size:14.5px; margin:16px 0 6px;}
+  .form-view-table{width:100%; border-collapse:collapse; font-size:12.5px;}
+  .form-view-table td{border-top:1px solid var(--card-line); padding:6px 4px; vertical-align:top;}
+  .form-view-table td:last-child{white-space:nowrap; font-weight:600; text-align:right; padding-left:10px;}
+  .form-view-table tr.flag td{background:#fdf3f5; color:#8a3644;}
+  .form-view-signer{display:flex; gap:12px; align-items:center; font-size:13px; margin-bottom:8px;}
+  .form-view-signer img{width:150px; border:1px solid var(--card-line); border-radius:6px; background:#fff;}
+  .form-view-signer span{color:var(--muted); font-size:12px;}
+  .settings-select{font-family:inherit; font-size:13.5px; padding:8px 10px; border:1px solid var(--card-line); border-radius:7px; background:#fff; color:var(--ink);}
+  .consent-label{display:block; font-size:12px; font-weight:600; color:var(--muted); margin:12px 0 5px;}
+  .consent-title-input{width:100%; font-family:inherit; font-size:14px; padding:9px 11px; border:1px solid var(--card-line); border-radius:7px;}
+  .consent-status{font-size:12.5px; color:var(--muted);}
+  .consent-editor{min-height:160px; max-height:420px; overflow:auto; border:1px solid var(--card-line); border-radius:7px; padding:12px 14px; background:#fff; font-size:13.5px; line-height:1.55;}
+  .consent-editor:empty::before{content:'Metni buraya yapıştır ya da yukarıdan dosya yükle…'; color:var(--muted);}
+  .consent-editor h1, .consent-editor h2, .consent-editor h3, .consent-editor h4{font-family:inherit; font-size:14.5px; font-weight:600; margin:14px 0 6px;}
+  .consent-editor p{margin:0 0 9px;}
+  .consent-editor ul, .consent-editor ol{margin:0 0 9px; padding-left:22px;}
+  .consent-fixed{margin-top:10px; padding:10px 12px; border:1px dashed var(--card-line); border-radius:7px; background:var(--paper); font-size:12.5px; color:var(--muted); display:flex; flex-direction:column; gap:4px;}
+  @media (max-width: 768px){
+    .form-act{font-size:13.5px; padding:9px 12px; min-height:40px;}
+    .consent-editor, .consent-title-input, .settings-select{font-size:16px;}
+  }
   .client-history-list{
     background:var(--card);
     border:1px solid var(--card-line);
@@ -2234,7 +2276,7 @@
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
   import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut }
     from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-  import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, runTransaction }
+  import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp, query, where, orderBy, limit, getDocs, runTransaction, deleteDoc }
     from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
   const firebaseConfig = {
@@ -2258,7 +2300,7 @@
   window.FB = {
     auth, db, provider, signInWithPopup, signInWithRedirect, getRedirectResult,
     onAuthStateChanged, signOut, doc, setDoc, getDoc, onSnapshot, collection, addDoc, serverTimestamp,
-    query, where, orderBy, limit, getDocs, runTransaction,
+    query, where, orderBy, limit, getDocs, runTransaction, deleteDoc,
     credentialFromResult: GoogleAuthProvider.credentialFromResult
   };
   window.dispatchEvent(new Event('fb-ready'));
@@ -2779,6 +2821,7 @@ function proceedToApp(){
 let practicePollTimer = null;
 
 async function loadPracticeSharedForNotifications(){
+  checkOpenFormRequests(); // runs on app load and with every 3-minute poll
   const loaded = await loadPracticeShared();
   if(!loaded) return;
   if(practicePendingSaves > 0) return; // a save is in flight; it will bring back the merged server state
@@ -2908,7 +2951,8 @@ function loadPickerLibrary(){
   });
 }
 
-async function openDriveFolderPicker(){
+async function openDriveFolderPicker(target){
+  const forForms = target === 'forms';
   try{
     await loadGoogleApiScript();
     await loadPickerLibrary();
@@ -2928,12 +2972,17 @@ async function openDriveFolderPicker(){
     .setOAuthToken(token)
     .setDeveloperKey(GOOGLE_PICKER_API_KEY)
     .addView(view)
-    .setTitle('Fatura kayıt klasörünü seç')
+    .setTitle(forForms ? 'Form kayıt klasörünü seç' : 'Fatura kayıt klasörünü seç')
     .setCallback((data)=>{
       if(data.action === google.picker.Action.PICKED){
         const folder = data.docs[0];
-        state.driveInvoiceFolderId = folder.id;
-        state.driveInvoiceFolderName = folder.name;
+        if(forForms){
+          state.driveFormsFolderId = folder.id;
+          state.driveFormsFolderName = folder.name;
+        }else{
+          state.driveInvoiceFolderId = folder.id;
+          state.driveInvoiceFolderName = folder.name;
+        }
         saveState();
         renderSettingsPage();
       }
@@ -2942,8 +2991,9 @@ async function openDriveFolderPicker(){
   picker.setVisible(true);
 }
 
-async function uploadPdfToDriveFolder(doc, filename){
-  if(!state.driveInvoiceFolderId){
+async function uploadPdfToDriveFolder(doc, filename, folderIdOverride){
+  const targetFolderId = folderIdOverride || state.driveInvoiceFolderId;
+  if(!targetFolderId){
     alert('Önce Ayarlar > Fatura Kayıt Klasörü bölümünden bir klasör seçmelisin.');
     return false;
   }
@@ -2951,7 +3001,7 @@ async function uploadPdfToDriveFolder(doc, filename){
   if(!token) return false;
 
   const pdfBlob = doc.output('blob');
-  const metadata = { name: filename, mimeType: 'application/pdf', parents: [state.driveInvoiceFolderId] };
+  const metadata = { name: filename, mimeType: 'application/pdf', parents: [targetFolderId] };
   const boundary = 'danisantakipinvoiceboundary';
   const pdfBase64 = btoa(arrayBufferToBinaryString(await pdfBlob.arrayBuffer()));
   const body =
@@ -3818,6 +3868,8 @@ function renderMain(){
   // The profile panel should only close when the Profile button is clicked.
   const profileWasOpen = !!document.getElementById('profilePanel')?.classList.contains('open');
   const todoWasOpen = !!document.getElementById('todoPanel')?.classList.contains('open');
+  const formsWasOpen = formsPanelOpenNext || !!document.getElementById('formsPanel')?.classList.contains('open');
+  formsPanelOpenNext = false;
   const calendarWasOpen = !!document.getElementById('calendarPanel')?.classList.contains('open');
   if(!activeClientId){
     main.innerHTML = `
@@ -3871,11 +3923,13 @@ function renderMain(){
       <button class="add-session-toggle" id="toggleTodoBtn">✅ Yapılacaklar</button>
       <button class="add-session-toggle" id="toggleCalendarBtn">📅 Randevu</button>
       <button class="add-session-toggle" id="toggleHistoryBtn">🕐 Geçmiş</button>
+      <button class="add-session-toggle" id="toggleFormsBtn">📋 Formlar${(client.formRequests||[]).some(e=>e.status==='done' && e.result && e.result.flag && !e.reviewed) ? ' ⚠️' : ((client.formRequests||[]).some(e=>e.status==='open' && Date.now() <= e.expiresAt) ? ' ⏳' : '')}</button>
       <button class="add-session-toggle" id="toggleFormBtn">+ Yeni seans kaydı ekle</button>
     </div>
     ${todoPanelHtml(client)}
     ${calendarPanelHtml(client)}
     <div id="clientHistoryPanel" class="client-history-panel"></div>
+    ${formsPanelHtml(client)}
     ${sessionFormHtml()}
     <div id="sessionsWrap"></div>
   `;
@@ -3899,6 +3953,7 @@ function renderMain(){
     document.getElementById('calendarPanel').classList.remove('open');
     document.getElementById('sessionForm').classList.remove('open');
     document.getElementById('clientHistoryPanel').classList.remove('open');
+    document.getElementById('formsPanel').classList.remove('open');
   }
 
   document.querySelectorAll('.header-icon-btn[data-kind]').forEach(btn=>{
@@ -3969,6 +4024,15 @@ function renderMain(){
       loadClientHistory(client);
     }
   });
+
+  document.getElementById('toggleFormsBtn').addEventListener('click', ()=>{
+    const panel = document.getElementById('formsPanel');
+    const wasOpen = panel.classList.contains('open');
+    closeAllActionPanels();
+    if(!wasOpen){ panel.classList.add('open'); checkOpenFormRequests(); }
+  });
+  if(formsWasOpen) document.getElementById('formsPanel').classList.add('open');
+  wireFormsPanel(client);
 
   document.getElementById('toggleFormBtn').addEventListener('click', ()=>{
     const panel = document.getElementById('sessionForm');
@@ -6934,6 +6998,983 @@ async function sendTaskReminder(taskId){
   if(mainView === 'practice') renderPracticeContent();
 }
 
+/* ---------- Client forms: consent + scales sent by a one-time link ---------- */
+const FORM_PAGE_URL = APP_URL + '/form.html';
+const FORM_FREQ = ['Not at all', 'Several days', 'More than half the days', 'Nearly every day'];
+const FORM_DIFFICULTY = ['Not difficult at all', 'Somewhat difficult', 'Very difficult', 'Extremely difficult'];
+const FORM_SCALES = {
+  phq9: {
+    title: 'PHQ-9',
+    stem: 'Over the last 2 weeks, how often have you been bothered by any of the following problems?',
+    items: [
+      'Little interest or pleasure in doing things',
+      'Feeling down, depressed, or hopeless',
+      'Trouble falling or staying asleep, or sleeping too much',
+      'Feeling tired or having little energy',
+      'Poor appetite or overeating',
+      'Feeling bad about yourself — or that you are a failure or have let yourself or your family down',
+      'Trouble concentrating on things, such as reading the newspaper or watching television',
+      'Moving or speaking so slowly that other people could have noticed? Or the opposite — being so fidgety or restless that you have been moving around a lot more than usual',
+      'Thoughts that you would be better off dead or of hurting yourself in some way'
+    ],
+    bands: [[4,'Minimal'],[9,'Mild'],[14,'Moderate'],[19,'Moderately severe'],[27,'Severe']]
+  },
+  gad7: {
+    title: 'GAD-7',
+    stem: 'Over the last 2 weeks, how often have you been bothered by the following problems?',
+    items: [
+      'Feeling nervous, anxious, or on edge',
+      'Not being able to stop or control worrying',
+      'Worrying too much about different things',
+      'Trouble relaxing',
+      'Being so restless that it is hard to sit still',
+      'Becoming easily annoyed or irritable',
+      'Feeling afraid as if something awful might happen'
+    ],
+    bands: [[4,'Minimal'],[9,'Mild'],[14,'Moderate'],[21,'Severe']]
+  }
+};
+const CONSENT_TYPES = { individual: 'Bireysel terapi', couple: 'Çift terapisi', minor: 'Reşit olmayan danışan', ifhp: 'IFHP' };
+const CONSENT_DEFAULT_TITLES = {
+  individual: 'Consent to Psychotherapy Services',
+  couple: 'Consent to Couple Therapy Services',
+  minor: 'Consent to Psychotherapy Services for a Minor',
+  ifhp: 'Consent to Psychotherapy Services (IFHP)'
+};
+// Fixed part of every consent form: this statement + name + signature + date.
+const CONSENT_ACK = 'I have read and understood this form, I have had the chance to ask questions, and I agree to its terms.';
+
+const CONSENT_ALLOWED_TAGS = new Set(['P','H1','H2','H3','H4','STRONG','B','EM','I','U','UL','OL','LI','BR','TABLE','THEAD','TBODY','TR','TD','TH']);
+function sanitizeConsentHtml(html){
+  const src = new DOMParser().parseFromString('<div>' + String(html || '') + '</div>', 'text/html').body.firstChild;
+  const walk = (node, out) => {
+    node.childNodes.forEach(ch => {
+      if(ch.nodeType === 3){ out.appendChild(document.createTextNode(ch.nodeValue)); return; }
+      if(ch.nodeType !== 1) return;
+      const tag = ch.tagName;
+      if(['SCRIPT','STYLE','IFRAME','OBJECT','IMG','SVG','LINK','META'].includes(tag)) return;
+      if(CONSENT_ALLOWED_TAGS.has(tag)){ const el = document.createElement(tag); walk(ch, el); out.appendChild(el); }
+      else if(tag === 'DIV'){ const el = document.createElement('p'); walk(ch, el); out.appendChild(el); }
+      else walk(ch, out);
+    });
+  };
+  const out = document.createElement('div');
+  walk(src, out);
+  return out.innerHTML;
+}
+
+function plainTextToConsentHtml(text){
+  return String(text || '').replace(/\r/g, '').split(/\n\s*\n/).map(p => p.trim()).filter(Boolean)
+    .map(p => `<p>${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('');
+}
+
+// Flattens the consent HTML into simple blocks for the PDF: headings, paragraphs, list items.
+function consentHtmlToBlocks(html){
+  const root = new DOMParser().parseFromString('<div>' + sanitizeConsentHtml(html) + '</div>', 'text/html').body.firstChild;
+  const blocks = [];
+  const textOf = el => {
+    let t = '';
+    el.childNodes.forEach(ch => {
+      if(ch.nodeType === 3) t += ch.nodeValue;
+      else if(ch.nodeType === 1){
+        if(ch.tagName === 'BR') t += '\n';
+        else if(ch.tagName === 'UL' || ch.tagName === 'OL') { /* nested lists handled separately */ }
+        else t += textOf(ch);
+      }
+    });
+    return t;
+  };
+  const visit = (el) => {
+    el.childNodes.forEach(ch => {
+      if(ch.nodeType === 3){ const t = ch.nodeValue.trim(); if(t) blocks.push({ type:'p', text:t }); return; }
+      if(ch.nodeType !== 1) return;
+      const tag = ch.tagName;
+      if(/^H[1-4]$/.test(tag)){ const t = textOf(ch).trim(); if(t) blocks.push({ type:'h', text:t }); }
+      else if(tag === 'UL' || tag === 'OL'){
+        let n = 0;
+        ch.querySelectorAll(':scope > li').forEach(li => {
+          n++;
+          const t = textOf(li).trim();
+          if(t) blocks.push({ type:'li', text: (tag === 'OL' ? `${n}. ` : '• ') + t });
+          li.querySelectorAll(':scope > ul, :scope > ol').forEach(sub => visit({ childNodes: [sub] }));
+        });
+      }
+      else if(tag === 'TABLE'){
+        ch.querySelectorAll('tr').forEach(tr => {
+          const t = Array.from(tr.querySelectorAll('td,th')).map(c => textOf(c).trim()).filter(Boolean).join(' — ');
+          if(t) blocks.push({ type:'p', text:t });
+        });
+      }
+      else{
+        const t = textOf(ch).trim();
+        if(!t) return;
+        // A paragraph that is entirely bold is treated as a heading.
+        const onlyBold = ch.children.length === 1 && /^(STRONG|B)$/.test(ch.children[0].tagName) && ch.children[0].textContent.trim() === ch.textContent.trim();
+        blocks.push({ type: onlyBold ? 'h' : 'p', text:t });
+      }
+    });
+  };
+  visit(root);
+  return blocks;
+}
+
+function hashString(str){
+  let h = 5381;
+  for(let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0;
+  return h.toString(16).padStart(8, '0');
+}
+
+async function ensurePracticeLoaded(){
+  if(practiceState) return true;
+  const loaded = await loadPracticeShared();
+  if(loaded && !practiceState) setPracticeFromServer(loaded);
+  return !!practiceState;
+}
+
+function getConsentTemplate(type){
+  // Each therapist keeps their own consent texts (stored in their own data, not the shared doc).
+  const t = state && state.consentTemplates && state.consentTemplates[type];
+  if(!t || !t.html || !consentHtmlToBlocks(t.html).length) return null;
+  return t;
+}
+
+function loadScriptOnce(src){
+  return new Promise((resolve, reject)=>{
+    if(document.querySelector(`script[data-src="${src}"]`)){ resolve(); return; }
+    const sc = document.createElement('script');
+    sc.src = src; sc.setAttribute('data-src', src);
+    sc.onload = resolve; sc.onerror = ()=>{ sc.remove(); reject(new Error('load failed')); };
+    document.head.appendChild(sc);
+  });
+}
+
+async function readConsentFile(file){
+  const name = (file.name || '').toLowerCase();
+  if(name.endsWith('.docx')){
+    await loadScriptOnce('https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js');
+    const res = await window.mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
+    return sanitizeConsentHtml(res.value);
+  }
+  if(name.endsWith('.txt')) return plainTextToConsentHtml(await file.text());
+  throw new Error('unsupported');
+}
+
+/* ----- Signature pad (therapist's own signature, stored once) ----- */
+function openSignaturePadModal(){
+  return new Promise((resolve)=>{
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:420px;">
+        <div class="backups-box-header"><h2>İmzanı çiz</h2></div>
+        <div style="padding:0 20px 20px;">
+          <canvas id="sigPadCanvas" style="width:100%; height:170px; border:1px dashed #b9bcc8; border-radius:8px; background:#fff; touch-action:none; display:block;"></canvas>
+          <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+            <button class="reschedule-cancel-btn" id="sigPadClear" type="button">Temizle</button>
+            <button class="reschedule-cancel-btn" id="sigPadCancel" type="button">Vazgeç</button>
+            <button class="reschedule-confirm-btn" id="sigPadSave" type="button">Kaydet</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const canvas = document.getElementById('sigPadCanvas');
+    const ctx = canvas.getContext('2d');
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(canvas.clientWidth * ratio); canvas.height = Math.round(canvas.clientHeight * ratio);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1d2330';
+    let drawing = false, ink = false, last = null;
+    const pos = ev => { const r = canvas.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
+    canvas.addEventListener('pointerdown', ev=>{ ev.preventDefault(); canvas.setPointerCapture(ev.pointerId); drawing = true; last = pos(ev); });
+    canvas.addEventListener('pointermove', ev=>{
+      if(!drawing) return;
+      const p = pos(ev);
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+      last = p; ink = true;
+    });
+    ['pointerup','pointercancel'].forEach(t => canvas.addEventListener(t, ()=>{ drawing = false; }));
+    const close = v => { modal.remove(); resolve(v); };
+    document.getElementById('sigPadClear').addEventListener('click', ()=>{ ctx.clearRect(0, 0, canvas.width, canvas.height); ink = false; });
+    document.getElementById('sigPadCancel').addEventListener('click', ()=> close(null));
+    document.getElementById('sigPadSave').addEventListener('click', ()=>{
+      if(!ink){ alert('Önce kutuya imzanı çiz.'); return; }
+      const out = document.createElement('canvas');
+      out.width = 600; out.height = Math.round(600 * canvas.height / canvas.width);
+      const o = out.getContext('2d');
+      o.fillStyle = '#fff'; o.fillRect(0, 0, out.width, out.height);
+      o.drawImage(canvas, 0, 0, out.width, out.height);
+      close(out.toDataURL('image/png'));
+    });
+  });
+}
+
+/* ----- Settings: consent templates, therapist signature, forms folder ----- */
+let consentSettingsType = 'individual';
+const consentSettingsDrafts = {}; // survives re-renders while editing
+
+function formsSettingsHtml(){
+  return `
+    <div class="settings-section">
+      <h3>📝 Onam Formları</h3>
+      <p>Her tür için onam metnini Word dosyası (.docx) olarak yükle ya da metni aşağıdaki kutuya yapıştır. İmza bölümü sabittir ve her forma otomatik eklenir. Bu metinler sadece senin hesabına özel — ${currentPersonId()==='kubilay' ? 'Duygu' : 'Kubilay'} kendi onam metinlerini ayrı yükler.</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
+        <select id="consentTypeSelect" class="settings-select">
+          ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}" ${consentSettingsType===k?'selected':''}>${CONSENT_TYPES[k]}</option>`).join('')}
+        </select>
+        <button class="settings-btn" id="consentUploadBtn" style="width:auto;">📄 Word / metin dosyası yükle</button>
+        <input type="file" id="consentFileInput" accept=".docx,.txt" hidden>
+      </div>
+      <div id="consentStatus" class="consent-status"></div>
+      <label class="consent-label" for="consentTitleInput">Başlık (danışanın göreceği)</label>
+      <input type="text" id="consentTitleInput" class="consent-title-input">
+      <label class="consent-label">Metin</label>
+      <div id="consentEditor" class="consent-editor" contenteditable="true"></div>
+      <div class="consent-fixed">
+        <strong>Sabit imza bölümü (değiştirilemez, otomatik eklenir)</strong>
+        <div>☐ ${escapeHtml(CONSENT_ACK)}</div>
+        <div>Ad Soyad · İmza · Tarih — çift terapisinde iki imza sırayla, reşit olmayan danışanda veli imzası ve yakınlık derecesi.</div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="settings-btn" id="consentSaveBtn" style="width:auto;">Kaydet</button>
+        <button class="settings-btn" id="consentPreviewBtn" style="width:auto;">Danışan görünümünü aç</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>✍️ İmzam</h3>
+      <p>Kaydettiğin imza, danışanın imzaladığı onam PDF'lerine terapist imzası olarak eklenir. Sadece senin hesabına özel.</p>
+      ${state.providerSignature ? `<img src="${state.providerSignature}" alt="Kayıtlı imza" style="display:block; max-width:260px; border:1px solid var(--card-line); border-radius:8px; margin-bottom:10px; background:#fff;">` : `<div style="font-size:13px; color:var(--muted); margin-bottom:10px;">Henüz imza kaydedilmedi.</div>`}
+      <button class="settings-btn" id="providerSigBtn" style="width:auto;">${state.providerSignature ? 'İmzayı değiştir' : 'İmza çiz'}</button>
+      ${state.providerSignature ? `<button class="settings-btn" id="providerSigClearBtn" style="width:auto; margin-left:8px;">Kaldır</button>` : ''}
+    </div>
+
+    <div class="settings-section">
+      <h3>📁 Form Kayıt Klasörü</h3>
+      <p>İmzalı onam ve ölçek PDF'lerini "Drive'a Kaydet" ile kaydettiğinde bu klasöre gider. Sadece senin hesabına özel.</p>
+      <div style="font-size:13px; color:var(--ink); margin-bottom:10px;">Şu an seçili: <strong>${state.driveFormsFolderName ? escapeHtml(state.driveFormsFolderName) : 'Seçilmedi'}</strong></div>
+      <button class="settings-btn" id="settingsPickFormsFolderBtn" style="width:auto;">📁 Klasör Seç</button>
+    </div>`;
+}
+
+async function wireFormsSettings(){
+  const typeSel = document.getElementById('consentTypeSelect');
+  if(!typeSel) return;
+  const titleInput = document.getElementById('consentTitleInput');
+  const editor = document.getElementById('consentEditor');
+  const status = document.getElementById('consentStatus');
+
+  const fill = ()=>{
+    const type = consentSettingsType;
+    const draft = consentSettingsDrafts[type];
+    const saved = state.consentTemplates && state.consentTemplates[type];
+    titleInput.value = draft ? draft.title : ((saved && saved.title) || CONSENT_DEFAULT_TITLES[type]);
+    editor.innerHTML = draft ? draft.html : ((saved && saved.html) || '');
+    if(draft) status.textContent = '✏️ Kaydedilmemiş değişiklikler var.';
+    else if(saved && saved.html) status.textContent = `✅ Kayıtlı — son güncelleme: ${formatBackupTime(saved.updatedAt)}${saved.sourceName ? ' · ' + saved.sourceName : ''}`;
+    else status.textContent = '⚠️ Bu tür için henüz metin yok — metin eklenmeden bu onam gönderilemez.';
+  };
+  const keepDraft = (sourceName)=>{
+    const prev = consentSettingsDrafts[consentSettingsType] || {};
+    consentSettingsDrafts[consentSettingsType] = { title: titleInput.value, html: editor.innerHTML, sourceName: sourceName || prev.sourceName || '' };
+    status.textContent = '✏️ Kaydedilmemiş değişiklikler var.';
+  };
+
+  fill();
+
+  typeSel.addEventListener('change', ()=>{ consentSettingsType = typeSel.value; fill(); });
+  titleInput.addEventListener('input', ()=> keepDraft());
+  editor.addEventListener('input', ()=> keepDraft());
+  document.getElementById('consentUploadBtn').addEventListener('click', ()=> document.getElementById('consentFileInput').click());
+  document.getElementById('consentFileInput').addEventListener('change', async (ev)=>{
+    const file = ev.target.files[0];
+    ev.target.value = '';
+    if(!file) return;
+    status.textContent = 'Dosya okunuyor…';
+    try{
+      const html = await readConsentFile(file);
+      if(!consentHtmlToBlocks(html).length){ alert('Bu dosyada metin bulunamadı.'); fill(); return; }
+      editor.innerHTML = html;
+      keepDraft(file.name);
+      status.textContent = `📄 "${file.name}" yüklendi — kontrol edip Kaydet'e bas.`;
+    }catch(e){
+      console.error('Onam dosyası okunamadı', e);
+      alert(e && e.message === 'unsupported'
+        ? 'Sadece Word (.docx) ve düz metin (.txt) dosyaları yüklenebilir. PDF için metni kopyalayıp kutuya yapıştırabilirsin.'
+        : 'Dosya okunamadı. İnternet bağlantını kontrol et ya da metni kutuya yapıştır.');
+      fill();
+    }
+  });
+  const collect = ()=>({ title: titleInput.value.trim() || CONSENT_DEFAULT_TITLES[consentSettingsType], html: sanitizeConsentHtml(editor.innerHTML) });
+  document.getElementById('consentSaveBtn').addEventListener('click', async ()=>{
+    const type = consentSettingsType;
+    const { title, html } = collect();
+    if(!consentHtmlToBlocks(html).length){ alert('Metin boş. Bir dosya yükle ya da metni kutuya yapıştır.'); return; }
+    if(!state.consentTemplates) state.consentTemplates = {};
+    const draft = consentSettingsDrafts[type] || {};
+    const prev = state.consentTemplates[type] || {};
+    state.consentTemplates[type] = { title, html, updatedAt: Date.now(), sourceName: draft.sourceName || prev.sourceName || '' };
+    delete consentSettingsDrafts[type];
+    await saveState();
+    showToast(`✅ ${CONSENT_TYPES[type]} onam formu kaydedildi.`);
+    if(document.body.contains(typeSel)) fill();
+  });
+  document.getElementById('consentPreviewBtn').addEventListener('click', ()=>{
+    const { title, html } = collect();
+    const type = consentSettingsType;
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    const sigBox = label => `<div style="border:1px solid var(--card-line); border-radius:8px; padding:10px; margin-top:8px; background:var(--paper);"><strong style="font-size:13px;">${label}</strong><div style="height:60px; border:1px dashed #b9bcc8; border-radius:6px; margin-top:6px; background:#fff;"></div></div>`;
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:560px; max-height:86vh; overflow:auto;">
+        <div class="backups-box-header"><h2>${escapeHtml(title)}</h2><button type="button" id="consentPreviewClose">✕</button></div>
+        <div style="padding:0 20px 20px;">
+          <div class="consent-editor" style="border:none; padding:0; min-height:0; max-height:none;">${html}</div>
+          <div style="border-top:2px solid var(--card-line); margin-top:14px; padding-top:12px; font-size:13.5px;">☐ ${escapeHtml(CONSENT_ACK)}</div>
+          ${type === 'couple' ? sigBox('Signature 1 of 2') + sigBox('Signature 2 of 2') : type === 'minor' ? sigBox('Parent / guardian signature') : sigBox('Your signature')}
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    document.getElementById('consentPreviewClose').addEventListener('click', ()=> modal.remove());
+    modal.addEventListener('click', ev=>{ if(ev.target === modal) modal.remove(); });
+  });
+
+  document.getElementById('providerSigBtn').addEventListener('click', async ()=>{
+    const data = await openSignaturePadModal();
+    if(!data) return;
+    state.providerSignature = data;
+    saveState();
+    renderSettingsPage();
+  });
+  const sigClear = document.getElementById('providerSigClearBtn');
+  if(sigClear) sigClear.addEventListener('click', ()=>{
+    if(!confirm('Kayıtlı imzan kaldırılsın mı?')) return;
+    state.providerSignature = null;
+    saveState();
+    renderSettingsPage();
+  });
+  document.getElementById('settingsPickFormsFolderBtn').addEventListener('click', ()=> openDriveFolderPicker('forms'));
+}
+
+/* ----- Requests ----- */
+function newFormToken(){
+  const b = new Uint8Array(24);
+  crypto.getRandomValues(b);
+  return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function formLink(entry){ return `${FORM_PAGE_URL}#p=${currentPersonId()}&t=${entry.token}`; }
+function formRequestRef(token){ return window.FB.doc(window.FB.db, 'users', currentPersonId(), 'formRequests', token); }
+function formResponseRef(token){ return window.FB.doc(window.FB.db, 'users', currentPersonId(), 'formRequests', token, 'responses', 'main'); }
+
+function scoreFormScale(s){
+  const sc = FORM_SCALES[s.id];
+  const total = (s.answers || []).reduce((a,b)=> a + (b || 0), 0);
+  const band = (sc.bands.find(b => total <= b[0]) || sc.bands[sc.bands.length-1])[1];
+  return { total, band };
+}
+
+function summarizeFormPayload(payload){
+  const scales = (payload.scales || []).filter(s => FORM_SCALES[s.id]).map(s=>{
+    const r = scoreFormScale(s);
+    return { id: s.id, name: s.respondentName || '', total: r.total, band: r.band, item9: s.id === 'phq9' ? (s.answers[8] || 0) : null };
+  });
+  const signers = payload.consent ? (payload.consent.signers || []).map(s => s.name) : [];
+  return { scales, signers, flag: scales.some(s => s.item9 > 0) };
+}
+
+async function createFormRequest(client, opts){
+  const me = currentPersonId();
+  const p = getProvider();
+  const sp = client.profile && client.profile.secondPerson;
+  let respondents = [{ name: client.name }];
+  let signers = [{ role: 'client', name: client.name }];
+  let clientLabel = client.name;
+  if(opts.consentType === 'couple'){
+    respondents = [{ name: client.name }, { name: sp.name.trim() }];
+    signers = respondents.map(r => ({ role: 'client', name: r.name }));
+    clientLabel = `${client.name} & ${sp.name.trim()}`;
+  }else if(opts.consentType === 'minor'){
+    signers = [{ role: 'guardian', name: '' }];
+  }
+  let consent = null;
+  if(opts.consentType){
+    const t = getConsentTemplate(opts.consentType);
+    consent = { type: opts.consentType, title: t.title || CONSENT_DEFAULT_TITLES[opts.consentType], html: t.html, checks: [CONSENT_ACK], version: hashString((t.title||'') + t.html + CONSENT_ACK) };
+  }
+  const token = newFormToken();
+  const now = Date.now();
+  const expiresAt = now + opts.days * 24*60*60*1000;
+  await window.FB.setDoc(formRequestRef(token), {
+    v: 1, owner: me, createdAt: window.FB.serverTimestamp(), expiresAt: new Date(expiresAt),
+    practice: 'İki Therapy',
+    therapist: { name: p.name || '', credential: p.credential || '', regNumber: p.regNumber || '' },
+    clientLabel, consent, signers: consent ? signers : [], respondents, scales: opts.scales
+  });
+  const entry = { token, createdAt: now, expiresAt, consentType: opts.consentType || null, consentVersion: consent ? consent.version : null, scales: opts.scales, status: 'open', sentTo: [] };
+  const live = state.clients.find(c => c.id === client.id) || client;
+  if(!live.formRequests) live.formRequests = [];
+  live.formRequests.push(entry);
+  saveState();
+  logAudit('form bağlantısı oluşturuldu', `${client.name} - ${formEntryContents(entry)}`, client.id);
+  return entry;
+}
+
+function formEntryContents(e){
+  const parts = [];
+  if(e.consentType) parts.push(`Onam (${CONSENT_TYPES[e.consentType] || e.consentType})`);
+  (e.scales || []).forEach(id => parts.push(FORM_SCALES[id] ? FORM_SCALES[id].title : id));
+  return parts.join(' · ');
+}
+
+async function createGmailTextDraft(to, subject, bodyText){
+  const token = await ensureGoogleAccessToken();
+  if(!token) return { ok:false, error:'Google bağlantısı kurulamadı.' };
+  const mime =
+    (to ? `To: ${to}\r\n` : '') +
+    `Subject: ${encodeMimeSubject(subject)}\r\n` +
+    `MIME-Version: 1.0\r\n` +
+    `Content-Type: text/plain; charset="UTF-8"\r\n` +
+    `Content-Transfer-Encoding: base64\r\n\r\n` +
+    utf8ToBase64(bodyText);
+  try{
+    const res = await fetch('https://www.googleapis.com/gmail/v1/users/me/drafts', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: { raw: base64UrlEncode(mime) } })
+    });
+    if(!res.ok){
+      const err = await res.json().catch(()=>({}));
+      return { ok:false, error: err.error && err.error.message ? err.error.message : `HTTP ${res.status}` };
+    }
+    return { ok:true };
+  }catch(e){ return { ok:false, error: e.message }; }
+}
+
+// The e-mail deliberately says nothing about which forms are inside.
+async function createFormLinkDraft(client, entry){
+  const sp = client.profile && client.profile.secondPerson;
+  const primaryEmail = (client.profile && client.profile.email || '').trim();
+  const both = entry.consentType === 'couple';
+  const to = both ? clientEmailList(client) : primaryEmail;
+  const greetName = both && sp && sp.name ? `${client.name} and ${sp.name.trim()}` : (entry.consentType === 'minor' ? '' : client.name);
+  const until = new Date(entry.expiresAt).toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' });
+  const body = `Hello${greetName ? ' ' + greetName : ''},\n\nPlease complete your forms before our next session using the secure link below. It takes about 5 to 10 minutes and works on a phone.\n\n${formLink(entry)}\n\nThe link can be used once and is valid until ${until}.\n\nBest regards,\n${getProvider().name || ''}`;
+  const r = await createGmailTextDraft(to, `Forms to complete before your session`, body);
+  if(r.ok){
+    const live = state.clients.find(c => c.id === client.id);
+    const liveEntry = live && (live.formRequests || []).find(e => e.token === entry.token);
+    if(liveEntry){
+      liveEntry.sentTo = Array.from(new Set([...(liveEntry.sentTo || []), ...to.split(',').map(x => x.trim()).filter(Boolean)]));
+      saveState();
+    }
+  }
+  return { ...r, to };
+}
+
+function openSendFormsModal(client){
+  const hasSecond = hasNamedSecondPerson(client);
+  const defaultType = (client.profile && client.profile.ifhp) ? 'ifhp' : hasSecond ? 'couple' : 'individual';
+  const modal = document.createElement('div');
+  modal.className = 'backups-modal';
+  modal.style.display = 'flex';
+  modal.innerHTML = `
+    <div class="backups-box" style="max-width:420px;">
+      <div class="backups-box-header"><h2>Form gönder</h2><button type="button" id="sendFormsClose">✕</button></div>
+      <div id="sendFormsBody" style="padding:0 20px 20px;">
+        <label class="consent-label">Onam formu</label>
+        <select id="sendConsentType" class="settings-select" style="width:100%;">
+          <option value="">Onam formu gönderme</option>
+          ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}" ${k===defaultType?'selected':''}>${CONSENT_TYPES[k]}</option>`).join('')}
+        </select>
+        <div id="sendConsentNote" class="consent-status" style="margin-top:6px;"></div>
+        <label class="consent-label">Ölçekler (İngilizce)</label>
+        <div class="tick-row"><input type="checkbox" id="sendPhq9"><span>PHQ-9 (depresyon)</span></div>
+        <div class="tick-row"><input type="checkbox" id="sendGad7"><span>GAD-7 (kaygı)</span></div>
+        <label class="consent-label">Bağlantının geçerlilik süresi</label>
+        <select id="sendDays" class="settings-select" style="width:100%;">
+          <option value="3">3 gün</option><option value="7" selected>7 gün</option><option value="14">14 gün</option>
+        </select>
+        <div class="form-actions" style="margin-top:16px; display:flex; gap:8px; justify-content:flex-end;">
+          <button class="reschedule-confirm-btn" id="sendFormsCreate" type="button">Bağlantı oluştur</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const close = ()=>{ modal.remove(); if(mainView === 'client' && activeClientId === client.id){ formsPanelOpenNext = true; renderMain(); } };
+  document.getElementById('sendFormsClose').addEventListener('click', close);
+  const typeSel = document.getElementById('sendConsentType');
+  const note = document.getElementById('sendConsentNote');
+  const createBtn = document.getElementById('sendFormsCreate');
+  let ready = true; // consent texts live in the therapist's own data, already loaded
+
+  const validate = ()=>{
+    const type = typeSel.value;
+    let msg = '';
+    if(type && !ready) msg = 'Onam metinleri yükleniyor…';
+    else if(type && !getConsentTemplate(type)) msg = `⚠️ "${CONSENT_TYPES[type]}" onam metni henüz eklenmemiş. Ayarlar > Onam Formları bölümünden ekle.`;
+    else if(type === 'couple' && !hasSecond) msg = '⚠️ Çift onamı için profilde ikinci kişinin adı girilmiş olmalı.';
+    else if(type === 'couple') msg = 'İki kişi aynı bağlantıdan sırayla imzalar. Ölçek seçersen her biri kendi ölçeğini doldurur.';
+    else if(type === 'minor') msg = 'Onamı veli imzalar; ölçekleri danışan doldurur.';
+    note.textContent = msg;
+    return !msg.startsWith('⚠️') && !(type && !ready);
+  };
+  typeSel.addEventListener('change', validate);
+  validate();
+
+  createBtn.addEventListener('click', async ()=>{
+    const scales = [];
+    if(document.getElementById('sendPhq9').checked) scales.push('phq9');
+    if(document.getElementById('sendGad7').checked) scales.push('gad7');
+    const consentType = typeSel.value;
+    if(!consentType && !scales.length){ alert('En az bir form seç.'); return; }
+    if(!validate()) return;
+    createBtn.disabled = true; createBtn.textContent = 'Oluşturuluyor…';
+    let entry;
+    try{
+      entry = await createFormRequest(client, { consentType, scales, days: Number(document.getElementById('sendDays').value) });
+    }catch(e){
+      console.error('Form bağlantısı oluşturulamadı', e);
+      createBtn.disabled = false; createBtn.textContent = 'Bağlantı oluştur';
+      alert('Bağlantı oluşturulamadı (' + (e && e.code ? e.code : 'hata') + '). Firestore kurallarına "formRequests" izni eklenmiş mi kontrol et.');
+      return;
+    }
+    const hasEmail = !!clientEmailList(client);
+    document.getElementById('sendFormsBody').innerHTML = `
+      <p style="font-size:13.5px; margin:0 0 8px;">✅ Bağlantı hazır: <strong>${escapeHtml(formEntryContents(entry))}</strong></p>
+      <input type="text" readonly id="sendFormsLink" value="${escapeAttr(formLink(entry))}" style="width:100%; font-size:12px; padding:9px 10px; border:1px solid var(--card-line); border-radius:7px;">
+      <p style="font-size:12.5px; color:var(--muted); margin:8px 0 12px;">Bağlantı bir kez kullanılabilir ve ${formatShortDate(isoDate(new Date(entry.expiresAt)))} tarihine kadar geçerli. E-postada hangi formların olduğu yazmaz.</p>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="settings-btn" id="sendFormsDraft" style="width:100%;" ${hasEmail ? '' : 'disabled'}>📧 Gmail taslağı oluştur${hasEmail ? '' : ' (profilde e-posta yok)'}</button>
+        <button class="settings-btn" id="sendFormsCopy" style="width:100%;">🔗 Bağlantıyı kopyala</button>
+      </div>`;
+    document.getElementById('sendFormsCopy').addEventListener('click', ()=> copyFormLink(entry));
+    document.getElementById('sendFormsDraft').addEventListener('click', async (ev)=>{
+      const b = ev.target;
+      b.disabled = true; b.textContent = '⏳ Taslak hazırlanıyor…';
+      const r = await createFormLinkDraft(client, entry);
+      b.textContent = r.ok ? `✅ Taslak Gmail'de hazır${r.to ? ' → ' + r.to : ''}` : '❌ Taslak oluşturulamadı: ' + r.error;
+      if(!r.ok) b.disabled = false;
+    });
+  });
+}
+
+async function copyFormLink(entry){
+  const link = formLink(entry);
+  try{ await navigator.clipboard.writeText(link); showToast('🔗 Bağlantı kopyalandı.'); }
+  catch(e){ prompt('Bağlantıyı kopyala:', link); }
+}
+
+/* ----- Checking for submitted forms ----- */
+let formCheckRunning = false;
+async function checkOpenFormRequests(){
+  if(formCheckRunning || !currentUser || !state || !hasLoadedOnce) return;
+  formCheckRunning = true;
+  let changed = false;
+  const newlyDone = [];
+  try{
+    const open = [];
+    (state.clients || []).forEach(c => (c.formRequests || []).forEach(e => { if(e.status === 'open') open.push({ clientId: c.id, token: e.token }); }));
+    for(const o of open){
+      let snap;
+      try{ snap = await window.FB.getDoc(formResponseRef(o.token)); }
+      catch(e){ console.error('Form yanıtı kontrol edilemedi', e); continue; }
+      // state may have been replaced while waiting — always work on the live objects.
+      const client = state.clients.find(c => c.id === o.clientId);
+      const entry = client && (client.formRequests || []).find(e => e.token === o.token);
+      if(!entry || entry.status !== 'open') continue;
+      if(snap.exists()){
+        const d = snap.data();
+        let payload;
+        try{ payload = JSON.parse(d.payload); }catch(e){ console.error('Form yanıtı okunamadı', e); continue; }
+        entry.status = 'done';
+        entry.submittedAt = d.submittedAt && d.submittedAt.toMillis ? d.submittedAt.toMillis() : Date.now();
+        entry.result = summarizeFormPayload(payload);
+        entry.reviewed = !entry.result.flag;
+        changed = true;
+        newlyDone.push({ client, entry });
+      }else if(Date.now() > entry.expiresAt){
+        entry.status = 'expired';
+        changed = true;
+      }
+    }
+  }finally{ formCheckRunning = false; }
+  if(changed){
+    saveState();
+    newlyDone.forEach(({ client, entry })=>{
+      showToast(entry.result.flag ? `⚠️ ${client.name}: formda bugün bakılması gereken bir yanıt var.` : `📋 ${client.name} formlarını doldurdu.`);
+      logAudit('form dolduruldu', `${client.name} - ${formEntryContents(entry)}`, client.id);
+    });
+    render();
+  }
+}
+
+function clientsWithFormAlerts(){
+  return (state.clients || []).filter(c => (c.formRequests || []).some(e => e.status === 'done' && e.result && e.result.flag && !e.reviewed));
+}
+
+function formAlertsBannerHtml(){
+  const list = clientsWithFormAlerts();
+  if(!list.length) return '';
+  return `<div class="form-alert-banner">
+    <strong>⚠️ Bugün bakılması gereken form yanıtı</strong>
+    <p>PHQ-9'un 9. maddesine (kendine zarar verme düşünceleri) "hiç" dışında bir yanıt verildi:</p>
+    ${list.map(c => `<button type="button" class="form-alert-open" data-client-id="${c.id}">${escapeHtml(c.name)} — yanıtları aç</button>`).join('')}
+  </div>`;
+}
+
+let formsPanelOpenNext = false;
+document.addEventListener('click', (ev)=>{
+  const b = ev.target.closest && ev.target.closest('.form-alert-open');
+  if(!b) return;
+  activeClientId = b.getAttribute('data-client-id');
+  mainView = 'client';
+  formsPanelOpenNext = true;
+  document.body.classList.add('mobile-detail');
+  render();
+});
+
+/* ----- Client page: Forms panel ----- */
+function formEntryHtml(e){
+  const sent = formatShortDate(isoDate(new Date(e.createdAt)));
+  let statusHtml;
+  if(e.status === 'done') statusHtml = `<span class="form-pill done">Dolduruldu · ${formatBackupTime(e.submittedAt)}</span>`;
+  else if(e.status === 'expired' || Date.now() > e.expiresAt) statusHtml = `<span class="form-pill expired">Süresi doldu</span>`;
+  else statusHtml = `<span class="form-pill open">Bekliyor · son gün ${formatShortDate(isoDate(new Date(e.expiresAt)))}</span>`;
+  const r = e.result;
+  const multi = r && new Set(r.scales.map(s => s.name)).size > 1;
+  const resultHtml = r ? `
+    <div class="form-result">
+      ${r.signers.length ? `<div>✍️ İmzalayan: ${escapeHtml(r.signers.join(', '))}</div>` : ''}
+      ${r.scales.map(s => `<div><strong>${FORM_SCALES[s.id].title}${multi ? ' — ' + escapeHtml(s.name) : ''}:</strong> ${s.total} (${s.band})${s.item9 > 0 ? ` <span class="form-flag">⚠️ Madde 9: ${escapeHtml(FORM_FREQ[s.item9])}</span>` : ''}</div>`).join('')}
+    </div>` : '';
+  const isOpen = e.status === 'open' && Date.now() <= e.expiresAt;
+  const btn = (act, label) => `<button type="button" class="form-act" data-act="${act}">${label}</button>`;
+  return `
+  <div class="form-entry ${r && r.flag && !e.reviewed ? 'flagged' : ''}" data-token="${escapeAttr(e.token)}">
+    <div class="form-entry-top"><strong>${escapeHtml(formEntryContents(e))}</strong>${statusHtml}</div>
+    <div class="form-entry-meta">Gönderim: ${sent}${(e.sentTo && e.sentTo.length) ? ' → ' + escapeHtml(e.sentTo.join(', ')) : ''}</div>
+    ${resultHtml}
+    <div class="form-entry-actions">
+      ${r && r.flag && !e.reviewed ? btn('reviewed', '✓ Gördüm, değerlendirdim') : ''}
+      ${isOpen ? btn('copy', '🔗 Bağlantıyı kopyala') + btn('draft', '📧 Gmail taslağı') : ''}
+      ${e.status === 'done' ? btn('view', '👁 Yanıtları gör') : ''}
+      ${e.status === 'done' && e.consentType ? btn('pdf-consent', '📄 İmzalı onam PDF') + btn('drive-consent', "☁️ Onamı Drive'a kaydet") : ''}
+      ${e.status === 'done' && (e.scales || []).length ? btn('pdf-scales', '📄 Ölçek PDF') + btn('drive-scales', "☁️ Ölçeği Drive'a kaydet") : ''}
+      ${btn('delete', e.status === 'open' ? 'İptal et' : 'Sil')}
+    </div>
+  </div>`;
+}
+
+function formsPanelHtml(client){
+  const list = (client.formRequests || []).slice().sort((a,b)=> b.createdAt - a.createdAt);
+  return `
+  <div id="formsPanel" class="forms-panel">
+    <button class="settings-btn" id="sendFormsBtn" type="button" style="width:auto; margin-bottom:12px;">📨 Yeni form gönder</button>
+    ${list.length ? list.map(formEntryHtml).join('') : `<div class="todo-empty">Bu danışana henüz form gönderilmedi.</div>`}
+  </div>`;
+}
+
+function wireFormsPanel(client){
+  const panel = document.getElementById('formsPanel');
+  if(!panel) return;
+  const refresh = ()=>{ formsPanelOpenNext = true; renderMain(); };
+  document.getElementById('sendFormsBtn').addEventListener('click', ()=> openSendFormsModal(client));
+  panel.querySelectorAll('.form-act').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const token = btn.closest('[data-token]').getAttribute('data-token');
+      const live = ()=> (state.clients.find(c => c.id === client.id) || client);
+      const entry = (live().formRequests || []).find(e => e.token === token);
+      if(!entry) return;
+      const act = btn.getAttribute('data-act');
+      const original = btn.textContent;
+      const busy = t => { btn.disabled = true; btn.textContent = t; };
+      const done = (t, ms) => { btn.textContent = t; setTimeout(()=>{ if(document.body.contains(btn)){ btn.textContent = original; btn.disabled = false; } }, ms || 2500); };
+      if(act === 'copy'){ copyFormLink(entry); return; }
+      if(act === 'reviewed'){ entry.reviewed = true; saveState(); logAudit('form yanıtı değerlendirildi olarak işaretlendi', client.name, client.id); refresh(); return; }
+      if(act === 'draft'){
+        if(!clientEmailList(client)){ alert('Bu danışanın profilinde e-posta yok. Bağlantıyı kopyalayıp başka yolla gönderebilirsin.'); return; }
+        busy('⏳ Hazırlanıyor…');
+        const r = await createFormLinkDraft(client, entry);
+        if(r.ok){ showToast(`📧 Taslak Gmail'de hazır${r.to ? ' → ' + r.to : ''}`); refresh(); } else { alert('Taslak oluşturulamadı: ' + r.error); done(original, 10); }
+        return;
+      }
+      if(act === 'delete'){
+        const msg = entry.status === 'done'
+          ? 'Bu form kaydı, danışanın yanıtları ve imzasıyla birlikte kalıcı olarak silinsin mi? PDF olarak kaydetmediysen geri getirilemez.'
+          : 'Bu bağlantı iptal edilsin mi? Danışan artık bu bağlantıyla form dolduramaz.';
+        if(!confirm(msg)) return;
+        busy('Siliniyor…');
+        try{
+          try{ await window.FB.deleteDoc(formResponseRef(token)); }catch(e){ /* no response yet */ }
+          await window.FB.deleteDoc(formRequestRef(token));
+        }catch(e){
+          console.error('Form silinemedi', e);
+          alert('Silinemedi, tekrar dener misin?');
+          done(original, 10);
+          return;
+        }
+        const c = live();
+        c.formRequests = (c.formRequests || []).filter(e => e.token !== token);
+        formRecordCache.delete(token);
+        saveState();
+        logAudit(entry.status === 'done' ? 'form kaydı silindi' : 'form bağlantısı iptal edildi', client.name, client.id);
+        refresh();
+        return;
+      }
+      // Everything below needs the stored answers.
+      busy('⏳ Yükleniyor…');
+      let rec;
+      try{ rec = await loadFormRecord(entry); }
+      catch(e){ console.error('Form kaydı yüklenemedi', e); alert('Form kaydı yüklenemedi, bağlantını kontrol et.'); done(original, 10); return; }
+      if(act === 'view'){ done(original, 10); openFormResponseModal(client, entry, rec); return; }
+      try{
+        const isConsent = act.endsWith('consent');
+        const doc = isConsent ? await buildConsentPdf(client, entry, rec) : await buildScalesPdf(client, entry, rec);
+        const filename = formPdfFilename(isConsent ? 'Consent' : 'Scales', client, entry);
+        if(act.startsWith('pdf')){
+          await savePdfWithPicker(doc, filename);
+          logAudit(isConsent ? 'imzalı onam PDF indirildi' : 'ölçek PDF indirildi', client.name, client.id);
+          done(original, 10);
+        }else{
+          if(!state.driveFormsFolderId){ alert('Önce Ayarlar > Form Kayıt Klasörü bölümünden bir klasör seçmelisin.'); done(original, 10); return; }
+          busy('⏳ Kaydediliyor…');
+          const ok = await uploadPdfToDriveFolder(doc, filename, state.driveFormsFolderId);
+          logAudit(ok ? (isConsent ? "imzalı onam Drive'a kaydedildi" : "ölçek PDF Drive'a kaydedildi") : "form PDF Drive'a kaydedilemedi", client.name, client.id);
+          done(ok ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene', 3000);
+        }
+      }catch(e){
+        console.error('PDF oluşturulamadı', e);
+        alert('PDF oluşturulamadı: ' + (e && e.message ? e.message : 'bilinmeyen hata'));
+        done(original, 10);
+      }
+    });
+  });
+}
+
+const formRecordCache = new Map();
+async function loadFormRecord(entry){
+  if(formRecordCache.has(entry.token)) return formRecordCache.get(entry.token);
+  const [reqSnap, resSnap] = await Promise.all([window.FB.getDoc(formRequestRef(entry.token)), window.FB.getDoc(formResponseRef(entry.token))]);
+  if(!reqSnap.exists() || !resSnap.exists()) throw new Error('Kayıt bulunamadı');
+  const res = resSnap.data();
+  const rec = {
+    request: reqSnap.data(),
+    payload: JSON.parse(res.payload),
+    submittedAt: res.submittedAt && res.submittedAt.toMillis ? res.submittedAt.toMillis() : entry.submittedAt
+  };
+  formRecordCache.set(entry.token, rec);
+  return rec;
+}
+
+function formDateTimeEn(ms){
+  return new Date(ms).toLocaleString('en-CA', { year:'numeric', month:'long', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' });
+}
+
+function openFormResponseModal(client, entry, rec){
+  const p = rec.payload;
+  const multi = new Set((p.scales || []).map(s => s.respondentName)).size > 1;
+  const consentHtml = p.consent ? `
+    <h3 class="form-view-h">${escapeHtml(rec.request.consent.title)}</h3>
+    ${(p.consent.signers || []).map(s => `
+      <div class="form-view-signer">
+        <img src="${escapeAttr(/^data:image\/png;base64,/.test(s.signature || '') ? s.signature : '')}" alt="İmza">
+        <div><strong>${escapeHtml(s.name)}</strong>${s.relationship ? ` (${escapeHtml(s.relationship)})` : ''}${s.role === 'guardian' ? ' — veli' : ''}<br><span>${escapeHtml(formDateTimeEn(new Date(s.signedAt).getTime()))}</span></div>
+      </div>`).join('')}` : '';
+  const scalesHtml = (p.scales || []).filter(s => FORM_SCALES[s.id]).map(s=>{
+    const sc = FORM_SCALES[s.id];
+    const r = scoreFormScale(s);
+    return `
+      <h3 class="form-view-h">${sc.title}${multi ? ' — ' + escapeHtml(s.respondentName) : ''}: ${r.total} (${r.band})</h3>
+      <table class="form-view-table">
+        ${sc.items.map((t,i)=>`<tr class="${s.id==='phq9' && i===8 && s.answers[i] > 0 ? 'flag' : ''}"><td>${i+1}. ${escapeHtml(t)}</td><td>${s.answers[i]} — ${escapeHtml(FORM_FREQ[s.answers[i]] || '')}</td></tr>`).join('')}
+        ${s.id === 'phq9' ? `<tr><td>Functional difficulty</td><td>${s.difficulty == null ? 'Not answered' : escapeHtml(FORM_DIFFICULTY[s.difficulty])}</td></tr>` : ''}
+      </table>`;
+  }).join('');
+  const modal = document.createElement('div');
+  modal.className = 'backups-modal';
+  modal.style.display = 'flex';
+  modal.innerHTML = `
+    <div class="backups-box" style="max-width:560px; max-height:86vh; overflow:auto;">
+      <div class="backups-box-header"><h2>${escapeHtml(client.name)} — form yanıtları</h2><button type="button" id="formViewClose">✕</button></div>
+      <div style="padding:0 20px 20px;">
+        <div class="form-entry-meta">Gönderildi: ${formatBackupTime(rec.submittedAt)}</div>
+        ${consentHtml}${scalesHtml}
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  document.getElementById('formViewClose').addEventListener('click', ()=> modal.remove());
+  modal.addEventListener('click', ev=>{ if(ev.target === modal) modal.remove(); });
+}
+
+/* ----- PDFs ----- */
+let pdfUnicodeFont = null; // null = not tried, false = unavailable
+async function loadPdfUnicodeFont(){
+  if(pdfUnicodeFont !== null) return pdfUnicodeFont;
+  try{
+    const base = 'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/';
+    const [regular, bold] = await Promise.all(['DejaVuSans.ttf', 'DejaVuSans-Bold.ttf'].map(async f=>{
+      const res = await fetch(base + f);
+      if(!res.ok) throw new Error('font');
+      return btoa(arrayBufferToBinaryString(await res.arrayBuffer()));
+    }));
+    pdfUnicodeFont = { regular, bold };
+  }catch(e){
+    console.warn('PDF yazı tipi yüklenemedi, sade karakterlerle devam ediliyor', e);
+    pdfUnicodeFont = false;
+  }
+  return pdfUnicodeFont;
+}
+
+// Fallback when the Unicode font cannot be loaded: keep the PDF readable with the built-in font.
+function pdfSafeText(str){
+  return toAscii(String(str == null ? '' : str))
+    .replace(/[–—]/g, '-').replace(/[‘’]/g, "'").replace(/[“”]/g, '"')
+    .replace(/•/g, '-').replace(/…/g, '...').replace(/ /g, ' ')
+    .replace(/[^\x09\x0A\x20-\x7E¡-ÿ]/g, '?');
+}
+
+async function makePdfWriter(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit:'mm', format:'letter' });
+  const font = await loadPdfUnicodeFont();
+  let family = 'helvetica';
+  let T = pdfSafeText;
+  if(font){
+    doc.addFileToVFS('DejaVuSans.ttf', font.regular); doc.addFont('DejaVuSans.ttf', 'DejaVu', 'normal');
+    doc.addFileToVFS('DejaVuSans-Bold.ttf', font.bold); doc.addFont('DejaVuSans-Bold.ttf', 'DejaVu', 'bold');
+    family = 'DejaVu';
+    T = s => String(s == null ? '' : s);
+  }
+  const M = 18, W = 215.9 - 2*M, BOTTOM = 262;
+  let y = M + 2;
+  const w = {
+    doc,
+    ensure(h){ if(y + h > BOTTOM){ doc.addPage(); y = M + 2; } },
+    text(str, o){
+      o = o || {};
+      const size = o.size || 10.5, indent = o.indent || 0;
+      doc.setFont(family, o.bold ? 'bold' : 'normal'); doc.setFontSize(size); doc.setTextColor(o.color == null ? 30 : o.color);
+      const lh = size * 0.3528 * 1.38;
+      T(str).split('\n').forEach(part=>{
+        doc.splitTextToSize(part || ' ', W - indent).forEach(line=>{ w.ensure(lh); doc.text(line, M + indent, y + lh*0.78); y += lh; });
+      });
+      y += (o.gap == null ? 2.2 : o.gap);
+    },
+    space(h){ y += h; },
+    rule(){ w.ensure(5); doc.setDrawColor(205); doc.line(M, y, M + W, y); y += 4; },
+    image(dataUrl, widthMm){
+      try{
+        const props = doc.getImageProperties(dataUrl);
+        const h = widthMm * props.height / props.width;
+        w.ensure(h + 2);
+        doc.addImage(dataUrl, 'PNG', M, y, widthMm, h);
+        y += h + 1.5;
+      }catch(e){ console.error('İmza görseli eklenemedi', e); w.text('[signature image unavailable]', { size:9, color:120 }); }
+    },
+    footers(label){
+      const n = doc.getNumberOfPages();
+      for(let i = 1; i <= n; i++){
+        doc.setPage(i); doc.setFont(family, 'normal'); doc.setFontSize(8); doc.setTextColor(125);
+        doc.text(T(`${label} — Page ${i} of ${n}`), M, 271);
+      }
+    }
+  };
+  return w;
+}
+
+function formPdfHeader(w, title, rec){
+  const t = rec.request.therapist || {};
+  w.text(rec.request.practice || 'İki Therapy', { size:9, color:110, gap:1 });
+  w.text(title, { size:16, bold:true, gap:3 });
+  w.text(`Therapist: ${t.name || ''}${t.credential ? ', ' + t.credential : ''}${t.regNumber ? ' — Registration No. ' + t.regNumber : ''}`, { size:9.5, color:90, gap:0.8 });
+  w.text(`Client: ${rec.request.clientLabel || ''}`, { size:9.5, color:90, gap:2 });
+  w.rule();
+}
+
+function formPdfRecord(w, entry, rec, extra){
+  w.rule();
+  w.text('Electronic record', { size:9.5, bold:true, gap:1.2 });
+  const lines = [
+    `Request ID: ${entry.token.slice(0, 10)}`,
+    `Link created: ${formDateTimeEn(entry.createdAt)}`,
+    (entry.sentTo && entry.sentTo.length) ? `Link e-mailed to: ${entry.sentTo.join(', ')}` : 'Link delivered by the therapist directly (no e-mail draft recorded)',
+    `Submitted (server time): ${formDateTimeEn(rec.submittedAt)}`,
+    rec.payload.timezone ? `Time zone of the device used: ${rec.payload.timezone}` : ''
+  ].concat(extra || []).filter(Boolean);
+  lines.forEach(l => w.text(l, { size:8.5, color:95, gap:0.6 }));
+}
+
+async function buildConsentPdf(client, entry, rec){
+  const c = rec.request.consent, pc = rec.payload.consent;
+  if(!c || !pc) throw new Error('Bu kayıtta onam formu yok');
+  const w = await makePdfWriter();
+  formPdfHeader(w, c.title || 'Consent form', rec);
+  consentHtmlToBlocks(c.html).forEach(b=>{
+    if(b.type === 'h'){ w.space(1.5); w.ensure(12); w.text(b.text, { size:11.5, bold:true, gap:1.6 }); }
+    else if(b.type === 'li') w.text(b.text, { indent:4, gap:1.2 });
+    else w.text(b.text, { gap:2.6 });
+  });
+  w.rule();
+  w.ensure(60);
+  w.text('Agreement and signature', { size:12, bold:true, gap:2 });
+  (c.checks || []).forEach((t,i)=> w.text(`${pc.checks && pc.checks[i] ? '[x]' : '[ ]'} ${t}`, { gap:2.4 }));
+  (pc.signers || []).forEach((s,i)=>{
+    w.ensure(48);
+    w.space(2);
+    w.text(s.role === 'guardian' ? 'Parent / guardian' : ((pc.signers.length > 1) ? `Client ${i+1}` : 'Client'), { size:10, bold:true, gap:1 });
+    if(/^data:image\/png;base64,/.test(s.signature || '')) w.image(s.signature, 62);
+    w.text(`Name: ${s.name}${s.relationship ? ` (${s.relationship} of ${rec.request.clientLabel})` : ''}`, { size:10, gap:0.8 });
+    w.text(`Signed electronically: ${formDateTimeEn(new Date(s.signedAt).getTime())}`, { size:9.5, color:80, gap:2 });
+  });
+  if(state.providerSignature){
+    const t = rec.request.therapist || {};
+    w.ensure(48);
+    w.space(2);
+    w.text('Therapist', { size:10, bold:true, gap:1 });
+    w.image(state.providerSignature, 62);
+    w.text(`Name: ${t.name || ''}${t.credential ? ', ' + t.credential : ''}`, { size:10, gap:0.8 });
+    w.text(`Date: ${formDateTimeEn(entry.createdAt)}`, { size:9.5, color:80, gap:2 });
+  }
+  formPdfRecord(w, entry, rec, [`Form text version: ${c.version || ''}`]);
+  w.footers(`${c.title || 'Consent form'} — ${rec.request.clientLabel || ''}`);
+  return w.doc;
+}
+
+async function buildScalesPdf(client, entry, rec){
+  const scales = (rec.payload.scales || []).filter(s => FORM_SCALES[s.id]);
+  if(!scales.length) throw new Error('Bu kayıtta ölçek yok');
+  const multi = new Set(scales.map(s => s.respondentName)).size > 1;
+  const w = await makePdfWriter();
+  formPdfHeader(w, 'Questionnaire results', rec);
+  scales.forEach(s=>{
+    const sc = FORM_SCALES[s.id];
+    const r = scoreFormScale(s);
+    w.ensure(40);
+    w.text(`${sc.title}${multi ? ' — ' + s.respondentName : ''}`, { size:13, bold:true, gap:1 });
+    w.text(`Total score: ${r.total} of ${sc.bands[sc.bands.length-1][0]} — ${r.band}`, { size:11, bold:true, gap:2 });
+    w.text(sc.stem, { size:9.5, color:90, gap:2 });
+    sc.items.forEach((t,i)=>{
+      w.ensure(12);
+      w.text(`${i+1}. ${t}`, { size:10, gap:0.4 });
+      w.text(`${s.answers[i]} — ${FORM_FREQ[s.answers[i]] || ''}`, { size:10, bold:true, indent:5, gap:1.8 });
+    });
+    if(s.id === 'phq9'){
+      w.text(`Functional difficulty: ${s.difficulty == null ? 'Not answered' : FORM_DIFFICULTY[s.difficulty]}`, { size:10, gap:1.6 });
+      if(s.answers[8] > 0) w.text(`Note: item 9 (thoughts of being better off dead or of self-harm) was answered "${FORM_FREQ[s.answers[8]]}".`, { size:10, bold:true, gap:2 });
+    }
+    w.space(3);
+  });
+  formPdfRecord(w, entry, rec);
+  w.footers(`Questionnaire results — ${rec.request.clientLabel || ''}`);
+  return w.doc;
+}
+
+function formPdfFilename(kind, client, entry){
+  const d = new Date(entry.submittedAt || entry.createdAt);
+  return `${kind}-${toAscii(client.name).replace(/[^A-Za-z0-9]+/g, '')}${String(d.getFullYear()).slice(-2)}.${pad2(d.getMonth()+1)}.${pad2(d.getDate())}.pdf`;
+}
+
 const TASK_NOTIFY_URL = 'https://tasknotify-171012588947.us-central1.run.app/';
 const TASK_NOTIFY_SECRET = 'iki-therapy-notify-2026';
 
@@ -8468,6 +9509,8 @@ function renderSettingsPage(){
       ${state.driveInvoiceFolderId ? `<button class="settings-btn" id="settingsClearDriveFolderBtn" style="width:auto; margin-left:8px;">Kaldır</button>` : ''}
     </div>
 
+    ${formsSettingsHtml()}
+
     <div class="settings-section">
       <h3>📥 Mevcut Veriyi İndir</h3>
       <p>Tüm danışan verilerinin bir kopyasını JSON dosyası olarak bilgisayarına indir — elle yedek almak için.</p>
@@ -8555,7 +9598,7 @@ function renderSettingsPage(){
     saveState();
   });
 
-  document.getElementById('settingsPickDriveFolderBtn').addEventListener('click', openDriveFolderPicker);
+  document.getElementById('settingsPickDriveFolderBtn').addEventListener('click', ()=> openDriveFolderPicker());
   const clearFolderBtn = document.getElementById('settingsClearDriveFolderBtn');
   if(clearFolderBtn){
     clearFolderBtn.addEventListener('click', ()=>{
@@ -8566,6 +9609,7 @@ function renderSettingsPage(){
     });
   }
 
+  wireFormsSettings();
   document.getElementById('settingsExportBtn').addEventListener('click', exportCurrentDataJson);
   document.getElementById('settingsImportInput').addEventListener('change', handleImportJsonFile);
   document.getElementById('settingsSignOutBtn').addEventListener('click', signOutAccount);
@@ -9018,6 +10062,7 @@ function renderHome(){
   main.innerHTML = `
     <button class="back-to-list" id="backToListBtn">← Danışanlar</button>
     <div id="clientHeader"><h2>Ana Sayfa</h2></div>
+    ${formAlertsBannerHtml()}
     <div id="clientSub">${tasks.length} bekleyen iş • sağda danışan randevuları</div>
     ${birthdayBannerHtml()}
     <div class="home-mobile-tabs">
