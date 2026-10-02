@@ -7009,7 +7009,8 @@ async function sendTaskReminder(taskId){
 }
 
 /* ---------- Client forms: consent + scales sent by a one-time link ---------- */
-const FORM_PAGE_URL = APP_URL + '/form.html';
+// Client-facing form page lives on its own address, separate from the admin app.
+const FORM_PAGE_URL = 'https://forms.ikitherapy.ca/';
 const FORM_FREQ = ['Not at all', 'Several days', 'More than half the days', 'Nearly every day'];
 const FORM_DIFFICULTY = ['Not difficult at all', 'Somewhat difficult', 'Very difficult', 'Extremely difficult'];
 const FORM_SCALES = {
@@ -8266,7 +8267,7 @@ async function buildConsentPdf(client, entry, rec){
   if(!c || !pc) throw new Error('Bu kayıtta onam formu yok');
   const blocks = consentHtmlToBlocks(c.html);
   const w = await makePdfWriter({ italic: blocks.some(b => b.runs.some(r => r.i)) });
-  formPdfHeader(w, c.title || 'Consent form', rec);
+  // No generated header here: the consent text starts with its own title and therapist details.
   blocks.forEach(b=>{
     if(b.type === 'h'){ w.space(1.5); w.ensure(12); w.rich(b.runs, { size:11.5, bold:true, gap:1.6 }); }
     else if(b.type === 'li') w.rich(b.runs, { indent:4, gap:1.2 });
