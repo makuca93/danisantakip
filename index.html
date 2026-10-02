@@ -7516,7 +7516,7 @@ function openSendFormsModal(client){
         <label class="consent-label">Onam formu</label>
         <select id="sendConsentType" class="settings-select" style="width:100%;">
           <option value="">Onam formu gönderme</option>
-          ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}" ${k===defaultType?'selected':''}>${CONSENT_TYPES[k]}</option>`).join('')}
+          ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}">${CONSENT_TYPES[k]}${k===defaultType?' (bu danışan için uygun)':''}</option>`).join('')}
         </select>
         <div id="sendConsentNote" class="consent-status" style="margin-top:6px;"></div>
         <label class="consent-label">Ölçekler (İngilizce)</label>
