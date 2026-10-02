@@ -60,11 +60,11 @@
   .signer-state{font-size:13px; color:var(--muted);}
   .signer.complete .signer-state{color:var(--green); font-weight:600;}
   label.field{display:block; font-size:13px; font-weight:600; color:var(--muted); margin:10px 0 5px;}
-  input[type="text"]{
+  input[type="text"], .date-input{
     width:100%; font:inherit; font-size:16px; color:var(--ink);
     padding:11px 12px; border:1px solid var(--card-line); border-radius:8px; background:#fff;
   }
-  input[type="text"]:focus-visible, button:focus-visible, .opt:focus-within{outline:2px solid #6f8fc0; outline-offset:2px;}
+  input[type="text"]:focus-visible, .date-input:focus-visible, button:focus-visible, .opt:focus-within{outline:2px solid #6f8fc0; outline-offset:2px;}
   .pad-wrap{position:relative; border:1px dashed #b9bcc8; border-radius:8px; background:#fff; touch-action:none;}
   .pad-wrap canvas{display:block; width:100%; height:170px; border-radius:8px; touch-action:none; cursor:crosshair;}
   .pad-hint{position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); text-align:center; color:#a9acb6; font-size:14px; pointer-events:none;}
@@ -213,7 +213,56 @@
       message('This link has expired', 'Please ask your therapist to send you a new link.');
       return;
     }
-    render();
+    document.getElementById('pageSub').textContent = [req.therapist && req.therapist.name, req.practice || 'İki Therapy'].filter(Boolean).join(' · ');
+    if(req.respondents){ render(); return; }      // older links carry the forms directly
+    if(req.needsDob){ showDobGate(); return; }
+    if(await loadContent('open')) render();
+    else message('The forms could not be loaded', 'Please ask your therapist for a new link.');
+  }
+
+  // The forms themselves live in a separate record that can only be opened with the right key
+  // (the date of birth, when the therapist asked for that check).
+  let contentKey = null;
+  async function loadContent(key){
+    const snap = await getDoc(doc(db, 'users', personId, 'formRequests', token, 'content', key));
+    if(!snap.exists()) return false;
+    req = { ...req, ...snap.data() };
+    contentKey = key;
+    return true;
+  }
+
+  function showDobGate(){
+    let tries = 0;
+    const who = req.dobOf === 'client' ? "the client's date of birth (the person receiving therapy)" : 'your date of birth';
+    app.innerHTML = `
+      <section class="card">
+        <h2>Confirm it's you</h2>
+        <p class="sub">To protect your privacy, please enter ${who} to open your forms.</p>
+        <label class="field" for="dobInput">Date of birth</label>
+        <input type="date" id="dobInput" class="date-input" max="${new Date().toISOString().slice(0,10)}">
+        <div id="errorBox" class="error-box" style="margin-top:12px;" hidden></div>
+        <button type="button" class="submit-btn" id="dobBtn" style="margin-top:14px;">Continue</button>
+      </section>`;
+    const btn = document.getElementById('dobBtn'), box = document.getElementById('errorBox');
+    btn.addEventListener('click', async ()=>{
+      const v = document.getElementById('dobInput').value;
+      box.hidden = true;
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(v)){ box.textContent = 'Please choose a full date.'; box.hidden = false; return; }
+      btn.disabled = true; btn.textContent = 'Checking…';
+      let ok = false, failed = false;
+      try{ ok = await loadContent(v); }catch(e){ failed = true; }
+      if(ok){ render(); return; }
+      btn.textContent = 'Continue';
+      if(failed){ box.textContent = 'Could not check right now. Please check your internet connection and try again.'; box.hidden = false; btn.disabled = false; return; }
+      tries++;
+      if(tries >= 5){
+        box.textContent = 'That date does not match our records. Please contact your therapist.';
+        box.hidden = false;
+        return; // button stays disabled
+      }
+      box.textContent = 'That date does not match our records. Please try again.';
+      box.hidden = false; btn.disabled = false;
+    });
   }
 
   function scaleHtml(scaleId, rIdx, respondentName, showName){
@@ -255,7 +304,6 @@
   }
 
   function render(){
-    document.getElementById('pageSub').textContent = [req.therapist && req.therapist.name, req.practice || 'İki Therapy'].filter(Boolean).join(' · ');
     document.getElementById('foot').hidden = false;
     const c = req.consent;
     const respondents = req.respondents || [];
@@ -272,6 +320,7 @@
           ${(c.checks||[]).map((t,i)=>`<label class="check-row"><input type="checkbox" data-check="${i}"><span>${esc(t)}</span></label>`).join('')}
         </div>
         ${req.signers.length > 1 ? `<p class="sub" style="margin-top:12px;">Each person signs in turn. The second signature opens once the first is complete.</p>` : ''}
+        ${req.coSignerName ? `<p class="sub" style="margin-top:12px;">This form is signed by two people. ${esc(req.coSignerName)} signs separately, using their own link.</p>` : ''}
         ${req.signers.map(signerHtml).join('')}
       </section>`;
     }
@@ -426,7 +475,7 @@
     btn.disabled = true; btn.textContent = 'Sending…';
     try{
       await setDoc(doc(db, 'users', personId, 'formRequests', token, 'responses', 'main'), {
-        v: 1, submittedAt: serverTimestamp(), payload: JSON.stringify(payload)
+        v: 1, submittedAt: serverTimestamp(), payload: JSON.stringify(payload), key: contentKey || 'open'
       });
     }catch(e){
       btn.disabled = false; btn.textContent = req.consent ? 'Sign and submit' : 'Submit';

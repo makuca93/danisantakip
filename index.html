@@ -3923,7 +3923,7 @@ function renderMain(){
       <button class="add-session-toggle" id="toggleTodoBtn">✅ Yapılacaklar</button>
       <button class="add-session-toggle" id="toggleCalendarBtn">📅 Randevu</button>
       <button class="add-session-toggle" id="toggleHistoryBtn">🕐 Geçmiş</button>
-      <button class="add-session-toggle" id="toggleFormsBtn">📋 Formlar${(client.formRequests||[]).some(e=>e.status==='done' && e.result && e.result.flag && !e.reviewed) ? ' ⚠️' : ((client.formRequests||[]).some(e=>e.status==='open' && Date.now() <= e.expiresAt) ? ' ⏳' : '')}</button>
+      <button class="add-session-toggle" id="toggleFormsBtn">📋 Formlar${(client.formRequests||[]).some(e=>e.result && e.result.flag && !e.reviewed) ? ' ⚠️' : ((client.formRequests||[]).some(e=>e.status==='open' && Date.now() <= e.expiresAt) ? ' ⏳' : '')}</button>
       <button class="add-session-toggle" id="toggleFormBtn">+ Yeni seans kaydı ekle</button>
     </div>
     ${todoPanelHtml(client)}
@@ -7363,8 +7363,11 @@ function newFormToken(){
   crypto.getRandomValues(b);
   return btoa(String.fromCharCode.apply(null, b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
-function formLink(entry){ return `${FORM_PAGE_URL}#p=${currentPersonId()}&t=${entry.token}`; }
+function formLinkForToken(token){ return `${FORM_PAGE_URL}#p=${currentPersonId()}&t=${token}`; }
+// Couple requests have one part (own link, own device) per person; everything else is a single link.
+function formTokens(entry){ return entry.parts ? entry.parts.map(p => p.token) : [entry.token]; }
 function formRequestRef(token){ return window.FB.doc(window.FB.db, 'users', currentPersonId(), 'formRequests', token); }
+function formContentRef(token, key){ return window.FB.doc(window.FB.db, 'users', currentPersonId(), 'formRequests', token, 'content', key); }
 function formResponseRef(token){ return window.FB.doc(window.FB.db, 'users', currentPersonId(), 'formRequests', token, 'responses', 'main'); }
 
 function scoreFormScale(s){
@@ -7387,31 +7390,46 @@ async function createFormRequest(client, opts){
   const me = currentPersonId();
   const p = getProvider();
   const sp = client.profile && client.profile.secondPerson;
-  let respondents = [{ name: client.name }];
-  let signers = [{ role: 'client', name: client.name }];
-  let clientLabel = client.name;
-  if(opts.consentType === 'couple'){
-    respondents = [{ name: client.name }, { name: sp.name.trim() }];
-    signers = respondents.map(r => ({ role: 'client', name: r.name }));
-    clientLabel = `${client.name} & ${sp.name.trim()}`;
-  }else if(opts.consentType === 'minor'){
-    signers = [{ role: 'guardian', name: '' }];
-  }
   let consent = null;
   if(opts.consentType){
     const t = getConsentTemplate(opts.consentType);
     consent = { type: opts.consentType, title: t.title || CONSENT_DEFAULT_TITLES[opts.consentType], html: t.html, checks: [CONSENT_ACK], version: hashString((t.title||'') + t.html + CONSENT_ACK) };
   }
-  const token = newFormToken();
   const now = Date.now();
   const expiresAt = now + opts.days * 24*60*60*1000;
-  await window.FB.setDoc(formRequestRef(token), {
-    v: 1, owner: me, createdAt: window.FB.serverTimestamp(), expiresAt: new Date(expiresAt),
+  // Two records per link: a small public "cover" (who it is from, expiry, whether a date of birth is asked)
+  // and the forms themselves, stored under a key. With the birth-date check on, the key IS the date of
+  // birth, so the forms can only be opened — and answers only submitted — by someone who knows it.
+  const cover = {
+    v: 2, owner: me, createdAt: window.FB.serverTimestamp(), expiresAt: new Date(expiresAt),
     practice: 'İki Therapy',
-    therapist: { name: p.name || '', credential: p.credential || '', regNumber: p.regNumber || '' },
-    clientLabel, consent, signers: consent ? signers : [], respondents, scales: opts.scales
-  });
-  const entry = { token, createdAt: now, expiresAt, consentType: opts.consentType || null, consentVersion: consent ? consent.version : null, scales: opts.scales, status: 'open', sentTo: [] };
+    therapist: { name: p.name || '', credential: p.credential || '', regNumber: p.regNumber || '' }
+  };
+  const write = async (content, dob)=>{
+    const token = newFormToken();
+    const key = dob || 'open';
+    await window.FB.setDoc(formContentRef(token, key), { consent, scales: opts.scales, ...content });
+    await window.FB.setDoc(formRequestRef(token), { ...cover, needsDob: !!dob, dobOf: opts.consentType === 'minor' ? 'client' : 'self' });
+    return { token, key };
+  };
+  const dobs = opts.dobs || [];
+  const entry = { createdAt: now, expiresAt, dobCheck: !!(opts.dobs && opts.dobs.length), consentType: opts.consentType || null, consentVersion: consent ? consent.version : null, scales: opts.scales, status: 'open', sentTo: [] };
+  if(opts.consentType === 'couple'){
+    // Each person gets their own link and signs on their own device.
+    const names = [client.name, sp.name.trim()];
+    const clientLabel = `${names[0]} & ${names[1]}`;
+    entry.parts = [];
+    for(let i = 0; i < 2; i++){
+      const w = await write({ clientLabel, part: i + 1, coSignerName: names[1 - i], signers: [{ role: 'client', name: names[i] }], respondents: [{ name: names[i] }] }, dobs[i]);
+      entry.parts.push({ token: w.token, key: w.key, name: names[i], status: 'open' });
+    }
+    entry.token = entry.parts[0].token; // identifies the entry in lists
+  }else{
+    const signers = consent ? [opts.consentType === 'minor' ? { role: 'guardian', name: '' } : { role: 'client', name: client.name }] : [];
+    const w = await write({ clientLabel: client.name, signers, respondents: [{ name: client.name }] }, dobs[0]);
+    entry.token = w.token;
+    entry.key = w.key;
+  }
   const live = state.clients.find(c => c.id === client.id) || client;
   if(!live.formRequests) live.formRequests = [];
   live.formRequests.push(entry);
@@ -7455,21 +7473,31 @@ async function createGmailTextDraft(to, subject, bodyText){
 async function createFormLinkDraft(client, entry){
   const sp = client.profile && client.profile.secondPerson;
   const primaryEmail = (client.profile && client.profile.email || '').trim();
-  const both = entry.consentType === 'couple';
-  const to = both ? clientEmailList(client) : primaryEmail;
-  const greetName = both && sp && sp.name ? `${client.name} and ${sp.name.trim()}` : (entry.consentType === 'minor' ? '' : client.name);
   const until = new Date(entry.expiresAt).toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' });
-  const body = `Hello${greetName ? ' ' + greetName : ''},\n\nPlease complete your forms before our next session using the secure link below. It takes about 5 to 10 minutes and works on a phone.\n\n${formLink(entry)}\n\nThe link can be used once and is valid until ${until}.\n\nBest regards,\n${getProvider().name || ''}`;
-  const r = await createGmailTextDraft(to, `Forms to complete before your session`, body);
-  if(r.ok){
+  const body = (name, token) => `Hello${name ? ' ' + name : ''},\n\nPlease complete your forms before our next session using the secure link below. It takes about 5 to 10 minutes and works on a phone.\n\n${formLinkForToken(token)}\n\nThis link is personal: it can be used once and is valid until ${until}.\n\nBest regards,\n${getProvider().name || ''}`;
+  // Couples: one separate draft per person, each to that person's own address with their own link.
+  const targets = entry.parts
+    ? entry.parts.map((pt, i) => ({ name: pt.name, token: pt.token, email: i === 0 ? primaryEmail : ((sp && sp.email) || '').trim(), skip: pt.status !== 'open' }))
+    : [{ name: entry.consentType === 'minor' ? '' : client.name, label: client.name, token: entry.token, email: primaryEmail }];
+  const lines = [];
+  const sent = [];
+  for(const t of targets){
+    const label = t.label || t.name;
+    if(t.skip) continue;
+    if(!t.email){ lines.push(`❌ ${label}: profilde e-posta yok — bağlantısını kopyalayıp gönder`); continue; }
+    const r = await createGmailTextDraft(t.email, 'Forms to complete before your session', body(t.name, t.token));
+    if(r.ok){ sent.push(t.email); lines.push(`✅ ${label}: taslak hazır → ${t.email}`); }
+    else lines.push(`❌ ${label}: ${r.error}`);
+  }
+  if(sent.length){
     const live = state.clients.find(c => c.id === client.id);
     const liveEntry = live && (live.formRequests || []).find(e => e.token === entry.token);
     if(liveEntry){
-      liveEntry.sentTo = Array.from(new Set([...(liveEntry.sentTo || []), ...to.split(',').map(x => x.trim()).filter(Boolean)]));
+      liveEntry.sentTo = Array.from(new Set([...(liveEntry.sentTo || []), ...sent]));
       saveState();
     }
   }
-  return { ...r, to };
+  return { ok: sent.length > 0 && lines.every(l => l.startsWith('✅')), anyOk: sent.length > 0, summary: lines.join('\n') || 'Gönderilecek açık bağlantı yok.' };
 }
 
 function openSendFormsModal(client){
@@ -7491,6 +7519,9 @@ function openSendFormsModal(client){
         <label class="consent-label">Ölçekler (İngilizce)</label>
         <div class="tick-row"><input type="checkbox" id="sendPhq9"><span>PHQ-9 (depresyon)</span></div>
         <div class="tick-row"><input type="checkbox" id="sendGad7"><span>GAD-7 (kaygı)</span></div>
+        <label class="consent-label">Kimlik doğrulama</label>
+        <div class="tick-row"><input type="checkbox" id="sendDobCheck" checked><span>Bağlantı açılırken doğum tarihi sorulsun</span></div>
+        <div id="sendDobFields"></div>
         <label class="consent-label">Bağlantının geçerlilik süresi</label>
         <select id="sendDays" class="settings-select" style="width:100%;">
           <option value="3">3 gün</option><option value="7" selected>7 gün</option><option value="14">14 gün</option>
@@ -7514,13 +7545,29 @@ function openSendFormsModal(client){
     if(type && !ready) msg = 'Onam metinleri yükleniyor…';
     else if(type && !getConsentTemplate(type)) msg = `⚠️ "${CONSENT_TYPES[type]}" onam metni henüz eklenmemiş. Ayarlar > Onam Formları bölümünden ekle.`;
     else if(type === 'couple' && !hasSecond) msg = '⚠️ Çift onamı için profilde ikinci kişinin adı girilmiş olmalı.';
-    else if(type === 'couple') msg = 'İki kişi aynı bağlantıdan sırayla imzalar. Ölçek seçersen her biri kendi ölçeğini doldurur.';
+    else if(type === 'couple') msg = 'Her birine kendi e-posta adresine ayrı bir bağlantı gider; her biri kendi cihazından imzalar ve kendi ölçeğini doldurur.';
     else if(type === 'minor') msg = 'Onamı veli imzalar; ölçekleri danışan doldurur.';
     note.textContent = msg;
     return !msg.startsWith('⚠️') && !(type && !ready);
   };
-  typeSel.addEventListener('change', validate);
+  const dobCheck = document.getElementById('sendDobCheck');
+  const dobFields = document.getElementById('sendDobFields');
+  const spProfile = client.profile && client.profile.secondPerson;
+  const renderDobFields = ()=>{
+    if(!dobCheck.checked){ dobFields.innerHTML = ''; return; }
+    const people = typeSel.value === 'couple' && hasSecond
+      ? [{ label: client.name, value: (client.profile && client.profile.birthDate) || '' }, { label: spProfile.name.trim(), value: spProfile.birthDate || '' }]
+      : [{ label: typeSel.value === 'minor' ? `${client.name} (danışan)` : client.name, value: (client.profile && client.profile.birthDate) || '' }];
+    dobFields.innerHTML = people.map((x,i)=>`
+      <div style="display:flex; align-items:center; gap:8px; margin-top:6px;">
+        <span style="flex:1; font-size:13px;">${escapeHtml(x.label)}</span>
+        <input type="date" class="send-dob-input settings-select" data-idx="${i}" value="${escapeAttr(x.value)}" max="${todayIso()}">
+      </div>`).join('') + `<div class="consent-status" style="margin-top:6px;">Profilde kayıtlıysa otomatik gelir. Burada girdiğin tarih profile de kaydedilir.</div>`;
+  };
+  dobCheck.addEventListener('change', renderDobFields);
+  typeSel.addEventListener('change', ()=>{ validate(); renderDobFields(); });
   validate();
+  renderDobFields();
 
   createBtn.addEventListener('click', async ()=>{
     const scales = [];
@@ -7529,10 +7576,21 @@ function openSendFormsModal(client){
     const consentType = typeSel.value;
     if(!consentType && !scales.length){ alert('En az bir form seç.'); return; }
     if(!validate()) return;
+    let dobs = null;
+    if(dobCheck.checked){
+      dobs = Array.from(dobFields.querySelectorAll('.send-dob-input')).map(i => i.value);
+      if(dobs.some(d => !/^\d{4}-\d{2}-\d{2}$/.test(d))){ alert('Doğum tarihi doğrulaması açık ama tarih eksik. Tarihi gir ya da doğrulamayı kapat.'); return; }
+      // Remember dates typed here so they are prefilled next time.
+      const live = state.clients.find(c => c.id === client.id) || client;
+      if(live.profile){
+        if(!live.profile.birthDate) live.profile.birthDate = dobs[0];
+        if(dobs[1] && live.profile.secondPerson && !live.profile.secondPerson.birthDate) live.profile.secondPerson.birthDate = dobs[1];
+      }
+    }
     createBtn.disabled = true; createBtn.textContent = 'Oluşturuluyor…';
     let entry;
     try{
-      entry = await createFormRequest(client, { consentType, scales, days: Number(document.getElementById('sendDays').value) });
+      entry = await createFormRequest(client, { consentType, scales, dobs, days: Number(document.getElementById('sendDays').value) });
     }catch(e){
       console.error('Form bağlantısı oluşturulamadı', e);
       createBtn.disabled = false; createBtn.textContent = 'Bağlantı oluştur';
@@ -7541,26 +7599,28 @@ function openSendFormsModal(client){
     }
     const hasEmail = !!clientEmailList(client);
     document.getElementById('sendFormsBody').innerHTML = `
-      <p style="font-size:13.5px; margin:0 0 8px;">✅ Bağlantı hazır: <strong>${escapeHtml(formEntryContents(entry))}</strong></p>
-      <input type="text" readonly id="sendFormsLink" value="${escapeAttr(formLink(entry))}" style="width:100%; font-size:12px; padding:9px 10px; border:1px solid var(--card-line); border-radius:7px;">
-      <p style="font-size:12.5px; color:var(--muted); margin:8px 0 12px;">Bağlantı bir kez kullanılabilir ve ${formatShortDate(isoDate(new Date(entry.expiresAt)))} tarihine kadar geçerli. E-postada hangi formların olduğu yazmaz.</p>
+      <p style="font-size:13.5px; margin:0 0 8px;">✅ ${entry.parts ? 'Bağlantılar' : 'Bağlantı'} hazır: <strong>${escapeHtml(formEntryContents(entry))}</strong></p>
+      <p style="font-size:12.5px; color:var(--muted); margin:0 0 12px;">${entry.parts ? 'Her kişinin bağlantısı ayrı ve kişiseldir; her biri' : 'Bağlantı'} bir kez kullanılabilir ve ${formatShortDate(isoDate(new Date(entry.expiresAt)))} tarihine kadar geçerli. E-postada hangi formların olduğu yazmaz.${entry.dobCheck ? ' Açılırken doğum tarihi sorulur.' : ''}</p>
       <div style="display:flex; flex-direction:column; gap:8px;">
-        <button class="settings-btn" id="sendFormsDraft" style="width:100%;" ${hasEmail ? '' : 'disabled'}>📧 Gmail taslağı oluştur${hasEmail ? '' : ' (profilde e-posta yok)'}</button>
-        <button class="settings-btn" id="sendFormsCopy" style="width:100%;">🔗 Bağlantıyı kopyala</button>
+        <button class="settings-btn" id="sendFormsDraft" style="width:100%;" ${hasEmail ? '' : 'disabled'}>📧 ${entry.parts ? 'Her birine ayrı Gmail taslağı oluştur' : 'Gmail taslağı oluştur'}${hasEmail ? '' : ' (profilde e-posta yok)'}</button>
+        <div id="sendFormsDraftResult" style="font-size:12.5px; white-space:pre-line;"></div>
+        ${formTokens(entry).map((t,i)=>`<button class="settings-btn send-forms-copy" data-token="${escapeAttr(t)}" style="width:100%;">🔗 ${entry.parts ? escapeHtml(entry.parts[i].name) + ' bağlantısını kopyala' : 'Bağlantıyı kopyala'}</button>`).join('')}
       </div>`;
-    document.getElementById('sendFormsCopy').addEventListener('click', ()=> copyFormLink(entry));
+    document.querySelectorAll('.send-forms-copy').forEach(b => b.addEventListener('click', ()=> copyFormLink(b.getAttribute('data-token'))));
     document.getElementById('sendFormsDraft').addEventListener('click', async (ev)=>{
       const b = ev.target;
+      const label = b.textContent;
       b.disabled = true; b.textContent = '⏳ Taslak hazırlanıyor…';
       const r = await createFormLinkDraft(client, entry);
-      b.textContent = r.ok ? `✅ Taslak Gmail'de hazır${r.to ? ' → ' + r.to : ''}` : '❌ Taslak oluşturulamadı: ' + r.error;
+      document.getElementById('sendFormsDraftResult').textContent = r.summary;
+      b.textContent = r.ok ? "✅ Gmail'de hazır" : label;
       if(!r.ok) b.disabled = false;
     });
   });
 }
 
-async function copyFormLink(entry){
-  const link = formLink(entry);
+async function copyFormLink(token){
+  const link = formLinkForToken(token);
   try{ await navigator.clipboard.writeText(link); showToast('🔗 Bağlantı kopyalandı.'); }
   catch(e){ prompt('Bağlantıyı kopyala:', link); }
 }
@@ -7574,43 +7634,60 @@ async function checkOpenFormRequests(){
   const newlyDone = [];
   try{
     const open = [];
-    (state.clients || []).forEach(c => (c.formRequests || []).forEach(e => { if(e.status === 'open') open.push({ clientId: c.id, token: e.token }); }));
+    (state.clients || []).forEach(c => (c.formRequests || []).forEach(e => {
+      if(e.status !== 'open') return;
+      if(e.parts) e.parts.forEach((pt, i) => { if(pt.status === 'open') open.push({ clientId: c.id, entryToken: e.token, token: pt.token, part: i }); });
+      else open.push({ clientId: c.id, entryToken: e.token, token: e.token, part: null });
+    }));
     for(const o of open){
       let snap;
       try{ snap = await window.FB.getDoc(formResponseRef(o.token)); }
       catch(e){ console.error('Form yanıtı kontrol edilemedi', e); continue; }
       // state may have been replaced while waiting — always work on the live objects.
       const client = state.clients.find(c => c.id === o.clientId);
-      const entry = client && (client.formRequests || []).find(e => e.token === o.token);
+      const entry = client && (client.formRequests || []).find(e => e.token === o.entryToken);
       if(!entry || entry.status !== 'open') continue;
+      const target = o.part === null ? entry : (entry.parts || [])[o.part]; // the entry itself, or one person's part
+      if(!target || target.status !== 'open') continue;
       if(snap.exists()){
         const d = snap.data();
         let payload;
         try{ payload = JSON.parse(d.payload); }catch(e){ console.error('Form yanıtı okunamadı', e); continue; }
-        entry.status = 'done';
-        entry.submittedAt = d.submittedAt && d.submittedAt.toMillis ? d.submittedAt.toMillis() : Date.now();
-        entry.result = summarizeFormPayload(payload);
-        entry.reviewed = !entry.result.flag;
+        target.status = 'done';
+        target.submittedAt = d.submittedAt && d.submittedAt.toMillis ? d.submittedAt.toMillis() : Date.now();
+        target.result = summarizeFormPayload(payload);
+        if(o.part === null){
+          entry.reviewed = !entry.result.flag;
+        }else{
+          const doneParts = entry.parts.filter(pt => pt.status === 'done');
+          entry.result = { scales: doneParts.flatMap(pt => pt.result.scales), signers: doneParts.flatMap(pt => pt.result.signers), flag: doneParts.some(pt => pt.result.flag) };
+          entry.submittedAt = Math.max(...doneParts.map(pt => pt.submittedAt));
+          if(doneParts.length === entry.parts.length) entry.status = 'done';
+          if(target.result.flag) entry.reviewed = false;
+          else if(entry.reviewed === undefined) entry.reviewed = true;
+        }
         changed = true;
-        newlyDone.push({ client, entry });
+        newlyDone.push({ client, entry, who: o.part === null ? '' : target.name, flag: target.result.flag });
       }else if(Date.now() > entry.expiresAt){
-        entry.status = 'expired';
+        target.status = 'expired';
+        if(o.part !== null && entry.parts.every(pt => pt.status !== 'open')) entry.status = 'expired';
         changed = true;
       }
     }
   }finally{ formCheckRunning = false; }
   if(changed){
     saveState();
-    newlyDone.forEach(({ client, entry })=>{
-      showToast(entry.result.flag ? `⚠️ ${client.name}: formda bugün bakılması gereken bir yanıt var.` : `📋 ${client.name} formlarını doldurdu.`);
-      logAudit('form dolduruldu', `${client.name} - ${formEntryContents(entry)}`, client.id);
+    newlyDone.forEach(({ client, entry, who, flag })=>{
+      const label = who || client.name;
+      showToast(flag ? `⚠️ ${label}: formda bugün bakılması gereken bir yanıt var.` : `📋 ${label} formlarını doldurdu.`);
+      logAudit('form dolduruldu', `${label} - ${formEntryContents(entry)}`, client.id);
     });
     render();
   }
 }
 
 function clientsWithFormAlerts(){
-  return (state.clients || []).filter(c => (c.formRequests || []).some(e => e.status === 'done' && e.result && e.result.flag && !e.reviewed));
+  return (state.clients || []).filter(c => (c.formRequests || []).some(e => e.result && e.result.flag && !e.reviewed));
 }
 
 function formAlertsBannerHtml(){
@@ -7654,14 +7731,17 @@ function formEntryHtml(e){
   <div class="form-entry ${r && r.flag && !e.reviewed ? 'flagged' : ''}" data-token="${escapeAttr(e.token)}">
     <div class="form-entry-top"><strong>${escapeHtml(formEntryContents(e))}</strong>${statusHtml}</div>
     <div class="form-entry-meta">Gönderim: ${sent}${(e.sentTo && e.sentTo.length) ? ' → ' + escapeHtml(e.sentTo.join(', ')) : ''}</div>
+    ${e.parts ? `<div class="form-entry-meta">${e.parts.map(pt => `${escapeHtml(pt.name)}: ${pt.status === 'done' ? '✓ doldurdu' : (pt.status === 'expired' || Date.now() > e.expiresAt) ? 'doldurmadı (süre doldu)' : 'bekliyor'}`).join(' · ')}</div>` : ''}
     ${resultHtml}
     <div class="form-entry-actions">
       ${r && r.flag && !e.reviewed ? btn('reviewed', '✓ Gördüm, değerlendirdim') : ''}
-      ${isOpen ? btn('copy', '🔗 Bağlantıyı kopyala') + btn('draft', '📧 Gmail taslağı') : ''}
-      ${e.status === 'done' ? btn('view', '👁 Yanıtları gör') : ''}
-      ${e.status === 'done' && e.consentType ? btn('pdf-consent', '📄 İmzalı onam PDF') + btn('drive-consent', "☁️ Onamı Drive'a kaydet") : ''}
-      ${e.status === 'done' && (e.scales || []).length ? btn('pdf-scales', '📄 Ölçek PDF') + btn('drive-scales', "☁️ Ölçeği Drive'a kaydet") : ''}
-      ${btn('delete', e.status === 'open' ? 'İptal et' : 'Sil')}
+      ${isOpen ? (e.parts
+          ? e.parts.map((pt,i)=> pt.status === 'open' ? btn('copy:' + i, `🔗 ${escapeHtml(pt.name)} bağlantısı`) : '').join('')
+          : btn('copy:0', '🔗 Bağlantıyı kopyala')) + btn('draft', '📧 Gmail taslağı') : ''}
+      ${r ? btn('view', '👁 Yanıtları gör') : ''}
+      ${r && e.consentType ? btn('pdf-consent', '📄 İmzalı onam PDF') + btn('drive-consent', "☁️ Onamı Drive'a kaydet") : ''}
+      ${r && (e.scales || []).length ? btn('pdf-scales', '📄 Ölçek PDF') + btn('drive-scales', "☁️ Ölçeği Drive'a kaydet") : ''}
+      ${btn('delete', (e.status === 'open' && !r) ? 'İptal et' : 'Sil')}
     </div>
   </div>`;
 }
@@ -7690,24 +7770,29 @@ function wireFormsPanel(client){
       const original = btn.textContent;
       const busy = t => { btn.disabled = true; btn.textContent = t; };
       const done = (t, ms) => { btn.textContent = t; setTimeout(()=>{ if(document.body.contains(btn)){ btn.textContent = original; btn.disabled = false; } }, ms || 2500); };
-      if(act === 'copy'){ copyFormLink(entry); return; }
+      if(act.startsWith('copy:')){ copyFormLink(formTokens(entry)[Number(act.slice(5))]); return; }
       if(act === 'reviewed'){ entry.reviewed = true; saveState(); logAudit('form yanıtı değerlendirildi olarak işaretlendi', client.name, client.id); refresh(); return; }
       if(act === 'draft'){
         if(!clientEmailList(client)){ alert('Bu danışanın profilinde e-posta yok. Bağlantıyı kopyalayıp başka yolla gönderebilirsin.'); return; }
         busy('⏳ Hazırlanıyor…');
         const r = await createFormLinkDraft(client, entry);
-        if(r.ok){ showToast(`📧 Taslak Gmail'de hazır${r.to ? ' → ' + r.to : ''}`); refresh(); } else { alert('Taslak oluşturulamadı: ' + r.error); done(original, 10); }
+        if(r.ok){ showToast(r.summary); refresh(); }
+        else{ alert(r.summary); if(r.anyOk) refresh(); else done(original, 10); }
         return;
       }
       if(act === 'delete'){
-        const msg = entry.status === 'done'
+        const msg = entry.result
           ? 'Bu form kaydı, danışanın yanıtları ve imzasıyla birlikte kalıcı olarak silinsin mi? PDF olarak kaydetmediysen geri getirilemez.'
           : 'Bu bağlantı iptal edilsin mi? Danışan artık bu bağlantıyla form dolduramaz.';
         if(!confirm(msg)) return;
         busy('Siliniyor…');
         try{
-          try{ await window.FB.deleteDoc(formResponseRef(token)); }catch(e){ /* no response yet */ }
-          await window.FB.deleteDoc(formRequestRef(token));
+          const targets = entry.parts ? entry.parts.map(pt => ({ token: pt.token, key: pt.key })) : [{ token: entry.token, key: entry.key }];
+          for(const t of targets){
+            try{ await window.FB.deleteDoc(formResponseRef(t.token)); }catch(e){ /* no response yet */ }
+            if(t.key) await window.FB.deleteDoc(formContentRef(t.token, t.key));
+            await window.FB.deleteDoc(formRequestRef(t.token));
+          }
         }catch(e){
           console.error('Form silinemedi', e);
           alert('Silinemedi, tekrar dener misin?');
@@ -7718,7 +7803,7 @@ function wireFormsPanel(client){
         c.formRequests = (c.formRequests || []).filter(e => e.token !== token);
         formRecordCache.delete(token);
         saveState();
-        logAudit(entry.status === 'done' ? 'form kaydı silindi' : 'form bağlantısı iptal edildi', client.name, client.id);
+        logAudit(entry.result ? 'form kaydı silindi' : 'form bağlantısı iptal edildi', client.name, client.id);
         refresh();
         return;
       }
@@ -7754,16 +7839,42 @@ function wireFormsPanel(client){
 
 const formRecordCache = new Map();
 async function loadFormRecord(entry){
-  if(formRecordCache.has(entry.token)) return formRecordCache.get(entry.token);
-  const [reqSnap, resSnap] = await Promise.all([window.FB.getDoc(formRequestRef(entry.token)), window.FB.getDoc(formResponseRef(entry.token))]);
-  if(!reqSnap.exists() || !resSnap.exists()) throw new Error('Kayıt bulunamadı');
-  const res = resSnap.data();
-  const rec = {
-    request: reqSnap.data(),
-    payload: JSON.parse(res.payload),
-    submittedAt: res.submittedAt && res.submittedAt.toMillis ? res.submittedAt.toMillis() : entry.submittedAt
+  if(entry.status === 'done' && formRecordCache.has(entry.token)) return formRecordCache.get(entry.token);
+  const loadOne = async (token, key)=>{
+    const [reqSnap, resSnap, contentSnap] = await Promise.all([
+      window.FB.getDoc(formRequestRef(token)), window.FB.getDoc(formResponseRef(token)),
+      key ? window.FB.getDoc(formContentRef(token, key)) : Promise.resolve(null)
+    ]);
+    if(!reqSnap.exists() || (key && !contentSnap.exists())) throw new Error('Kayıt bulunamadı');
+    const res = resSnap.exists() ? resSnap.data() : null;
+    return { request: { ...reqSnap.data(), ...(contentSnap ? contentSnap.data() : {}) }, payload: res ? JSON.parse(res.payload) : null, submittedAt: res && res.submittedAt && res.submittedAt.toMillis ? res.submittedAt.toMillis() : null };
   };
-  formRecordCache.set(entry.token, rec);
+  let rec;
+  if(entry.parts){
+    // Couple: one stored record per person; combine them into one document (signatures in profile order).
+    const parts = await Promise.all(entry.parts.map(pt => loadOne(pt.token, pt.key)));
+    const done = parts.filter(pt => pt.payload);
+    if(!done.length) throw new Error('Kayıt bulunamadı');
+    const consentDef = parts[0].request.consent;
+    rec = {
+      request: parts[0].request,
+      payload: {
+        timezone: Array.from(new Set(done.map(d => d.payload.timezone).filter(Boolean))).join(', '),
+        consent: consentDef ? {
+          checks: (consentDef.checks || []).map((_, i) => done.every(d => d.payload.consent && d.payload.consent.checks && d.payload.consent.checks[i])),
+          signers: parts.map((pt, i) => (pt.payload && pt.payload.consent) ? pt.payload.consent.signers[0] : { role: 'client', name: entry.parts[i].name, missing: true })
+        } : null,
+        scales: done.flatMap(d => d.payload.scales || [])
+      },
+      submittedAt: Math.max(...done.map(d => d.submittedAt || 0)) || entry.submittedAt,
+      tokens: entry.parts.map(pt => pt.token)
+    };
+  }else{
+    const one = await loadOne(entry.token, entry.key);
+    if(!one.payload) throw new Error('Kayıt bulunamadı');
+    rec = { request: one.request, payload: one.payload, submittedAt: one.submittedAt || entry.submittedAt, tokens: [entry.token] };
+  }
+  if(entry.status === 'done') formRecordCache.set(entry.token, rec);
   return rec;
 }
 
@@ -7776,7 +7887,8 @@ function openFormResponseModal(client, entry, rec){
   const multi = new Set((p.scales || []).map(s => s.respondentName)).size > 1;
   const consentHtml = p.consent ? `
     <h3 class="form-view-h">${escapeHtml(rec.request.consent.title)}</h3>
-    ${(p.consent.signers || []).map(s => `
+    ${(p.consent.signers || []).map(s => s.missing ? `
+      <div class="form-view-signer"><div><strong>${escapeHtml(s.name)}</strong><br><span>Henüz imzalamadı</span></div></div>` : `
       <div class="form-view-signer">
         <img src="${escapeAttr(/^data:image\/png;base64,/.test(s.signature || '') ? s.signature : '')}" alt="İmza">
         <div><strong>${escapeHtml(s.name)}</strong>${s.relationship ? ` (${escapeHtml(s.relationship)})` : ''}${s.role === 'guardian' ? ' — veli' : ''}<br><span>${escapeHtml(formDateTimeEn(new Date(s.signedAt).getTime()))}</span></div>
@@ -7896,11 +8008,12 @@ function formPdfRecord(w, entry, rec, extra){
   w.rule();
   w.text('Electronic record', { size:9.5, bold:true, gap:1.2 });
   const lines = [
-    `Request ID: ${entry.token.slice(0, 10)}`,
+    `Request ID: ${(rec.tokens || [entry.token]).map(t => t.slice(0, 10)).join(', ')}`,
     `Link created: ${formDateTimeEn(entry.createdAt)}`,
-    (entry.sentTo && entry.sentTo.length) ? `Link e-mailed to: ${entry.sentTo.join(', ')}` : 'Link delivered by the therapist directly (no e-mail draft recorded)',
+    (entry.sentTo && entry.sentTo.length) ? `${entry.parts ? 'Personal links e-mailed separately to' : 'Link e-mailed to'}: ${entry.sentTo.join(', ')}` : 'Link delivered by the therapist directly (no e-mail draft recorded)',
     `Submitted (server time): ${formDateTimeEn(rec.submittedAt)}`,
-    rec.payload.timezone ? `Time zone of the device used: ${rec.payload.timezone}` : ''
+    rec.payload.timezone ? `Time zone of the device used: ${rec.payload.timezone}` : '',
+    entry.dobCheck ? 'Identity check: date of birth confirmed before the form opened' : ''
   ].concat(extra || []).filter(Boolean);
   lines.forEach(l => w.text(l, { size:8.5, color:95, gap:0.6 }));
 }
@@ -7923,6 +8036,11 @@ async function buildConsentPdf(client, entry, rec){
     w.ensure(48);
     w.space(2);
     w.text(s.role === 'guardian' ? 'Parent / guardian' : ((pc.signers.length > 1) ? `Client ${i+1}` : 'Client'), { size:10, bold:true, gap:1 });
+    if(s.missing){
+      w.text(`Name: ${s.name}`, { size:10, gap:0.8 });
+      w.text('Not signed.', { size:9.5, color:80, gap:2 });
+      return;
+    }
     if(/^data:image\/png;base64,/.test(s.signature || '')) w.image(s.signature, 62);
     w.text(`Name: ${s.name}${s.relationship ? ` (${s.relationship} of ${rec.request.clientLabel})` : ''}`, { size:10, gap:0.8 });
     w.text(`Signed electronically: ${formDateTimeEn(new Date(s.signedAt).getTime())}`, { size:9.5, color:80, gap:2 });
