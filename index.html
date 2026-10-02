@@ -8288,7 +8288,7 @@ async function buildConsentPdf(client, entry, rec){
     if(/^data:image\/png;base64,/.test(s.signature || '')) w.image(s.signature, 62);
     w.text(`Name: ${s.name}${s.relationship ? ` (${s.relationship} of the client)` : ''}`, { size:10, gap:0.8 });
     if(s.clientName) w.text(`Client's name as entered by the signer: ${s.clientName}`, { size:10, gap:0.8 });
-    w.text(`Signed electronically: ${formDateTimeEn(new Date(s.signedAt).getTime())}`, { size:9.5, color:80, gap:2 });
+    w.text(`Signed electronically${s.signatureMethod === 'typed' ? ' (signature adopted by typing the name)' : ''}: ${formDateTimeEn(new Date(s.signedAt).getTime())}`, { size:9.5, color:80, gap:2 });
   });
   if(state.providerSignature){
     const t = rec.request.therapist || {};

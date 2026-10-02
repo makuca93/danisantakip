@@ -8,7 +8,7 @@
 <title>İki Therapy — Client Forms</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@600&family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
     --ink:#2b2d33; --muted:#6b6f78; --card:#ffffff; --card-line:#e2e2ea; --paper:#fbfafc;
@@ -70,6 +70,12 @@
     padding:11px 12px; border:1px solid var(--card-line); border-radius:8px; background:#fff;
   }
   input[type="text"]:focus-visible, .date-input:focus-visible, button:focus-visible, .opt:focus-within{outline:2px solid #6f8fc0; outline-offset:2px;}
+  .sig-modes{display:flex; gap:6px; margin:12px 0 2px;}
+  .sig-mode{flex:1; min-height:40px; border:1px solid var(--card-line); border-radius:8px; background:#fff; color:var(--muted); font:inherit; font-size:14.5px; font-weight:500; cursor:pointer;}
+  .sig-mode.active{background:var(--highlight); border-color:var(--highlight-line); color:var(--ink); font-weight:600;}
+  .sig-mode:disabled{cursor:default;}
+  .pad-wrap.typed canvas{cursor:default;}
+  .signer input[id^="typed_"]{margin-bottom:8px;}
   .pad-wrap{position:relative; border:1px dashed #b9bcc8; border-radius:8px; background:#fff; touch-action:none;}
   .pad-wrap canvas{display:block; width:100%; height:170px; border-radius:8px; touch-action:none; cursor:crosshair;}
   .pad-hint{position:absolute; left:0; right:0; top:50%; transform:translateY(-50%); text-align:center; color:#a9acb6; font-size:14px; pointer-events:none;}
@@ -321,7 +327,12 @@
       <input type="text" id="name_${i}" autocomplete="name" ${i > 0 ? 'disabled' : ''}>
       ${isGuardian ? `<label class="field" for="rel_${i}">Relationship to the client</label><input type="text" id="rel_${i}" placeholder="e.g. mother, father, legal guardian">
       <label class="field" for="cname_${i}">Client's full name (the young person receiving therapy)</label><input type="text" id="cname_${i}">` : ''}
-      <label class="field">Sign in the box with your finger or mouse</label>
+      <div class="sig-modes">
+        <button type="button" class="sig-mode active" data-sigmode="draw" data-i="${i}">Draw signature</button>
+        <button type="button" class="sig-mode" data-sigmode="type" data-i="${i}">Type signature</button>
+      </div>
+      <label class="field" id="padlabel_${i}" for="typed_${i}">Sign in the box with your finger or mouse</label>
+      <input type="text" id="typed_${i}" autocomplete="off" hidden>
       <div class="pad-wrap"><canvas id="pad_${i}"></canvas><div class="pad-hint">Sign here</div></div>
       <div class="pad-actions"><span>Date: ${new Date().toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' })}</span><button type="button" class="link-btn" data-clear="${i}">Clear</button></div>
     </div>`;
@@ -360,7 +371,28 @@
         document.getElementById(`name_${i}`).addEventListener('input', updateSigners);
         ['rel_', 'cname_'].forEach(pre => { const el = document.getElementById(pre + i); if(el) el.addEventListener('input', updateSigners); });
       });
-      app.querySelectorAll('[data-clear]').forEach(b=> b.addEventListener('click', ()=>{ pads[Number(b.dataset.clear)].clear(); updateSigners(); }));
+      app.querySelectorAll('[data-clear]').forEach(b=> b.addEventListener('click', ()=>{
+        const i = Number(b.dataset.clear);
+        pads[i].clear();
+        document.getElementById(`typed_${i}`).value = '';
+        updateSigners();
+      }));
+      // Draw / Type: a typed name is rendered in a handwriting-style font and stored like a drawn signature.
+      app.querySelectorAll('[data-sigmode]').forEach(b=> b.addEventListener('click', ()=>{
+        const i = Number(b.dataset.i), mode = b.dataset.sigmode;
+        const typed = document.getElementById(`typed_${i}`);
+        app.querySelectorAll(`[data-sigmode][data-i="${i}"]`).forEach(x => x.classList.toggle('active', x === b));
+        pads[i].setMode(mode);
+        typed.hidden = mode !== 'type';
+        document.getElementById(`padlabel_${i}`).textContent = mode === 'type' ? 'Type your name; it appears below as your signature' : 'Sign in the box with your finger or mouse';
+        if(mode === 'type'){
+          if(!typed.value) typed.value = document.getElementById(`name_${i}`).value.trim();
+          pads[i].setTyped(typed.value);
+          typed.focus();
+        }
+        updateSigners();
+      }));
+      req.signers.forEach((s,i)=> document.getElementById(`typed_${i}`).addEventListener('input', ev=>{ pads[i].setTyped(ev.target.value); updateSigners(); }));
       updateSigners();
     }
     app.querySelectorAll('.q input').forEach(inp => inp.addEventListener('change', ()=> inp.closest('.q').classList.remove('missing')));
@@ -383,6 +415,8 @@
       el.classList.toggle('locked', !prevDone);
       el.classList.toggle('complete', done);
       document.getElementById(`name_${i}`).disabled = !prevDone;
+      document.getElementById(`typed_${i}`).disabled = !prevDone;
+      el.querySelectorAll('.sig-mode').forEach(x => { x.disabled = !prevDone; });
       pads[i].setEnabled(prevDone);
       el.querySelector('.signer-state').textContent = !prevDone ? 'Waiting for the previous signature' : (done ? '✓ Signed' : '');
       prevDone = done;
@@ -391,7 +425,22 @@
 
   function makePad(canvas, onChange){
     const ctx = canvas.getContext('2d');
-    let drawing = false, ink = false, enabled = true, last = null;
+    let drawing = false, ink = false, enabled = true, last = null, mode = 'draw', typedText = '';
+    const hint = canvas.parentElement.querySelector('.pad-hint');
+    function renderTyped(){
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const text = typedText.trim();
+      ink = text.length >= 2;
+      hint.hidden = !!text;
+      if(!text) return;
+      let size = 56;
+      const font = px => `600 ${px}px "Dancing Script", "Snell Roundhand", "Segoe Script", cursive`;
+      ctx.font = font(size);
+      while(size > 18 && ctx.measureText(text).width > w - 36){ size -= 2; ctx.font = font(size); }
+      ctx.fillStyle = '#1d2330'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(text, w / 2, h / 2 + 2);
+    }
     function resize(){
       const ratio = Math.min(window.devicePixelRatio || 1, 2);
       const w = canvas.clientWidth, h = canvas.clientHeight;
@@ -400,13 +449,14 @@
       canvas.width = Math.round(w * ratio); canvas.height = Math.round(h * ratio);
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
       ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1d2330';
-      if(old){ const img = new Image(); img.onload = ()=> ctx.drawImage(img, 0, 0, w, h); img.src = old; }
+      if(mode === 'type') renderTyped();
+      else if(old){ const img = new Image(); img.onload = ()=> ctx.drawImage(img, 0, 0, w, h); img.src = old; }
     }
     resize();
     window.addEventListener('resize', resize);
     const pos = ev => { const r = canvas.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
     canvas.addEventListener('pointerdown', ev=>{
-      if(!enabled) return;
+      if(!enabled || mode !== 'draw') return;
       ev.preventDefault();
       canvas.setPointerCapture(ev.pointerId);
       drawing = true; last = pos(ev);
@@ -425,8 +475,22 @@
     canvas.addEventListener('pointercancel', end);
     return {
       hasInk: ()=> ink,
+      method: ()=> mode === 'type' ? 'typed' : 'drawn',
       setEnabled: v => { enabled = v; },
-      clear(){ ctx.clearRect(0, 0, canvas.width, canvas.height); ink = false; canvas.parentElement.querySelector('.pad-hint').hidden = false; },
+      setMode(m){
+        mode = m; typedText = ''; ink = false;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        hint.hidden = false;
+        hint.textContent = m === 'type' ? 'Your typed signature appears here' : 'Sign here';
+        canvas.parentElement.classList.toggle('typed', m === 'type');
+      },
+      setTyped(text){
+        typedText = text || '';
+        renderTyped();
+        // The handwriting font may still be loading on first use: draw again once it is ready.
+        if(document.fonts && document.fonts.load) document.fonts.load('600 40px "Dancing Script"', typedText || 'a').then(()=>{ if(mode === 'type') renderTyped(); }).catch(()=>{});
+      },
+      clear(){ typedText = ''; ctx.clearRect(0, 0, canvas.width, canvas.height); ink = false; hint.hidden = false; },
       // Exported at a fixed small size so the stored record stays light.
       toDataUrl(){
         const out = document.createElement('canvas');
@@ -470,6 +534,7 @@
           relationship: document.getElementById(`rel_${i}`) ? document.getElementById(`rel_${i}`).value.trim() : '',
           clientName: document.getElementById(`cname_${i}`) ? document.getElementById(`cname_${i}`).value.trim() : '',
           signature: pads[i].toDataUrl(),
+          signatureMethod: pads[i].method(),
           signedAt: new Date().toISOString()
         }))
       };
