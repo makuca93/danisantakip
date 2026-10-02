@@ -44,6 +44,11 @@
   .consent-text{font-size:15px; overflow-wrap:anywhere; margin:12px 0 4px;}
   .consent-text h1, .consent-text h2, .consent-text h3, .consent-text h4{font-family:inherit; font-size:16px; font-weight:600; margin:18px 0 6px;}
   .consent-text p{margin:0 0 10px;}
+  .consent-text{--base:15px;}
+  .consent-text [data-size="s"]{font-size:calc(var(--base) * .82);}
+  .consent-text [data-size="n"]{font-size:var(--base);}
+  .consent-text [data-size="l"]{font-size:calc(var(--base) * 1.18);}
+  .consent-text [data-size="xl"]{font-size:calc(var(--base) * 1.45);}
   .consent-text ul, .consent-text ol{margin:0 0 10px; padding-left:22px;}
   .consent-text li{margin-bottom:4px;}
   .consent-text table{border-collapse:collapse; width:100%; margin-bottom:10px;}
@@ -181,6 +186,13 @@
         if(ch.nodeType !== 1) return;
         const tag = ch.tagName;
         if(['SCRIPT','STYLE','IFRAME','OBJECT','IMG','SVG','LINK','META'].includes(tag)) return;
+        if(tag === 'SPAN' || tag === 'FONT'){
+          let size = ch.getAttribute('data-size');
+          if(tag === 'FONT'){ const n = parseInt(ch.getAttribute('size'), 10); size = n <= 2 ? 's' : n === 3 ? 'n' : n === 4 ? 'l' : n >= 5 ? 'xl' : null; }
+          if(['s','n','l','xl'].includes(size)){ const el = document.createElement('span'); el.setAttribute('data-size', size); walk(ch, el); out.appendChild(el); }
+          else walk(ch, out);
+          return;
+        }
         if(ALLOWED_TAGS.has(tag)){ const el = document.createElement(tag); walk(ch, el); out.appendChild(el); }
         else if(tag === 'DIV'){ const el = document.createElement('p'); walk(ch, el); out.appendChild(el); }
         else walk(ch, out);

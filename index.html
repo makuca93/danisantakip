@@ -1751,6 +1751,18 @@
   .consent-title-input{width:100%; font-family:inherit; font-size:14px; padding:9px 11px; border:1px solid var(--card-line); border-radius:7px;}
   .consent-status{font-size:12.5px; color:var(--muted);}
   .consent-editor{min-height:160px; max-height:420px; overflow:auto; border:1px solid var(--card-line); border-radius:7px; padding:12px 14px; background:#fff; font-size:13.5px; line-height:1.55;}
+  .consent-toolbar{display:flex; flex-wrap:wrap; align-items:center; gap:4px; padding:6px; border:1px solid var(--card-line); border-bottom:none; border-radius:7px 7px 0 0; background:var(--paper);}
+  .consent-toolbar + .consent-editor{border-radius:0 0 7px 7px;}
+  .consent-toolbar button{min-width:32px; height:30px; padding:0 8px; border:1px solid var(--card-line); border-radius:6px; background:#fff; color:var(--ink); font-family:inherit; font-size:12.5px; cursor:pointer;}
+  .consent-toolbar button:hover{background:var(--highlight);}
+  .consent-toolbar .sep{width:1px; height:20px; background:var(--card-line); margin:0 4px;}
+  .consent-toolbar .lbl{font-size:12px; color:var(--muted); margin-right:2px;}
+  .consent-editor{--base:13.5px;}
+  .consent-editor [data-size="s"], .consent-editor font[size="1"], .consent-editor font[size="2"]{font-size:calc(var(--base) * .82);}
+  .consent-editor [data-size="n"], .consent-editor font[size="3"]{font-size:var(--base);}
+  .consent-editor [data-size="l"], .consent-editor font[size="4"]{font-size:calc(var(--base) * 1.18);}
+  .consent-editor [data-size="xl"], .consent-editor font[size="5"], .consent-editor font[size="6"], .consent-editor font[size="7"]{font-size:calc(var(--base) * 1.45);}
+  @media (max-width: 768px){ .consent-toolbar button{height:38px; min-width:38px;} }
   .consent-editor:empty::before{content:'Metni buraya yapıştır ya da yukarıdan dosya yükle…'; color:var(--muted);}
   .consent-editor h1, .consent-editor h2, .consent-editor h3, .consent-editor h4{font-family:inherit; font-size:14.5px; font-weight:600; margin:14px 0 6px;}
   .consent-editor p{margin:0 0 9px;}
@@ -7051,6 +7063,14 @@ function sanitizeConsentHtml(html){
       if(ch.nodeType !== 1) return;
       const tag = ch.tagName;
       if(['SCRIPT','STYLE','IFRAME','OBJECT','IMG','SVG','LINK','META'].includes(tag)) return;
+      if(tag === 'SPAN' || tag === 'FONT'){
+        // Text size: only four fixed sizes are kept (the editor's size buttons produce <font size>).
+        let size = ch.getAttribute('data-size');
+        if(tag === 'FONT'){ const n = parseInt(ch.getAttribute('size'), 10); size = n <= 2 ? 's' : n === 3 ? 'n' : n === 4 ? 'l' : n >= 5 ? 'xl' : null; }
+        if(['s','n','l','xl'].includes(size)){ const el = document.createElement('span'); el.setAttribute('data-size', size); walk(ch, el); out.appendChild(el); }
+        else walk(ch, out);
+        return;
+      }
       if(CONSENT_ALLOWED_TAGS.has(tag)){ const el = document.createElement(tag); walk(ch, el); out.appendChild(el); }
       else if(tag === 'DIV'){ const el = document.createElement('p'); walk(ch, el); out.appendChild(el); }
       else walk(ch, out);
@@ -7070,45 +7090,54 @@ function plainTextToConsentHtml(text){
 function consentHtmlToBlocks(html){
   const root = new DOMParser().parseFromString('<div>' + sanitizeConsentHtml(html) + '</div>', 'text/html').body.firstChild;
   const blocks = [];
-  const textOf = el => {
-    let t = '';
+  // Inline text of one block as styled runs: { text, b, i, u, size }
+  const runsOf = (el, st, out) => {
     el.childNodes.forEach(ch => {
-      if(ch.nodeType === 3) t += ch.nodeValue;
-      else if(ch.nodeType === 1){
-        if(ch.tagName === 'BR') t += '\n';
-        else if(ch.tagName === 'UL' || ch.tagName === 'OL') { /* nested lists handled separately */ }
-        else t += textOf(ch);
-      }
+      if(ch.nodeType === 3){ if(ch.nodeValue) out.push({ ...st, text: ch.nodeValue.replace(/\s+/g, ' ') }); return; }
+      if(ch.nodeType !== 1) return;
+      const tag = ch.tagName;
+      if(tag === 'BR'){ out.push({ ...st, text: '\n' }); return; }
+      if(tag === 'UL' || tag === 'OL') return; // nested lists are handled as their own blocks
+      const next = { ...st };
+      if(tag === 'STRONG' || tag === 'B') next.b = true;
+      if(tag === 'EM' || tag === 'I') next.i = true;
+      if(tag === 'U') next.u = true;
+      if(tag === 'SPAN' && ch.getAttribute('data-size')) next.size = ch.getAttribute('data-size');
+      runsOf(ch, next, out);
     });
-    return t;
+    return out;
+  };
+  const push = (type, el, prefix) => {
+    const runs = runsOf(el, {}, []);
+    const text = runs.map(r => r.text).join('').trim();
+    if(!text) return;
+    if(prefix) runs.unshift({ text: prefix });
+    blocks.push({ type, text: (prefix || '') + text, runs });
   };
   const visit = (el) => {
     el.childNodes.forEach(ch => {
-      if(ch.nodeType === 3){ const t = ch.nodeValue.trim(); if(t) blocks.push({ type:'p', text:t }); return; }
+      if(ch.nodeType === 3){ const t = ch.nodeValue.trim(); if(t) blocks.push({ type:'p', text:t, runs:[{ text:t }] }); return; }
       if(ch.nodeType !== 1) return;
       const tag = ch.tagName;
-      if(/^H[1-4]$/.test(tag)){ const t = textOf(ch).trim(); if(t) blocks.push({ type:'h', text:t }); }
+      if(/^H[1-4]$/.test(tag)) push('h', ch);
       else if(tag === 'UL' || tag === 'OL'){
         let n = 0;
         ch.querySelectorAll(':scope > li').forEach(li => {
           n++;
-          const t = textOf(li).trim();
-          if(t) blocks.push({ type:'li', text: (tag === 'OL' ? `${n}. ` : '• ') + t });
+          push('li', li, tag === 'OL' ? `${n}. ` : '• ');
           li.querySelectorAll(':scope > ul, :scope > ol').forEach(sub => visit({ childNodes: [sub] }));
         });
       }
       else if(tag === 'TABLE'){
         ch.querySelectorAll('tr').forEach(tr => {
-          const t = Array.from(tr.querySelectorAll('td,th')).map(c => textOf(c).trim()).filter(Boolean).join(' — ');
-          if(t) blocks.push({ type:'p', text:t });
+          const t = Array.from(tr.querySelectorAll('td,th')).map(c => c.textContent.trim()).filter(Boolean).join(' — ');
+          if(t) blocks.push({ type:'p', text:t, runs:[{ text:t }] });
         });
       }
       else{
-        const t = textOf(ch).trim();
-        if(!t) return;
         // A paragraph that is entirely bold is treated as a heading.
         const onlyBold = ch.children.length === 1 && /^(STRONG|B)$/.test(ch.children[0].tagName) && ch.children[0].textContent.trim() === ch.textContent.trim();
-        blocks.push({ type: onlyBold ? 'h' : 'p', text:t });
+        push(onlyBold ? 'h' : 'p', ch);
       }
     });
   };
@@ -7148,13 +7177,117 @@ function loadScriptOnce(src){
 
 async function readConsentFile(file){
   const name = (file.name || '').toLowerCase();
-  if(name.endsWith('.docx')){
-    await loadScriptOnce('https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js');
-    const res = await window.mammoth.convertToHtml({ arrayBuffer: await file.arrayBuffer() });
-    return sanitizeConsentHtml(res.value);
-  }
   if(name.endsWith('.txt')) return plainTextToConsentHtml(await file.text());
-  throw new Error('unsupported');
+  if(!name.endsWith('.docx')) throw new Error('unsupported');
+  const buffer = await file.arrayBuffer();
+  // 1) Preferred: the mammoth library (best formatting). It is fetched from a CDN, which can be
+  //    blocked by a network or content blocker — so try two sources, then fall back to (2).
+  const sources = ['https://cdn.jsdelivr.net/npm/mammoth@1.13.0/mammoth.browser.min.js', 'https://unpkg.com/mammoth@1.13.0/mammoth.browser.min.js'];
+  let lastError = null;
+  for(const src of sources){
+    if(window.mammoth) break;
+    const savedDefine = window.define; // the bundle registers elsewhere if an AMD loader is present
+    try{ window.define = undefined; await loadScriptOnce(src); }
+    catch(e){ lastError = e; }
+    finally{ window.define = savedDefine; }
+  }
+  if(window.mammoth){
+    try{
+      const res = await window.mammoth.convertToHtml({ arrayBuffer: buffer });
+      const html = sanitizeConsentHtml(res.value);
+      if(consentHtmlToBlocks(html).length) return html;
+    }catch(e){ lastError = e; console.warn('mammoth dosyayı okuyamadı, yerleşik okuyucu deneniyor', e); }
+  }
+  // 2) Built-in reader: no external code needed. Keeps headings, bold, lists and tables.
+  try{
+    return sanitizeConsentHtml(await docxToHtmlBuiltIn(buffer));
+  }catch(e){
+    console.error('Yerleşik .docx okuyucu da başarısız', e, lastError);
+    throw new Error((e && e.message) || 'docx');
+  }
+}
+
+// Minimal .docx reader: a .docx is a zip file whose main text is word/document.xml.
+async function docxToHtmlBuiltIn(buffer){
+  const bytes = new Uint8Array(buffer);
+  const view = new DataView(buffer);
+  if(bytes.length < 22 || view.getUint32(0, true) !== 0x04034b50) throw new Error('Bu dosya geçerli bir .docx değil (eski .doc dosyasıysa Word\'de "Farklı Kaydet > .docx" yap).');
+  let eocd = -1;
+  for(let i = bytes.length - 22; i >= Math.max(0, bytes.length - 66000); i--){ if(view.getUint32(i, true) === 0x06054b50){ eocd = i; break; } }
+  if(eocd < 0) throw new Error('Dosya bozuk görünüyor.');
+  const count = view.getUint16(eocd + 10, true);
+  let p = view.getUint32(eocd + 16, true);
+  let entry = null;
+  for(let n = 0; n < count && p + 46 <= bytes.length; n++){
+    if(view.getUint32(p, true) !== 0x02014b50) break;
+    const method = view.getUint16(p + 10, true), compSize = view.getUint32(p + 20, true);
+    const nameLen = view.getUint16(p + 28, true), extraLen = view.getUint16(p + 30, true), commentLen = view.getUint16(p + 32, true);
+    const localOffset = view.getUint32(p + 42, true);
+    const fname = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen));
+    if(fname === 'word/document.xml'){ entry = { method, compSize, localOffset }; break; }
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  if(!entry) throw new Error('Dosyada Word metni bulunamadı.');
+  const lh = entry.localOffset;
+  const dataStart = lh + 30 + view.getUint16(lh + 26, true) + view.getUint16(lh + 28, true);
+  const raw = bytes.subarray(dataStart, dataStart + entry.compSize);
+  let xmlBytes;
+  if(entry.method === 0) xmlBytes = raw;
+  else if(entry.method === 8){
+    if(typeof DecompressionStream === 'undefined') throw new Error('Bu tarayıcı dosyayı açamıyor; metni kopyalayıp kutuya yapıştır.');
+    xmlBytes = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+  }else throw new Error('Desteklenmeyen sıkıştırma türü.');
+  const xml = new DOMParser().parseFromString(new TextDecoder('utf-8').decode(xmlBytes), 'application/xml');
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const body = xml.getElementsByTagNameNS(W, 'body')[0];
+  if(!body) throw new Error('Dosyada Word metni bulunamadı.');
+  const kids = (el, tag) => Array.from(el.children).filter(c => c.namespaceURI === W && c.localName === tag);
+  const kid = (el, tag) => kids(el, tag)[0] || null;
+  const on = el => !!el && !['0', 'false', 'off'].includes(el.getAttributeNS(W, 'val') || '');
+  const runsHtml = (para) => {
+    let out = '';
+    Array.from(para.getElementsByTagNameNS(W, 'r')).forEach(r => {
+      const rPr = kid(r, 'rPr');
+      let t = '';
+      Array.from(r.children).forEach(c => {
+        if(c.namespaceURI !== W) return;
+        if(c.localName === 't') t += escapeHtml(c.textContent);
+        else if(c.localName === 'tab') t += ' ';
+        else if(c.localName === 'br' || c.localName === 'cr') t += '<br>';
+      });
+      if(!t) return;
+      if(rPr && on(kid(rPr, 'b'))) t = `<strong>${t}</strong>`;
+      if(rPr && on(kid(rPr, 'i'))) t = `<em>${t}</em>`;
+      out += t;
+    });
+    return out;
+  };
+  let html = '', listOpen = false;
+  const closeList = () => { if(listOpen){ html += '</ul>'; listOpen = false; } };
+  const paragraph = (para) => {
+    const inner = runsHtml(para);
+    const pPr = kid(para, 'pPr');
+    const style = pPr && kid(pPr, 'pStyle') ? (kid(pPr, 'pStyle').getAttributeNS(W, 'val') || '') : '';
+    const isList = !!(pPr && kid(pPr, 'numPr')) || /^List/i.test(style);
+    if(!inner.replace(/<br>/g, '').trim()){ closeList(); return; }
+    if(isList){ if(!listOpen){ html += '<ul>'; listOpen = true; } html += `<li>${inner}</li>`; return; }
+    closeList();
+    // Heading styles: "Heading1" (English Word), "Balk1" (Turkish Word), "Title"/"KonuBal"
+    if(/^(Heading|Balk|Title|KonuBa|Subtitle)/i.test(style)) html += `<h3>${inner.replace(/<\/?strong>/g, '')}</h3>`;
+    else html += `<p>${inner}</p>`;
+  };
+  Array.from(body.children).forEach(el => {
+    if(el.namespaceURI !== W) return;
+    if(el.localName === 'p') paragraph(el);
+    else if(el.localName === 'tbl'){
+      closeList();
+      html += '<table>' + Array.from(el.getElementsByTagNameNS(W, 'tr')).map(tr =>
+        '<tr>' + kids(tr, 'tc').map(tc => `<td>${kids(tc, 'p').map(runsHtml).filter(Boolean).join('<br>')}</td>`).join('') + '</tr>').join('') + '</table>';
+    }
+  });
+  closeList();
+  if(!html) throw new Error('Dosyada metin bulunamadı.');
+  return html;
 }
 
 /* ----- Signature pad (therapist's own signature, stored once) ----- */
@@ -7221,12 +7354,30 @@ function formsSettingsHtml(){
           ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}" ${consentSettingsType===k?'selected':''}>${CONSENT_TYPES[k]}</option>`).join('')}
         </select>
         <button class="settings-btn" id="consentUploadBtn" style="width:auto;">📄 Word / metin dosyası yükle</button>
-        <input type="file" id="consentFileInput" accept=".docx,.txt" hidden>
+        <input type="file" id="consentFileInput" accept=".docx,.txt,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" hidden>
       </div>
       <div id="consentStatus" class="consent-status"></div>
       <label class="consent-label" for="consentTitleInput">Başlık (danışanın göreceği)</label>
       <input type="text" id="consentTitleInput" class="consent-title-input">
       <label class="consent-label">Metin</label>
+      <div class="consent-toolbar" id="consentToolbar">
+        <button type="button" data-cmd="bold" title="Kalın"><b>K</b></button>
+        <button type="button" data-cmd="italic" title="İtalik"><i>İ</i></button>
+        <button type="button" data-cmd="underline" title="Altı çizili"><u>A</u></button>
+        <span class="sep"></span>
+        <button type="button" data-block="h3" title="Seçili satırı başlık yap">Başlık</button>
+        <button type="button" data-block="p" title="Seçili satırı normal paragraf yap">Paragraf</button>
+        <button type="button" data-cmd="insertUnorderedList" title="Madde işaretli liste">• Liste</button>
+        <button type="button" data-cmd="insertOrderedList" title="Numaralı liste">1. Liste</button>
+        <span class="sep"></span>
+        <span class="lbl">Punto</span>
+        <button type="button" data-size="2" title="Küçük">9</button>
+        <button type="button" data-size="3" title="Normal">11</button>
+        <button type="button" data-size="4" title="Büyük">13</button>
+        <button type="button" data-size="5" title="Çok büyük">16</button>
+        <span class="sep"></span>
+        <button type="button" data-cmd="removeFormat" title="Seçili metnin kalın/italik/altı çizili/punto biçimini kaldır">Biçimi temizle</button>
+      </div>
       <div id="consentEditor" class="consent-editor" contenteditable="true"></div>
       <div class="consent-fixed">
         <strong>Sabit imza bölümü (değiştirilemez, otomatik eklenir)</strong>
@@ -7283,6 +7434,18 @@ async function wireFormsSettings(){
   typeSel.addEventListener('change', ()=>{ consentSettingsType = typeSel.value; fill(); });
   titleInput.addEventListener('input', ()=> keepDraft());
   editor.addEventListener('input', ()=> keepDraft());
+  // Formatting buttons act on the selected text. mousedown + preventDefault keeps the selection in the editor.
+  document.getElementById('consentToolbar').addEventListener('mousedown', (ev)=>{
+    const b = ev.target.closest('button');
+    if(!b) return;
+    ev.preventDefault();
+    editor.focus();
+    try{ document.execCommand('styleWithCSS', false, false); }catch(e){}
+    if(b.dataset.cmd) document.execCommand(b.dataset.cmd, false, null);
+    else if(b.dataset.block) document.execCommand('formatBlock', false, b.dataset.block);
+    else if(b.dataset.size) document.execCommand('fontSize', false, b.dataset.size);
+    keepDraft();
+  });
   document.getElementById('consentUploadBtn').addEventListener('click', ()=> document.getElementById('consentFileInput').click());
   document.getElementById('consentFileInput').addEventListener('change', async (ev)=>{
     const file = ev.target.files[0];
@@ -7298,8 +7461,8 @@ async function wireFormsSettings(){
     }catch(e){
       console.error('Onam dosyası okunamadı', e);
       alert(e && e.message === 'unsupported'
-        ? 'Sadece Word (.docx) ve düz metin (.txt) dosyaları yüklenebilir. PDF için metni kopyalayıp kutuya yapıştırabilirsin.'
-        : 'Dosya okunamadı. İnternet bağlantını kontrol et ya da metni kutuya yapıştır.');
+        ? 'Sadece Word (.docx) ve düz metin (.txt) dosyaları yüklenebilir. Eski .doc dosyasını Word\'de "Farklı Kaydet > .docx" ile çevirebilir, PDF için metni kopyalayıp kutuya yapıştırabilirsin.'
+        : 'Dosya okunamadı: ' + (e && e.message ? e.message : 'bilinmeyen hata') + '\n\nMetni Word\'den kopyalayıp kutuya yapıştırarak da ekleyebilirsin.');
       fill();
     }
   });
@@ -7951,6 +8114,21 @@ async function loadPdfUnicodeFont(){
   return pdfUnicodeFont;
 }
 
+let pdfItalicFonts = null;
+async function loadPdfItalicFonts(){
+  if(pdfItalicFonts !== null) return pdfItalicFonts;
+  try{
+    const base = 'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/';
+    const [italic, bolditalic] = await Promise.all(['DejaVuSans-Oblique.ttf', 'DejaVuSans-BoldOblique.ttf'].map(async f=>{
+      const res = await fetch(base + f);
+      if(!res.ok) throw new Error('font');
+      return btoa(arrayBufferToBinaryString(await res.arrayBuffer()));
+    }));
+    pdfItalicFonts = { italic, bolditalic };
+  }catch(e){ console.warn('İtalik yazı tipi yüklenemedi', e); pdfItalicFonts = false; }
+  return pdfItalicFonts;
+}
+
 // Fallback when the Unicode font cannot be loaded: keep the PDF readable with the built-in font.
 function pdfSafeText(str){
   return toAscii(String(str == null ? '' : str))
@@ -7959,13 +8137,23 @@ function pdfSafeText(str){
     .replace(/[^\x09\x0A\x20-\x7E¡-ÿ]/g, '?');
 }
 
-async function makePdfWriter(){
+async function makePdfWriter(opts){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit:'mm', format:'letter' });
   const font = await loadPdfUnicodeFont();
   let family = 'helvetica';
   let T = pdfSafeText;
+  let hasItalic = true; // the built-in font has italics; the Unicode font loads them only when needed
   if(font){
+    hasItalic = false;
+    if(opts && opts.italic){
+      const it = await loadPdfItalicFonts();
+      if(it){
+        doc.addFileToVFS('DejaVuSans-Oblique.ttf', it.italic); doc.addFont('DejaVuSans-Oblique.ttf', 'DejaVu', 'italic');
+        doc.addFileToVFS('DejaVuSans-BoldOblique.ttf', it.bolditalic); doc.addFont('DejaVuSans-BoldOblique.ttf', 'DejaVu', 'bolditalic');
+        hasItalic = true;
+      }
+    }
     doc.addFileToVFS('DejaVuSans.ttf', font.regular); doc.addFont('DejaVuSans.ttf', 'DejaVu', 'normal');
     doc.addFileToVFS('DejaVuSans-Bold.ttf', font.bold); doc.addFont('DejaVuSans-Bold.ttf', 'DejaVu', 'bold');
     family = 'DejaVu';
@@ -7984,6 +8172,48 @@ async function makePdfWriter(){
       T(str).split('\n').forEach(part=>{
         doc.splitTextToSize(part || ' ', W - indent).forEach(line=>{ w.ensure(lh); doc.text(line, M + indent, y + lh*0.78); y += lh; });
       });
+      y += (o.gap == null ? 2.2 : o.gap);
+    },
+    // Styled text: runs of { text, b, i, u, size } wrapped word by word.
+    rich(runs, o){
+      o = o || {};
+      const base = o.size || 10.5, indent = o.indent || 0, maxW = W - indent;
+      const ptOf = r => r.size === 's' ? base * 0.82 : r.size === 'l' ? base * 1.18 : r.size === 'xl' ? base * 1.45 : base;
+      const styleOf = r => { const b = o.bold || r.b, i = hasItalic && r.i; return b && i ? 'bolditalic' : b ? 'bold' : i ? 'italic' : 'normal'; };
+      const tokens = [];
+      runs.forEach(r => {
+        const pt = ptOf(r), style = styleOf(r);
+        T(r.text).split(/(\n|\s+)/).forEach(part => {
+          if(!part) return;
+          if(part === '\n'){ tokens.push({ nl: true }); return; }
+          const s = /^\s+$/.test(part) ? ' ' : part;
+          doc.setFont(family, style); doc.setFontSize(pt);
+          tokens.push({ s, pt, style, u: !!r.u, space: s === ' ', w: doc.getTextWidth(s) });
+        });
+      });
+      let line = [], lineW = 0;
+      const flush = ()=>{
+        while(line.length && line[line.length-1].space) line.pop();
+        const pt = line.length ? Math.max(...line.map(t => t.pt)) : base;
+        const lh = pt * 0.3528 * 1.38;
+        w.ensure(lh);
+        let x = M + indent;
+        const by = y + lh * 0.78;
+        line.forEach(t => {
+          doc.setFont(family, t.style); doc.setFontSize(t.pt); doc.setTextColor(30);
+          doc.text(t.s, x, by);
+          if(t.u){ doc.setDrawColor(30); doc.setLineWidth(0.2); doc.line(x, by + 0.7, x + t.w, by + 0.7); }
+          x += t.w;
+        });
+        y += lh; line = []; lineW = 0;
+      };
+      tokens.forEach(t => {
+        if(t.nl){ flush(); return; }
+        if(t.space && !line.length) return;
+        if(!t.space && line.length && lineW + t.w > maxW) flush();
+        line.push(t); lineW += t.w;
+      });
+      if(line.length) flush();
       y += (o.gap == null ? 2.2 : o.gap);
     },
     space(h){ y += h; },
@@ -8034,12 +8264,13 @@ function formPdfRecord(w, entry, rec, extra){
 async function buildConsentPdf(client, entry, rec){
   const c = rec.request.consent, pc = rec.payload.consent;
   if(!c || !pc) throw new Error('Bu kayıtta onam formu yok');
-  const w = await makePdfWriter();
+  const blocks = consentHtmlToBlocks(c.html);
+  const w = await makePdfWriter({ italic: blocks.some(b => b.runs.some(r => r.i)) });
   formPdfHeader(w, c.title || 'Consent form', rec);
-  consentHtmlToBlocks(c.html).forEach(b=>{
-    if(b.type === 'h'){ w.space(1.5); w.ensure(12); w.text(b.text, { size:11.5, bold:true, gap:1.6 }); }
-    else if(b.type === 'li') w.text(b.text, { indent:4, gap:1.2 });
-    else w.text(b.text, { gap:2.6 });
+  blocks.forEach(b=>{
+    if(b.type === 'h'){ w.space(1.5); w.ensure(12); w.rich(b.runs, { size:11.5, bold:true, gap:1.6 }); }
+    else if(b.type === 'li') w.rich(b.runs, { indent:4, gap:1.2 });
+    else w.rich(b.runs, { gap:2.6 });
   });
   w.rule();
   w.ensure(60);
