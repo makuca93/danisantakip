@@ -8888,11 +8888,20 @@ function practiceTaskRowHtml(t){
   <div class="home-task-row assigned-${t.assignedTo||''} ${t.done?'done':''} ${dueDateUrgencyClass(t.dueDate, t.done, 'practice')}" data-id="${t.id}">
     <input type="checkbox" class="practice-task-check" ${t.done?'checked':''}>
     <div class="home-task-main">
-      <div class="practice-task-title">${escapeHtml(t.title)}</div>
+      <textarea class="home-task-text-input practice-inline-title" rows="1">${escapeHtml(t.title)}</textarea>
       <div class="home-task-meta">
-        <span class="home-task-client">${personLabel(t.assignedBy)} → ${personLabel(t.assignedTo)}</span>
-        ${t.dueDate ? `<span>${formatShortDate(t.dueDate)}</span>` : ''}
-        <span>${stars(t.importance)}</span>
+        <span class="home-task-client">${personLabel(t.assignedBy)} →</span>
+        <select class="home-task-importance-select practice-inline-assignee" title="Kime atanmış">
+          <option value="kubilay" ${t.assignedTo==='kubilay'?'selected':''}>Kubilay</option>
+          <option value="duygu" ${t.assignedTo==='duygu'?'selected':''}>Duygu</option>
+          <option value="both" ${t.assignedTo==='both'?'selected':''}>Ortak</option>
+        </select>
+        <select class="home-task-importance-select practice-inline-importance" title="Önem">
+          <option value="1" ${t.importance===1?'selected':''}>⭐ Düşük</option>
+          <option value="2" ${t.importance===2?'selected':''}>⭐⭐ Orta</option>
+          <option value="3" ${t.importance===3?'selected':''}>⭐⭐⭐ Yüksek</option>
+        </select>
+        <input type="date" class="home-task-duedate-input practice-inline-duedate ${(!t.done && t.dueDate && t.dueDate < todayIso()) ? 'overdue' : ''}" value="${t.dueDate||''}" title="Son tarih">
         ${taskExtrasToggleHtml(t)}
         ${taskReminderTarget(t, currentPersonId()) ? (practiceRemindersSending.has(t.id)
           ? `<button class="practice-task-remind-btn" type="button" disabled>⏳ Gönderiliyor…</button>`
@@ -8901,7 +8910,6 @@ function practiceTaskRowHtml(t){
       </div>
       ${taskExtrasBodyHtml(t)}
     </div>
-    <button class="practice-task-edit-btn" title="Düzenle">✏️</button>
     <button class="home-task-del" title="Sil">✕</button>
   </div>`;
 }
@@ -9198,6 +9206,50 @@ function wirePracticePage(){
     if(task){
       wireTaskExtras(row, task, savePracticeShared, renderPracticeContent);
     }
+    // Inline editing (same as the Home page): no pencil button, changes save as you go.
+    // The task is looked up again at event time because practiceState is refreshed in the background.
+    const liveTask = ()=> (practiceState.tasks||[]).find(t=>t.id===id);
+    const titleEl = row.querySelector('.practice-inline-title');
+    if(!titleEl) return;
+    const autoResize = ()=>{ titleEl.style.height = 'auto'; titleEl.style.height = titleEl.scrollHeight + 'px'; };
+    titleEl.addEventListener('input', autoResize);
+    autoResize();
+    titleEl.addEventListener('keydown', (ev)=>{ if(ev.key === 'Enter' && !ev.shiftKey){ ev.preventDefault(); titleEl.blur(); } });
+    titleEl.addEventListener('blur', async ()=>{
+      const t = liveTask();
+      if(!t) return;
+      const val = titleEl.value.trim();
+      if(!val){ titleEl.value = t.title; autoResize(); return; }
+      if(val === t.title) return;
+      t.title = val;
+      logPracticeActivity(`${personLabel(currentPersonId())}, "${t.title}" işini düzenledi.`);
+      await savePracticeShared();
+    });
+    row.querySelector('.practice-inline-assignee').addEventListener('change', async (ev)=>{
+      const t = liveTask();
+      if(!t) return;
+      const me = currentPersonId();
+      t.assignedTo = ev.target.value;
+      logPracticeActivity(`${personLabel(me)}, "${t.title}" işini ${personLabel(t.assignedTo)} olarak yeniden atadı.`);
+      const target = t.assignedTo === 'both' ? (me === 'kubilay' ? 'duygu' : 'kubilay') : t.assignedTo;
+      if(target !== me && !t.done) pushInAppNotification(target, `${personLabel(me)}, sana bir iş atadı: "${t.title}"`, 'taskAssigned');
+      await savePracticeShared();
+      renderPracticeContent();
+    });
+    row.querySelector('.practice-inline-importance').addEventListener('change', async (ev)=>{
+      const t = liveTask();
+      if(!t) return;
+      t.importance = Number(ev.target.value);
+      await savePracticeShared();
+      renderPracticeContent();
+    });
+    row.querySelector('.practice-inline-duedate').addEventListener('change', async (ev)=>{
+      const t = liveTask();
+      if(!t) return;
+      t.dueDate = ev.target.value;
+      await savePracticeShared();
+      renderPracticeContent();
+    });
   });
 
   document.querySelectorAll('.practice-task-edit-btn').forEach(btn=>{
