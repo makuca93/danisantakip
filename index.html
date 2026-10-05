@@ -1812,6 +1812,8 @@
     flex-shrink:0;
   }
   .session-noshow-btn.active{background:var(--red); border-color:var(--red); color:#fff;}
+  .session-late-btn{background:none; border:1px solid var(--card-line); color:var(--muted); font-family:inherit; font-size:11.5px; padding:5px 10px; border-radius:6px; cursor:pointer; flex-shrink:0;}
+  .session-late-btn.active{background:#fdf0dc; border-color:#e6bf86; color:#7a4a12; font-weight:600;}
   .noshow-summary{
     font-size:13.5px;
     color:var(--ink);
@@ -5643,12 +5645,15 @@ async function loadCalendarDayEvents(panel, client){
       const calendarId = row.getAttribute('data-calendar-id') || 'primary';
       if(!confirm('Bu randevu iptal edilsin mi? Danışana bilgilendirme gider.')) return;
       btn.disabled = true;
+      const linked = (client.sessions||[]).find(s => s.calendarEventId === eventId);
+      const origStart = linked ? linked.calendarStartTime : null;
       const ok = await cancelCalendarEvent(eventId, calendarId);
       if(ok){
         const sessionRemoved = removeSessionForCalendarEvent(client, eventId);
         logAudit('randevu iptal edildi', `${client.name} - ${dateStr}`, client.id);
         if(sessionRemoved){ render(); }
         else{ loadCalendarDayEvents(panel, client); }
+        maybeRecordLateChange(client, 'cancel', dateStr, origStart);
       }else{
         alert('Randevu iptal edilemedi.'); btn.disabled = false;
       }
@@ -5669,12 +5674,15 @@ async function loadCalendarDayEvents(panel, client){
           const newTime = parseAmPmTime(newTimeLabel);
           if(!newTime) return;
           btn.disabled = true;
+          const linked = (client.sessions||[]).find(s => s.calendarEventId === eventId);
+          const origStart = linked ? linked.calendarStartTime : null;
           const ok = await rescheduleCalendarEvent(eventId, newDate, newTime, calendarId);
           if(ok){
             const sessionUpdated = syncSessionDateForCalendarEvent(client, eventId, newDate);
             logAudit('randevu yeniden planlandı', `${client.name} - ${dateStr} → ${formatShortDate(newDate)}`, client.id);
             if(sessionUpdated){ render(); }
             else{ loadCalendarDayEvents(panel, client); }
+            if(newDate !== dateStr || newTimeLabel !== currentTimeLabel) maybeRecordLateChange(client, 'reschedule', dateStr, origStart, linked);
           }else{
             alert('Randevu güncellenemedi.'); btn.disabled = false;
           }
@@ -6049,6 +6057,139 @@ function wireTodoPanel(client){
   });
 }
 
+/* ---------- Late changes: a session cancelled or moved within 24 hours of its start ---------- */
+// Stored in two places: a rescheduled session keeps a `lateChange` mark on itself;
+// a cancelled one no longer exists, so it goes into the client's `lateChanges` log.
+const LATE_CHANGE_WINDOW_MS = 24*60*60*1000;
+
+function sessionStartMs(dateStr, startIso){
+  if(startIso){ const t = new Date(startIso).getTime(); if(!isNaN(t)) return t; }
+  return dateStr ? new Date(dateStr + 'T09:00:00').getTime() : NaN; // no time known: assume morning
+}
+
+function isLateChangeWindow(dateStr, startIso){
+  if(!dateStr) return false;
+  // Anything from 24 hours before the start onwards counts, including sessions whose time has already passed.
+  const ms = sessionStartMs(dateStr, startIso);
+  return !isNaN(ms) && (ms - Date.now()) <= LATE_CHANGE_WINDOW_MS;
+}
+
+function askLateChange(kind, dateStr, startIso){
+  const past = sessionStartMs(dateStr, startIso) < Date.now();
+  return new Promise((resolve)=>{
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    const word = kind === 'cancel' ? 'iptal' : 'erteleme';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:380px;">
+        <div class="backups-box-header"><h2>Geç ${word} mi?</h2></div>
+        <div style="padding:0 20px 20px; display:flex; flex-direction:column; gap:8px;">
+          <p style="font-size:13px; color:var(--muted); margin:0 0 4px;">${formatShortDate(dateStr)} tarihli ${past ? 'seansın zamanı geçmişti' : 'seansa 24 saatten az kalmıştı'}. Bu ${word} danışandan kaynaklıysa "geç ${word}" olarak istatistiğe eklenir.</p>
+          <button class="settings-btn" id="lateChangeYes" style="width:100%;">Evet, geç ${word} olarak say</button>
+          <button class="reschedule-cancel-btn" id="lateChangeNo" style="width:100%;">Hayır, sayma</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const done = v => { modal.remove(); resolve(v); };
+    document.getElementById('lateChangeYes').addEventListener('click', ()=> done(true));
+    document.getElementById('lateChangeNo').addEventListener('click', ()=> done(false));
+  });
+}
+
+// Called after a cancel/reschedule has gone through. Asks only when the session was within 24 hours.
+async function maybeRecordLateChange(client, kind, dateStr, startIso, session){
+  if(!isLateChangeWindow(dateStr, startIso)) return;
+  if(!(await askLateChange(kind, dateStr, startIso))) return;
+  const live = state.clients.find(c => c.id === client.id) || client;
+  const liveSession = session ? (live.sessions || []).find(s => s.id === session.id) : null;
+  if(kind === 'reschedule' && liveSession){
+    liveSession.lateChange = { kind: 'reschedule', originalDate: dateStr, at: Date.now() };
+  }else{
+    if(!live.lateChanges) live.lateChanges = [];
+    live.lateChanges.push({ id: uid(), kind, sessionDate: dateStr, at: Date.now() });
+  }
+  saveState();
+  logAudit(kind === 'cancel' ? 'geç iptal kaydedildi' : 'geç erteleme kaydedildi', `${client.name} - ${formatShortDate(dateStr)}`, client.id);
+  render();
+}
+
+// Every late change of one client as { kind, date } (date = the session's original date).
+function clientLateChanges(client){
+  const out = (client.lateChanges || []).map(l => ({ kind: l.kind, date: l.sessionDate }));
+  (client.sessions || []).forEach(s => { if(s.lateChange) out.push({ kind: s.lateChange.kind, date: s.lateChange.originalDate || s.date }); });
+  return out;
+}
+
+function lateChangeSummaryText(client){
+  const list = clientLateChanges(client);
+  if(!list.length) return 'Yok';
+  const cancels = list.filter(l => l.kind === 'cancel').length;
+  const moves = list.length - cancels;
+  const parts = [];
+  if(cancels) parts.push(`${cancels} iptal`);
+  if(moves) parts.push(`${moves} erteleme`);
+  return `${list.length} geç değişiklik (${parts.join(', ')})`;
+}
+
+function computeMonthlyLateChanges(monthsBack){
+  const now = new Date();
+  const buckets = [];
+  const monthNames = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  for(let i = monthsBack-1; i >= 0; i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    buckets.push({ key: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`, label: monthNames[d.getMonth()], total: 0, cancel: 0, reschedule: 0 });
+  }
+  const bucketMap = {};
+  buckets.forEach(b => bucketMap[b.key] = b);
+  (state.clients || []).forEach(c => clientLateChanges(c).forEach(l => {
+    const b = bucketMap[(l.date || '').slice(0, 7)];
+    if(!b) return;
+    b.total++;
+    if(l.kind === 'cancel') b.cancel++; else b.reschedule++;
+  }));
+  return buckets;
+}
+
+function getFilteredMonthlyLateChanges(filter){
+  const shared = (practiceState && practiceState.stats) || {};
+  const me = currentPersonId();
+  const myBuckets = computeMonthlyLateChanges(12);
+  const empty = { total: 0, cancel: 0, reschedule: 0 };
+  const kub = (me === 'kubilay') ? myBuckets : alignBucketsToWindow(shared.kubilay && shared.kubilay.monthlyLateChanges, myBuckets, empty);
+  const duy = (me === 'duygu') ? myBuckets : alignBucketsToWindow(shared.duygu && shared.duygu.monthlyLateChanges, myBuckets, empty);
+  if(filter === 'kubilay') return kub || null;
+  if(filter === 'duygu') return duy || null;
+  if(!kub && !duy) return null;
+  return (kub || duy).map((b, i) => ({
+    key: b.key, label: b.label,
+    total: (kub ? kub[i].total : 0) + (duy ? duy[i].total : 0),
+    cancel: (kub ? kub[i].cancel : 0) + (duy ? duy[i].cancel : 0),
+    reschedule: (kub ? kub[i].reschedule : 0) + (duy ? duy[i].reschedule : 0)
+  }));
+}
+
+function lateChangeChartSvg(filter){
+  const buckets = getFilteredMonthlyLateChanges(filter);
+  if(!buckets){
+    return `<div class="todo-empty">${filter==='kubilay'?'Kubilay':'Duygu'} henüz veri paylaşmadı.</div>`;
+  }
+  const max = Math.max(...buckets.map(b => b.total), 4);
+  const width = 600, height = 190, barGap = 6, chartHeight = 130, topPad = 24;
+  const barWidth = (width - barGap*(buckets.length-1)) / buckets.length;
+  const bars = buckets.map((b, i)=>{
+    const barHeight = b.total > 0 ? Math.max(3, (b.total/max) * chartHeight) : 0;
+    const x = i * (barWidth + barGap);
+    const y = chartHeight - barHeight + topPad;
+    const label = b.total > 0 ? `<text x="${(x+barWidth/2).toFixed(1)}" y="${(y-6).toFixed(1)}" font-size="10" font-weight="600" fill="#2b2d33" text-anchor="middle">${b.total}</text>` : '';
+    return `
+      <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barHeight.toFixed(1)}" rx="3" fill="#f1d7a8"><title>${b.label}: ${b.total} geç değişiklik (${b.cancel} iptal, ${b.reschedule} erteleme)</title></rect>
+      ${label}
+      <text x="${(x+barWidth/2).toFixed(1)}" y="${height-8}" font-size="10" fill="#6b6f78" text-anchor="middle">${b.label}</text>`;
+  }).join('');
+  return `<svg viewBox="0 0 ${width} ${height}" style="width:100%; height:auto; display:block;">${bars}</svg>`;
+}
+
 function noShowSummaryText(client){
   const sessions = (client.sessions||[]).filter(s=>isSessionDue(s));
   const total = sessions.length;
@@ -6080,6 +6221,10 @@ function profilePanelHtml(client){
       <div class="field-block">
         <label>Gelmedi (No-show)</label>
         <div class="noshow-summary">${noShowSummaryText(client)}</div>
+      </div>
+      <div class="field-block">
+        <label>Geç değişiklik (son 24 saatte iptal / erteleme)</label>
+        <div class="noshow-summary">${lateChangeSummaryText(client)}</div>
       </div>
       <div class="field-block full">
         <label>Adres</label>
@@ -6436,6 +6581,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
       <span class="session-link-badge ${isCalendarLinked?'linked':'manual'}" title="${isCalendarLinked?'Bu seans Google Takvim randevusuna bağlı':'Bu seans elle eklendi, Takvim ile bağlantısı yok'}">${isCalendarLinked?'📅 Takvim':'📝 Elle'}</span>
       ${(!isCalendarLinked && session.detachedFromEventId) ? `<button type="button" class="session-resync-btn" title="Takvimdeki orijinal randevuyla yeniden eşitle">🔄 Senkronize Et</button>` : ''}
       <button class="session-noshow-btn ${session.noShow?'active':''}" type="button" title="Danışan gelmedi olarak işaretle">🚫 ${session.noShow?'Gelmedi':'Gelmedi mi?'}</button>
+      <button class="session-late-btn ${session.lateChange?'active':''}" type="button" title="Bu seans son 24 saat içinde iptal edildi ya da ertelendi">⏱ ${session.lateChange ? (session.lateChange.originalDate && session.lateChange.originalDate !== session.date ? `Geç erteleme (${formatShortDate(session.lateChange.originalDate)})` : 'Geç değişiklik') : 'Geç değişiklik?'}</button>
       <button class="session-del">Sil</button>
     </div>
     ${isFuture ? `
@@ -6502,11 +6648,13 @@ function renderSessionCard(client, session, index, defaultOpenId){
       client.sessions = client.sessions.filter(s=>s.id!==session.id);
       saveState(); render();
       logAudit('seans silindi', `${client.name} - ${formatShortDate(session.date)}`, client.id);
+      maybeRecordLateChange(client, 'cancel', session.date, session.calendarStartTime);
     }else{
       if(confirm('Bu kayıt silinsin mi?')){
         client.sessions = client.sessions.filter(s=>s.id!==session.id);
         saveState(); render();
         logAudit('seans silindi', `${client.name} - ${formatShortDate(session.date)}`, client.id);
+        maybeRecordLateChange(client, 'cancel', session.date, session.calendarStartTime);
       }
     }
   });
@@ -6562,11 +6710,13 @@ function renderSessionCard(client, session, index, defaultOpenId){
         const newTime24 = parseAmPmTime(newTimeLabel);
         const newStartIso = newTime24 ? `${newDate}T${newTime24}:00` : null;
 
+        const changed = newDate !== originalDate || (newStartIso && newStartIso !== originalStartTime);
         if(!isCalendarLinked){
           session.date = newDate;
           if(newStartIso) session.calendarStartTime = newStartIso;
           saveState();
           render();
+          if(changed) maybeRecordLateChange(client, 'reschedule', originalDate, originalStartTime, session);
           return;
         }
 
@@ -6580,6 +6730,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
             saveState();
             logAudit('randevu yeniden planlandı', `${client.name} - ${formatShortDate(originalDate)} → ${formatShortDate(newDate)}`, client.id);
             render();
+            if(changed) maybeRecordLateChange(client, 'reschedule', originalDate, originalStartTime, session);
           }else{
             alert('Takvimdeki randevu güncellenemedi.');
           }
@@ -6594,6 +6745,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
           saveState();
           logAudit('seans elle moduna alındı', `${client.name} - ${formatShortDate(newDate)}`, client.id);
           render();
+          if(changed) maybeRecordLateChange(client, 'reschedule', originalDate, originalStartTime, session);
         }else{
           // Vazgeç: revert to the original calendar time, discard the edit
           session.date = originalDate;
@@ -6605,6 +6757,11 @@ function renderSessionCard(client, session, index, defaultOpenId){
   });
   div.querySelector('.session-noshow-btn').addEventListener('click', ()=>{
     session.noShow = !session.noShow;
+    saveState();
+    render();
+  });
+  div.querySelector('.session-late-btn').addEventListener('click', ()=>{
+    session.lateChange = session.lateChange ? null : { kind: 'reschedule', originalDate: session.date, at: Date.now(), manual: true };
     saveState();
     render();
   });
@@ -8587,9 +8744,10 @@ function computePersonalStats(){
   const thisMonthStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const thisYearStr = String(now.getFullYear());
   let activeClients = 0, terminatedClients = 0;
-  let sessionsThisMonth = 0, sessionsThisYear = 0, revenueThisMonth = 0;
+  let sessionsThisMonth = 0, sessionsThisYear = 0, revenueThisMonth = 0, lateChangesThisMonth = 0;
   (state.clients||[]).forEach(c=>{
     if(c.profile && c.profile.terminated) terminatedClients++; else activeClients++;
+    lateChangesThisMonth += clientLateChanges(c).filter(l => (l.date || '').startsWith(thisMonthStr)).length;
     (c.sessions||[]).forEach(s=>{
       if(!s.date || !isSessionDue(s)) return;
       if(s.date.startsWith(thisMonthStr)){
@@ -8602,7 +8760,7 @@ function computePersonalStats(){
       if(s.date.startsWith(thisYearStr)) sessionsThisYear++;
     });
   });
-  return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth, monthKey: thisMonthStr, yearKey: thisYearStr, monthlyRevenue: computeMonthlyRevenue(12), monthlyNoShowRate: computeMonthlyNoShowRate(12) };
+  return { activeClients, terminatedClients, sessionsThisMonth, sessionsThisYear, revenueThisMonth, lateChangesThisMonth, monthKey: thisMonthStr, yearKey: thisYearStr, monthlyRevenue: computeMonthlyRevenue(12), monthlyNoShowRate: computeMonthlyNoShowRate(12), monthlyLateChanges: computeMonthlyLateChanges(12) };
 }
 
 // Publishes my stats to the shared doc. Previously this only happened when opening Yönetim,
@@ -8785,6 +8943,7 @@ function practiceStatsHtml(){
       sessionsThisMonth: monthOk ? e.sessionsThisMonth : null,
       revenueThisMonth: monthOk ? e.revenueThisMonth : null,
       sessionsThisYear: yearOk ? e.sessionsThisYear : null,
+      lateChangesThisMonth: (monthOk && e.lateChangesThisMonth != null) ? e.lateChangesThisMonth : null,
       monthStale: !monthOk };
   }
   const kubilay = view('kubilay');
@@ -8816,6 +8975,7 @@ function practiceStatsHtml(){
       ${box(num(kubilay.sessionsThisMonth),'Bu ay seans')}
       ${box(num(kubilay.sessionsThisYear),'Bu yıl seans')}
       ${box(money(kubilay.revenueThisMonth),'Bu ay tahsil edilen')}
+      ${box(num(kubilay.lateChangesThisMonth),'Bu ay geç değişiklik')}
     </div>`;
   }
   if(practiceStatsFilter === 'duygu'){
@@ -8826,6 +8986,7 @@ function practiceStatsHtml(){
       ${box(num(duygu.sessionsThisMonth),'Bu ay seans')}
       ${box(num(duygu.sessionsThisYear),'Bu yıl seans')}
       ${box(money(duygu.revenueThisMonth),'Bu ay tahsil edilen')}
+      ${box(num(duygu.lateChangesThisMonth),'Bu ay geç değişiklik')}
     </div>`;
   }
   // toplam
@@ -8847,6 +9008,7 @@ function practiceStatsHtml(){
     ${box(num(sum(k.sessionsThisMonth, d.sessionsThisMonth)) + star(k.sessionsThisMonth, d.sessionsThisMonth),'Bu ay seans')}
     ${box(num(sum(k.sessionsThisYear, d.sessionsThisYear)) + star(k.sessionsThisYear, d.sessionsThisYear),'Bu yıl seans')}
     ${box(money(sum(k.revenueThisMonth, d.revenueThisMonth)) + star(k.revenueThisMonth, d.revenueThisMonth),'Bu ay tahsil edilen')}
+    ${box(num(sum(k.lateChangesThisMonth, d.lateChangesThisMonth)) + star(k.lateChangesThisMonth, d.lateChangesThisMonth),'Bu ay geç değişiklik')}
   </div>`;
 }
 
@@ -9065,6 +9227,10 @@ function renderPracticeContent(){
         <div class="revenue-chart-block">
           <h4 class="revenue-chart-title">🚫 Son 12 Ay Gelmedi Oranı (${practiceStatsFilter==='toplam'?'toplam':practiceStatsFilter==='kubilay'?'Kubilay':'Duygu'})</h4>
           ${noShowChartSvg(practiceStatsFilter)}
+        </div>
+        <div class="revenue-chart-block">
+          <h4 class="revenue-chart-title">⏱ Son 12 Ay Geç Değişiklik — son 24 saatte iptal / erteleme (${practiceStatsFilter==='toplam'?'toplam':practiceStatsFilter==='kubilay'?'Kubilay':'Duygu'})</h4>
+          ${lateChangeChartSvg(practiceStatsFilter)}
         </div>
       </div>
     </div>
