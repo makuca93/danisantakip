@@ -1816,30 +1816,6 @@
   .session-noshow-btn.active{background:var(--red); border-color:var(--red); color:#fff;}
   .session-late-btn{background:none; border:1px solid var(--card-line); color:var(--muted); font-family:inherit; font-size:11.5px; padding:5px 10px; border-radius:6px; cursor:pointer; flex-shrink:0;}
   .session-late-btn.active{background:#fdf0dc; border-color:#e6bf86; color:#7a4a12; font-weight:600;}
-  /* Availability */
-  .avail-h{font-size:13.5px; margin:18px 0 8px;}
-  .avail-hours.disabled, .avail-holidays.disabled{opacity:.5;}
-  .avail-hour-row{display:flex; align-items:center; gap:8px; margin-top:6px; font-size:13px;}
-  .avail-day{display:flex; align-items:center; gap:6px; min-width:118px; font-size:13px;}
-  .avail-blocks{display:flex; flex-direction:column; gap:6px; margin-bottom:8px;}
-  .avail-block-row{display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--card-line); border-radius:7px; background:#fff; font-size:13px;}
-  .avail-block-row.past{opacity:.55;}
-  .avail-block-row button{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:4px 6px;}
-  .avail-add{display:flex; flex-wrap:wrap; align-items:center; gap:8px;}
-  .avail-holidays{display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:4px 14px; margin-top:6px;}
-  .avail-holiday{display:flex; align-items:center; gap:8px; font-size:13px; padding:5px 0;}
-  .avail-holiday span{flex:1;}
-  .avail-holiday em{font-style:normal; color:var(--muted); font-size:12px; white-space:nowrap;}
-  .avail-warn-group{background:#fdf0dc; border:1px solid #e6bf86; border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; color:#5c4126;}
-  .avail-warn-group ul{margin:6px 0 0; padding-left:18px;}
-  .cal-avail-note{margin-bottom:8px; font-size:12.5px; display:flex; flex-direction:column; gap:6px;}
-  .avail-note-warn{background:#fdf0dc; border:1px solid #e6bf86; border-radius:7px; padding:8px 10px; color:#7a4a12; font-weight:600;}
-  .avail-note-other{background:var(--paper); border:1px dashed var(--card-line); border-radius:7px; padding:8px 10px; color:var(--muted);}
-  .mini-cal-cell.day-off, .cal-big-cell.day-off, .cal-week-cell.day-off{background-image:repeating-linear-gradient(135deg, rgba(230,191,134,.35) 0 4px, transparent 4px 8px);}
-  @media (max-width: 768px){
-    .avail-hour-row{flex-wrap:wrap;}
-    .avail-add input, .avail-add .settings-btn{flex:1 1 45%;}
-  }
   /* Header buttons wrap onto a second line instead of running past the card edge on narrow screens. */
   .session-card-top{flex-wrap:wrap; row-gap:6px;}
   .session-card-top .session-datetime-btn{min-width:0;}
@@ -4302,9 +4278,7 @@ function miniCalendarMonthHtml(year, month, selectedIso){
     const cls = ['mini-cal-cell'];
     if(iso === selectedIso) cls.push('selected');
     if(iso === todayStr) cls.push('today');
-    const off = dayOffLabel(iso);
-    if(off) cls.push('day-off');
-    cells += `<button type="button" class="${cls.join(' ')}" data-date="${iso}"${off ? ` title="${escapeAttr(off)}"` : ''}>${d}</button>`;
+    cells += `<button type="button" class="${cls.join(' ')}" data-date="${iso}">${d}</button>`;
   }
   return `
     <div class="mini-cal-header">
@@ -4319,8 +4293,7 @@ function miniCalendarMonthHtml(year, month, selectedIso){
 
 // Opens a small popover with a mini month calendar (date) + 15-minute dropdown (time)
 // to replace the old prompt()-based reschedule flow.
-// `availability` ({ durationMinutes, skipEventId }) turns on the working-hours / holiday / conflict warning on Kaydet.
-function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm, title, availability }){
+function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm, title }){
   const overlay = document.createElement('div');
   overlay.className = 'reschedule-overlay';
 
@@ -4363,15 +4336,8 @@ function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm, title
     overlay.querySelector('.reschedule-cancel-btn').addEventListener('click', ()=>{
       overlay.remove();
     });
-    overlay.querySelector('.reschedule-confirm-btn').addEventListener('click', async (ev)=>{
+    overlay.querySelector('.reschedule-confirm-btn').addEventListener('click', ()=>{
       const timeLabel = overlay.querySelector('.reschedule-time-select').value;
-      if(availability){
-        const btn = ev.currentTarget;
-        btn.disabled = true; btn.textContent = 'Kontrol ediliyor…';
-        const ok = await confirmAvailabilityFor(selectedIso, parseAmPmTime(timeLabel), availability.durationMinutes || 50, availability.skipEventId);
-        btn.disabled = false; btn.textContent = 'Kaydet';
-        if(!ok) return; // stay on the picker so another time can be chosen
-      }
       overlay.remove();
       onConfirm(selectedIso, timeLabel);
     });
@@ -5666,7 +5632,6 @@ async function loadCalendarDayEvents(panel, client){
   const dateStr = dtBtn ? dtBtn.getAttribute('data-date') : '';
   const box = panel.querySelector('.cal-day-events');
   if(!dateStr){ box.textContent = 'Tarih seçince görünecek…'; return; }
-  renderAvailabilityNote(panel, dateStr, parseAmPmTime(dtBtn.getAttribute('data-time')), Number((panel.querySelector('.cal-duration') || {}).value) || 50);
   box.textContent = 'Yükleniyor…';
   const events = await fetchDayEvents(dateStr);
   if(events === null){
@@ -5717,7 +5682,6 @@ async function loadCalendarDayEvents(panel, client){
       const currentTimeLabel = (timeEl && timeEl.textContent !== 'Tüm gün') ? timeEl.textContent : '10:00 AM';
 
       openReschedulePopover({
-        availability: { durationMinutes: 50, skipEventId: eventId },
         initialDate: dateStr,
         initialTimeLabel: currentTimeLabel,
         onConfirm: async (newDate, newTimeLabel)=>{
@@ -5746,10 +5710,6 @@ function wireCalendarPanel(client){
   const panel = document.getElementById('calendarPanel');
 
   const dtBtn = panel.querySelector('.cal-datetime-btn');
-  const durSel = panel.querySelector('.cal-duration');
-  if(durSel) durSel.addEventListener('change', ()=>{
-    if(dtBtn.getAttribute('data-date')) renderAvailabilityNote(panel, dtBtn.getAttribute('data-date'), parseAmPmTime(dtBtn.getAttribute('data-time')), Number(durSel.value) || 50);
-  });
   dtBtn.addEventListener('click', ()=>{
     openReschedulePopover({
       title: 'Randevu Tarih ve Saati Seç',
@@ -5849,25 +5809,6 @@ function wireCalendarPanel(client){
       return;
     }
 
-    // Working hours / holidays / closed times / calendar conflicts: warn before anything is created.
-    const skipDates = new Set();
-    if(repeatWeekly){
-      btn.textContent = 'Kontrol ediliyor…';
-      const base0 = new Date(dateStr + 'T00:00:00');
-      const weekDates = Array.from({ length: repeatWeeks }, (_, i) => isoDate(addDaysLocal(base0, i*7)));
-      const checked = await Promise.all(weekDates.map(async d => ({ dateStr: d, issues: await collectAvailabilityIssues(d, timeStr, durationMinutes) })));
-      const problems = checked.filter(c => c.issues.length);
-      if(problems.length){
-        const choice = await askAvailabilityWarning(problems, timeStr, problems.length < repeatWeeks);
-        if(!choice){ btn.disabled = false; btn.textContent = 'Randevu Oluştur'; return; }
-        if(choice === 'skip') problems.forEach(pr => skipDates.add(pr.dateStr));
-      }
-    }else{
-      btn.textContent = 'Kontrol ediliyor…';
-      const okToGo = await confirmAvailabilityFor(dateStr, timeStr, durationMinutes);
-      if(!okToGo){ btn.disabled = false; btn.textContent = 'Randevu Oluştur'; return; }
-    }
-
     if(repeatWeekly){
       const baseDate = new Date(dateStr + 'T00:00:00');
       let successCount = 0;
@@ -5875,7 +5816,6 @@ function wireCalendarPanel(client){
         btn.textContent = `Oluşturuluyor… (${i+1}/${repeatWeeks})`;
         const d = addDaysLocal(baseDate, i*7);
         const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        if(skipDates.has(dStr)) continue; // skipped by choice in the availability warning
         const created = await createCalendarEvent(client, { title, dateStr: dStr, timeStr, durationMinutes, inviteEmails });
         if(created){
           successCount++;
@@ -5898,7 +5838,7 @@ function wireCalendarPanel(client){
       if(successCount) logAudit('randevu oluşturuldu (haftalık tekrar)', `${client.name} - ${successCount} hafta`, client.id);
       calendarViewCache = {};
       btn.disabled = false; btn.textContent = 'Randevu Oluştur';
-      alert(`${successCount} / ${repeatWeeks - skipDates.size} randevu Google Takvimine eklendi.` + (skipDates.size ? ` ${skipDates.size} hafta uygun olmadığı için atlandı.` : ''));
+      alert(`${successCount} / ${repeatWeeks} randevu Google Takvimine eklendi.`);
       calendarCheckedClientIds.delete(client.id);
       panel.classList.remove('open');
       if(successCount) markPreviousSessionAsNext(client, dateStr, title);
@@ -6803,10 +6743,6 @@ function renderSessionCard(client, session, index, defaultOpenId){
     const originalDate = session.date;
     const originalStartTime = session.calendarStartTime;
     openReschedulePopover({
-      availability: {
-        durationMinutes: (session.calendarStartTime && session.calendarEndTime) ? Math.max(15, Math.round((new Date(session.calendarEndTime) - new Date(session.calendarStartTime)) / 60000)) : 50,
-        skipEventId: session.calendarEventId || session.detachedFromEventId
-      },
       title: 'Seans Tarih ve Saatini Değiştir',
       initialDate: session.date,
       initialTimeLabel: session.calendarStartTime ? formatEventTime(session.calendarStartTime) : '10:00 AM',
@@ -7272,489 +7208,6 @@ async function sendTaskReminder(taskId){
     alert('Hatırlatma gönderilemedi: ' + errText);
   }
   if(mainView === 'practice') renderPracticeContent();
-}
-
-/* ---------- Availability: working hours, closed times, Ontario holidays, other calendars ---------- */
-// Everything here only WARNS. Nothing blocks an appointment; "Yine de devam et" always goes through.
-const WEEKDAY_NAMES_TR = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
-const WEEKDAY_ORDER = [1,2,3,4,5,6,0]; // shown Monday first
-
-function defaultAvailability(){
-  const hours = {};
-  for(let d = 0; d < 7; d++) hours[d] = (d >= 1 && d <= 5) ? { start: '09:00', end: '17:00' } : null;
-  return { hoursEnabled: false, hours, blocks: [], holidaysEnabled: true, holidayOverrides: {}, checkConflicts: true, conflictCalendars: [] };
-}
-
-function getAvailability(){
-  const d = defaultAvailability();
-  const a = (state && state.availability) || {};
-  return { ...d, ...a, hours: { ...d.hours, ...(a.hours || {}) }, blocks: a.blocks || [], holidayOverrides: a.holidayOverrides || {}, conflictCalendars: a.conflictCalendars || [] };
-}
-
-function updateAvailability(mutator){
-  const a = getAvailability();
-  mutator(a);
-  state.availability = a;
-  saveState();
-}
-
-// Ontario: the 9 public holidays are on by default; 4 common closures are listed but off.
-const ONTARIO_HOLIDAYS = [
-  { id: 'new-year', name: "New Year's Day", on: true },
-  { id: 'family-day', name: 'Family Day', on: true },
-  { id: 'good-friday', name: 'Good Friday', on: true },
-  { id: 'easter-monday', name: 'Easter Monday', on: false },
-  { id: 'victoria-day', name: 'Victoria Day', on: true },
-  { id: 'canada-day', name: 'Canada Day', on: true },
-  { id: 'civic-holiday', name: 'Civic Holiday', on: false },
-  { id: 'labour-day', name: 'Labour Day', on: true },
-  { id: 'truth-reconciliation', name: 'National Day for Truth and Reconciliation', on: false },
-  { id: 'thanksgiving', name: 'Thanksgiving', on: true },
-  { id: 'remembrance-day', name: 'Remembrance Day', on: false },
-  { id: 'christmas', name: 'Christmas Day', on: true },
-  { id: 'boxing-day', name: 'Boxing Day', on: true }
-];
-
-function easterSunday(year){
-  const a = year % 19, b = Math.floor(year / 100), c = year % 100, d = Math.floor(b / 4), e = b % 4;
-  const f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19*a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2*e + 2*i - h - k) % 7, m = Math.floor((a + 11*h + 22*l) / 451);
-  const month = Math.floor((h + l - 7*m + 114) / 31), day = ((h + l - 7*m + 114) % 31) + 1;
-  return new Date(year, month - 1, day);
-}
-
-const holidayDateCache = {};
-function ontarioHolidayDates(year){
-  if(holidayDateCache[year]) return holidayDateCache[year];
-  const nthMonday = (month, n) => { const d = new Date(year, month, 1); const shift = (8 - d.getDay()) % 7; return new Date(year, month, 1 + shift + (n - 1) * 7); };
-  const easter = easterSunday(year);
-  const victoria = new Date(year, 4, 24); // the Monday before May 25
-  while(victoria.getDay() !== 1) victoria.setDate(victoria.getDate() - 1);
-  const canada = new Date(year, 6, 1);
-  if(canada.getDay() === 0) canada.setDate(2); // observed on July 2 when July 1 is a Sunday
-  const map = {
-    'new-year': new Date(year, 0, 1),
-    'family-day': nthMonday(1, 3),
-    'good-friday': addDaysLocal(easter, -2),
-    'easter-monday': addDaysLocal(easter, 1),
-    'victoria-day': victoria,
-    'canada-day': canada,
-    'civic-holiday': nthMonday(7, 1),
-    'labour-day': nthMonday(8, 1),
-    'truth-reconciliation': new Date(year, 8, 30),
-    'thanksgiving': nthMonday(9, 2),
-    'remembrance-day': new Date(year, 10, 11),
-    'christmas': new Date(year, 11, 25),
-    'boxing-day': new Date(year, 11, 26)
-  };
-  const out = {};
-  Object.keys(map).forEach(id => { out[id] = isoDate(map[id]); });
-  holidayDateCache[year] = out;
-  return out;
-}
-
-function isHolidayEnabled(h, a){
-  const o = a.holidayOverrides[h.id];
-  return o === undefined ? h.on : !!o;
-}
-
-function holidayOn(dateStr){
-  const a = getAvailability();
-  if(!a.holidaysEnabled || !dateStr) return null;
-  const dates = ontarioHolidayDates(Number(dateStr.slice(0, 4)));
-  return ONTARIO_HOLIDAYS.find(h => dates[h.id] === dateStr && isHolidayEnabled(h, a)) || null;
-}
-
-const hhmmToMin = t => { const [h, m] = String(t || '').split(':').map(Number); return (isNaN(h) || isNaN(m)) ? null : h * 60 + m; };
-const minToHhmm = m => `${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`;
-function displayTime(hhmm){ return formatEventTime(`2000-01-01T${hhmm}:00`); }
-
-function blockLabel(b){
-  const range = b.to && b.to !== b.from ? `${formatShortDate(b.from)} – ${formatShortDate(b.to)}` : formatShortDate(b.from);
-  return `${range}, ${b.allDay ? 'tüm gün' : `${displayTime(b.start)}–${displayTime(b.end)}`}${b.note ? ` · ${b.note}` : ''}`;
-}
-
-// Checks that need no network: holiday, working hours, closed times.
-function availabilityIssues(dateStr, timeStr, durationMinutes){
-  const a = getAvailability();
-  const issues = [];
-  if(!dateStr) return issues;
-  const startMin = timeStr ? hhmmToMin(timeStr) : null;
-  const endMin = startMin !== null ? startMin + (durationMinutes || 50) : null;
-  const h = holidayOn(dateStr);
-  if(h) issues.push({ type: 'holiday', text: `Resmî tatil: ${h.name}` });
-  if(a.hoursEnabled){
-    const day = new Date(dateStr + 'T00:00:00').getDay();
-    const wh = a.hours[day];
-    if(!wh) issues.push({ type: 'hours', text: `Çalışmadığın gün: ${WEEKDAY_NAMES_TR[day]}` });
-    else if(startMin !== null && (startMin < hhmmToMin(wh.start) || endMin > hhmmToMin(wh.end))){
-      issues.push({ type: 'hours', text: `Mesai dışı: ${WEEKDAY_NAMES_TR[day]} günü ${displayTime(wh.start)}–${displayTime(wh.end)} çalışıyorsun` });
-    }
-  }
-  a.blocks.forEach(b => {
-    if(dateStr < b.from || dateStr > (b.to || b.from)) return;
-    if(!b.allDay && startMin !== null){
-      if(!(startMin < hhmmToMin(b.end) && endMin > hhmmToMin(b.start))) return;
-    }
-    issues.push({ type: 'block', text: `Kapalı zaman: ${b.allDay ? 'tüm gün' : `${displayTime(b.start)}–${displayTime(b.end)}`}${b.note ? ` (${b.note})` : ''}` });
-  });
-  return issues;
-}
-
-// Short label for marking a day in the calendars (holiday or closed time); null when the day is open.
-function dayOffLabel(dateStr){
-  const h = holidayOn(dateStr);
-  if(h) return h.name;
-  const b = getAvailability().blocks.find(x => dateStr >= x.from && dateStr <= (x.to || x.from));
-  return b ? `Kapalı zaman${b.note ? ': ' + b.note : ''}` : null;
-}
-
-/* ----- Other calendars: read only for conflict checks, never shown in the app's calendar ----- */
-async function fetchCalendarEventsForDay(token, calId, dateStr){
-  const start = new Date(`${dateStr}T00:00:00`);
-  const end = addDaysLocal(start, 1);
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=100`;
-  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-  if(!res.ok) throw new Error('HTTP ' + res.status);
-  return ((await res.json()).items || []);
-}
-
-function eventIsBusy(ev){
-  if(!ev || ev.status === 'cancelled' || ev.transparency === 'transparent') return false;
-  const me = (ev.attendees || []).find(x => x.self);
-  return !(me && me.responseStatus === 'declined');
-}
-
-function eventIntervalMs(ev){
-  if(ev.start && ev.start.dateTime) return [new Date(ev.start.dateTime).getTime(), new Date(ev.end.dateTime).getTime()];
-  if(ev.start && ev.start.date) return [new Date(ev.start.date + 'T00:00:00').getTime(), new Date(ev.end.date + 'T00:00:00').getTime()];
-  return null;
-}
-
-function eventTimeRangeLabel(ev){
-  return ev.start && ev.start.dateTime ? `${formatEventTime(ev.start.dateTime)}–${formatEventTime(ev.end.dateTime)}` : 'tüm gün';
-}
-
-// Busy events of one day: the main calendar plus the extra ones chosen in Settings.
-async function fetchBusyEventsForDay(dateStr){
-  const a = getAvailability();
-  const token = await ensureGoogleAccessToken();
-  if(!token) return null;
-  const cals = [{ id: 'primary', name: '' }, ...a.conflictCalendars];
-  const lists = await Promise.all(cals.map(async c => {
-    try{ return (await fetchCalendarEventsForDay(token, c.id, dateStr)).filter(eventIsBusy).map(ev => ({ ev, cal: c })); }
-    catch(e){ console.warn('Takvim okunamadı', c.id, e); return []; }
-  }));
-  return lists.flat();
-}
-
-async function calendarConflictIssues(dateStr, timeStr, durationMinutes, skipEventId){
-  if(!getAvailability().checkConflicts || !timeStr) return [];
-  const busy = await fetchBusyEventsForDay(dateStr);
-  if(!busy) return [];
-  const start = new Date(`${dateStr}T${timeStr}:00`).getTime();
-  const end = start + (durationMinutes || 50) * 60000;
-  const seen = new Set();
-  const issues = [];
-  busy.forEach(({ ev, cal }) => {
-    if(skipEventId && ev.id === skipEventId) return;
-    const iv = eventIntervalMs(ev);
-    if(!iv || !(iv[0] < end && iv[1] > start)) return;
-    const key = (ev.iCalUID || ev.id) + '|' + iv[0];
-    if(seen.has(key)) return; // the same event can sit in two calendars
-    seen.add(key);
-    issues.push({ type: 'conflict', text: `Çakışma: ${eventTimeRangeLabel(ev)} ${ev.summary || 'meşgul'}${cal.name ? ` (${cal.name})` : ''}` });
-  });
-  return issues;
-}
-
-async function collectAvailabilityIssues(dateStr, timeStr, durationMinutes, skipEventId){
-  const issues = availabilityIssues(dateStr, timeStr, durationMinutes);
-  try{ issues.push(...await calendarConflictIssues(dateStr, timeStr, durationMinutes, skipEventId)); }
-  catch(e){ console.warn('Çakışma kontrolü yapılamadı', e); }
-  return issues;
-}
-
-// groups: [{ dateStr, issues }]. Returns 'continue', 'skip' (only offered for repeats) or null (cancel).
-function askAvailabilityWarning(groups, timeStr, allowSkip){
-  return new Promise((resolve)=>{
-    const modal = document.createElement('div');
-    modal.className = 'backups-modal';
-    modal.style.display = 'flex';
-    modal.style.zIndex = '400';
-    const single = groups.length === 1 && !allowSkip;
-    modal.innerHTML = `
-      <div class="backups-box" style="max-width:420px; max-height:86vh; overflow:auto;">
-        <div class="backups-box-header"><h2>⚠️ Bu zaman uygun görünmüyor</h2></div>
-        <div style="padding:0 20px 20px;">
-          ${groups.map(g => `
-            <div class="avail-warn-group">
-              <strong>${turkishDayName(g.dateStr)}, ${formatShortDate(g.dateStr)}${timeStr ? ' · ' + displayTime(timeStr) : ''}</strong>
-              <ul>${g.issues.map(i => `<li>${escapeHtml(i.text)}</li>`).join('')}</ul>
-            </div>`).join('')}
-          <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
-            <button class="reschedule-confirm-btn" id="availCancel" type="button" style="width:100%;">Vazgeç, başka zaman seçeyim</button>
-            ${allowSkip ? `<button class="settings-btn" id="availSkip" type="button" style="width:100%;">Sorunlu ${groups.length} haftayı atla, diğerlerini oluştur</button>` : ''}
-            <button class="reschedule-cancel-btn" id="availContinue" type="button" style="width:100%;">${single ? 'Yine de devam et' : 'Yine de hepsini oluştur'}</button>
-          </div>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-    const done = v => { modal.remove(); resolve(v); };
-    document.getElementById('availCancel').addEventListener('click', ()=> done(null));
-    document.getElementById('availContinue').addEventListener('click', ()=> done('continue'));
-    const skip = document.getElementById('availSkip');
-    if(skip) skip.addEventListener('click', ()=> done('skip'));
-  });
-}
-
-// One date/time: true when there is nothing to warn about, or the user chose to go ahead anyway.
-async function confirmAvailabilityFor(dateStr, timeStr, durationMinutes, skipEventId){
-  const issues = await collectAvailabilityIssues(dateStr, timeStr, durationMinutes, skipEventId);
-  if(!issues.length) return true;
-  const choice = await askAvailabilityWarning([{ dateStr, issues }], timeStr, false);
-  if(choice === 'continue') logAudit('uygunluk uyarısına rağmen devam edildi', `${formatShortDate(dateStr)} — ${issues.map(i => i.text).join('; ')}`);
-  return choice === 'continue';
-}
-
-// Shown in the appointment panel as soon as a date/time is picked, before pressing "Randevu Oluştur".
-async function renderAvailabilityNote(panel, dateStr, timeStr, durationMinutes){
-  const box = panel.querySelector('.cal-day-events');
-  if(!box) return;
-  let note = panel.querySelector('.cal-avail-note');
-  if(!note){
-    note = document.createElement('div');
-    note.className = 'cal-avail-note';
-    box.parentNode.insertBefore(note, box);
-  }
-  const key = `${dateStr}|${timeStr}|${durationMinutes}`;
-  note.dataset.key = key;
-  const paint = (issues, others) => {
-    note.innerHTML =
-      (issues.length ? `<div class="avail-note-warn">${issues.map(i => `<div>⚠️ ${escapeHtml(i.text)}</div>`).join('')}</div>` : '') +
-      (others.length ? `<div class="avail-note-other"><strong>Diğer takvimlerinde bu gün:</strong>${others.map(o => `<div>🔒 ${escapeHtml(o)}</div>`).join('')}</div>` : '');
-    note.style.display = (issues.length || others.length) ? '' : 'none';
-  };
-  const sync = availabilityIssues(dateStr, timeStr, durationMinutes);
-  paint(sync, []);
-  const a = getAvailability();
-  if(!a.checkConflicts || !dateStr) return;
-  try{
-    const busy = await fetchBusyEventsForDay(dateStr);
-    if(!busy || note.dataset.key !== key) return; // a newer date was picked meanwhile
-    const start = timeStr ? new Date(`${dateStr}T${timeStr}:00`).getTime() : null;
-    const end = start !== null ? start + (durationMinutes || 50) * 60000 : null;
-    const conflicts = [], others = [];
-    busy.forEach(({ ev, cal }) => {
-      const iv = eventIntervalMs(ev);
-      if(!iv) return;
-      if(start !== null && iv[0] < end && iv[1] > start) conflicts.push({ type: 'conflict', text: `Çakışma: ${eventTimeRangeLabel(ev)} ${ev.summary || 'meşgul'}${cal.name ? ` (${cal.name})` : ''}` });
-      else if(cal.id !== 'primary') others.push(`${eventTimeRangeLabel(ev)} ${ev.summary || 'meşgul'} (${cal.name})`);
-    });
-    paint([...sync, ...conflicts], others);
-  }catch(e){ console.warn('Uygunluk notu güncellenemedi', e); }
-}
-
-/* ----- Settings ----- */
-function availabilitySettingsHtml(){
-  const a = getAvailability();
-  const year = new Date().getFullYear();
-  const dates = ontarioHolidayDates(year), nextDates = ontarioHolidayDates(year + 1);
-  const today = todayIso();
-  return `
-    <div class="settings-section" id="availabilitySettings">
-      <h3>🗓 Çalışma Saatlerim ve Kapalı Zamanlar</h3>
-      <p>Randevu oluştururken ya da tarih değiştirirken, seçtiğin zaman buradaki kurallara uymuyorsa uygulama seni uyarır. Uyarıyı geçip devam edebilirsin; hiçbir şey engellenmez. Bu ayarlar sadece senin hesabına özel.</p>
-
-      <h4 class="avail-h">Mesai saatleri</h4>
-      <div class="tick-row"><input type="checkbox" id="availHoursEnabled" ${a.hoursEnabled ? 'checked' : ''}><span>Mesai saatlerimin dışındaki randevularda uyar</span></div>
-      <div class="avail-hours ${a.hoursEnabled ? '' : 'disabled'}">
-        ${WEEKDAY_ORDER.map(d => { const wh = a.hours[d]; return `
-          <div class="avail-hour-row" data-day="${d}">
-            <label class="avail-day"><input type="checkbox" class="avail-day-on" ${wh ? 'checked' : ''}> ${WEEKDAY_NAMES_TR[d]}</label>
-            <input type="time" class="avail-start settings-select" value="${wh ? wh.start : '09:00'}" ${wh ? '' : 'disabled'}>
-            <span>–</span>
-            <input type="time" class="avail-end settings-select" value="${wh ? wh.end : '17:00'}" ${wh ? '' : 'disabled'}>
-          </div>`; }).join('')}
-      </div>
-
-      <h4 class="avail-h">Kapalı zamanlar</h4>
-      <div class="avail-blocks">
-        ${a.blocks.length ? a.blocks.slice().sort((x,y)=> x.from.localeCompare(y.from)).map(b => `
-          <div class="avail-block-row ${(b.to || b.from) < today ? 'past' : ''}" data-id="${b.id}"><span>${escapeHtml(blockLabel(b))}</span><button type="button" class="avail-block-del" title="Sil">✕</button></div>`).join('')
-          : `<div class="todo-empty">Kapalı zaman eklenmedi.</div>`}
-      </div>
-      <div class="avail-add">
-        <input type="date" id="availBlockFrom" class="settings-select" title="Başlangıç tarihi" min="${today}">
-        <input type="date" id="availBlockTo" class="settings-select" title="Bitiş tarihi (tek günse boş bırak)">
-        <label class="avail-day"><input type="checkbox" id="availBlockAllDay" checked> Tüm gün</label>
-        <input type="time" id="availBlockStart" class="settings-select" value="13:00" disabled>
-        <input type="time" id="availBlockEnd" class="settings-select" value="17:00" disabled>
-        <input type="text" id="availBlockNote" class="settings-select" placeholder="Not (isteğe bağlı)" style="flex:1; min-width:140px;">
-        <button class="settings-btn" id="availBlockAdd" type="button" style="width:auto;">Ekle</button>
-      </div>
-
-      <h4 class="avail-h">Resmî tatiller (Ontario)</h4>
-      <div class="tick-row"><input type="checkbox" id="availHolidaysEnabled" ${a.holidaysEnabled ? 'checked' : ''}><span>Tatile denk gelen randevularda uyar</span></div>
-      <div class="avail-holidays ${a.holidaysEnabled ? '' : 'disabled'}">
-        ${ONTARIO_HOLIDAYS.map(h => { const d = dates[h.id] >= today ? dates[h.id] : nextDates[h.id]; return `
-          <label class="avail-holiday"><input type="checkbox" class="avail-holiday-on" data-id="${h.id}" ${isHolidayEnabled(h, a) ? 'checked' : ''}> <span>${h.name}</span><em>${turkishDayName(d).slice(0,3)} ${formatShortDate(d)}</em></label>`; }).join('')}
-      </div>
-
-      <h4 class="avail-h">Diğer takvimlerle çakışma</h4>
-      <div class="tick-row"><input type="checkbox" id="availCheckConflicts" ${a.checkConflicts ? 'checked' : ''}><span>Seçtiğim saatte takvimimde başka bir etkinlik varsa uyar</span></div>
-      <p style="margin-top:8px;">Ana takvimin her zaman kontrol edilir. Aşağıya eklediğin takvimler de kontrol edilir, ama uygulamanın takviminde gösterilmez; sadece randevu verirken uyarı olarak görünür.</p>
-      <div class="avail-blocks">
-        ${a.conflictCalendars.length ? a.conflictCalendars.map(c => `
-          <div class="avail-block-row" data-cal="${escapeAttr(c.id)}"><span>${escapeHtml(c.name || c.id)}${c.readable === false ? ' — ⚠️ okunamadı' : ''}</span><button type="button" class="avail-cal-del" title="Kaldır">✕</button></div>`).join('')
-          : `<div class="todo-empty">Ek takvim eklenmedi.</div>`}
-      </div>
-      <div class="avail-add">
-        <button class="settings-btn" id="availCalPick" type="button" style="width:auto;">📅 Takvimlerimden seç</button>
-        <input type="text" id="availCalId" class="settings-select" placeholder="ya da takvim kimliğini yapıştır" style="flex:1; min-width:180px;">
-        <button class="settings-btn" id="availCalAdd" type="button" style="width:auto;">Ekle</button>
-      </div>
-      <div id="availCalStatus" class="consent-status" style="margin-top:6px;"></div>
-    </div>`;
-}
-
-function rerenderSettingsKeepingScroll(){
-  const scroller = document.scrollingElement || document.documentElement;
-  const main = document.getElementById('main');
-  const y = scroller.scrollTop, my = main ? main.scrollTop : 0;
-  renderSettingsPage();
-  scroller.scrollTop = y;
-  if(main) main.scrollTop = my;
-}
-
-// One-off permission to read the LIST of calendars. Kept separate from the app's normal Google
-// permission so that nothing else is affected if it is refused.
-function requestCalendarListToken(){
-  return new Promise((resolve)=>{
-    if(!window.google || !window.google.accounts || !window.google.accounts.oauth2){ resolve(null); return; }
-    try{
-      const client = window.google.accounts.oauth2.initTokenClient({
-        client_id: GIS_CLIENT_ID,
-        scope: 'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
-        callback: (r)=> resolve(r && r.access_token ? r.access_token : null),
-        error_callback: ()=> resolve(null)
-      });
-      client.requestAccessToken({ login_hint: currentUser && currentUser.email ? currentUser.email : undefined });
-    }catch(e){ resolve(null); }
-  });
-}
-
-async function testCalendarReadable(calId){
-  const token = await ensureGoogleAccessToken();
-  if(!token) return false;
-  try{ await fetchCalendarEventsForDay(token, calId, todayIso()); return true; }catch(e){ return false; }
-}
-
-async function addConflictCalendar(id, name){
-  const readable = await testCalendarReadable(id);
-  updateAvailability(a => {
-    if(a.conflictCalendars.some(c => c.id === id)) return;
-    a.conflictCalendars.push({ id, name: name || id, readable });
-  });
-  return readable;
-}
-
-function openCalendarListPicker(items){
-  return new Promise((resolve)=>{
-    const a = getAvailability();
-    const modal = document.createElement('div');
-    modal.className = 'backups-modal';
-    modal.style.display = 'flex';
-    modal.innerHTML = `
-      <div class="backups-box" style="max-width:420px; max-height:86vh; overflow:auto;">
-        <div class="backups-box-header"><h2>Çakışma için kontrol edilecek takvimler</h2></div>
-        <div style="padding:0 20px 20px;">
-          ${items.length ? items.map((c,i) => `<label class="avail-holiday"><input type="checkbox" data-i="${i}" ${a.conflictCalendars.some(x => x.id === c.id) ? 'checked' : ''}> <span>${escapeHtml(c.summaryOverride || c.summary || c.id)}</span></label>`).join('') : `<div class="todo-empty">Ana takvimin dışında başka takvim bulunamadı.</div>`}
-          <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
-            <button class="reschedule-cancel-btn" id="calPickCancel" type="button">Vazgeç</button>
-            <button class="reschedule-confirm-btn" id="calPickSave" type="button">Kaydet</button>
-          </div>
-        </div>
-      </div>`;
-    document.body.appendChild(modal);
-    document.getElementById('calPickCancel').addEventListener('click', ()=>{ modal.remove(); resolve(null); });
-    document.getElementById('calPickSave').addEventListener('click', ()=>{
-      const chosen = Array.from(modal.querySelectorAll('input[type=checkbox]')).filter(cb => cb.checked).map(cb => items[Number(cb.dataset.i)]);
-      modal.remove();
-      resolve(chosen);
-    });
-  });
-}
-
-function wireAvailabilitySettings(){
-  const root = document.getElementById('availabilitySettings');
-  if(!root) return;
-  const q = sel => root.querySelector(sel);
-  q('#availHoursEnabled').addEventListener('change', ev => { updateAvailability(a => { a.hoursEnabled = ev.target.checked; }); rerenderSettingsKeepingScroll(); });
-  root.querySelectorAll('.avail-hour-row').forEach(row => {
-    const day = Number(row.dataset.day);
-    const on = row.querySelector('.avail-day-on'), s = row.querySelector('.avail-start'), e = row.querySelector('.avail-end');
-    const save = ()=>{
-      if(on.checked && hhmmToMin(e.value) <= hhmmToMin(s.value)){ alert('Bitiş saati başlangıçtan sonra olmalı.'); rerenderSettingsKeepingScroll(); return; }
-      updateAvailability(a => { a.hours[day] = on.checked ? { start: s.value || '09:00', end: e.value || '17:00' } : null; });
-      s.disabled = e.disabled = !on.checked;
-    };
-    on.addEventListener('change', save); s.addEventListener('change', save); e.addEventListener('change', save);
-  });
-  const allDay = q('#availBlockAllDay');
-  allDay.addEventListener('change', ()=>{ q('#availBlockStart').disabled = q('#availBlockEnd').disabled = allDay.checked; });
-  q('#availBlockAdd').addEventListener('click', ()=>{
-    const from = q('#availBlockFrom').value, to = q('#availBlockTo').value || from;
-    if(!from){ alert('Başlangıç tarihini seç.'); return; }
-    if(to < from){ alert('Bitiş tarihi başlangıçtan önce olamaz.'); return; }
-    const start = q('#availBlockStart').value, end = q('#availBlockEnd').value;
-    if(!allDay.checked && (!start || !end || hhmmToMin(end) <= hhmmToMin(start))){ alert('Bitiş saati başlangıçtan sonra olmalı.'); return; }
-    updateAvailability(a => { a.blocks.push({ id: uid(), from, to, allDay: allDay.checked, start: allDay.checked ? null : start, end: allDay.checked ? null : end, note: q('#availBlockNote').value.trim() }); });
-    rerenderSettingsKeepingScroll();
-  });
-  root.querySelectorAll('.avail-block-del').forEach(btn => btn.addEventListener('click', ()=>{
-    const id = btn.closest('[data-id]').dataset.id;
-    updateAvailability(a => { a.blocks = a.blocks.filter(b => b.id !== id); });
-    rerenderSettingsKeepingScroll();
-  }));
-  q('#availHolidaysEnabled').addEventListener('change', ev => { updateAvailability(a => { a.holidaysEnabled = ev.target.checked; }); rerenderSettingsKeepingScroll(); });
-  root.querySelectorAll('.avail-holiday-on').forEach(cb => cb.addEventListener('change', ()=>{
-    updateAvailability(a => { a.holidayOverrides[cb.dataset.id] = cb.checked; });
-  }));
-  q('#availCheckConflicts').addEventListener('change', ev => { updateAvailability(a => { a.checkConflicts = ev.target.checked; }); });
-  root.querySelectorAll('.avail-cal-del').forEach(btn => btn.addEventListener('click', ()=>{
-    const id = btn.closest('[data-cal]').dataset.cal;
-    updateAvailability(a => { a.conflictCalendars = a.conflictCalendars.filter(c => c.id !== id); });
-    rerenderSettingsKeepingScroll();
-  }));
-  const status = q('#availCalStatus');
-  q('#availCalAdd').addEventListener('click', async ()=>{
-    const id = q('#availCalId').value.trim();
-    if(!id) return;
-    status.textContent = 'Takvim kontrol ediliyor…';
-    const ok = await addConflictCalendar(id, id);
-    rerenderSettingsKeepingScroll();
-    if(!ok) alert('Takvim eklendi ama okunamadı. Kimliği kontrol et; takvim başka bir hesaba aitse önce bu hesapla paylaşılmış olmalı.');
-  });
-  q('#availCalPick').addEventListener('click', async ()=>{
-    status.textContent = 'Google izni bekleniyor…';
-    const token = await requestCalendarListToken();
-    if(!token){ status.textContent = 'Takvim listesi alınamadı. Takvim kimliğini elle yapıştırarak ekleyebilirsin (Google Takvim > takvim ayarları > "Takvim kimliği").'; return; }
-    let items = [];
-    try{
-      const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250', { headers: { 'Authorization': `Bearer ${token}` } });
-      if(!res.ok) throw new Error('HTTP ' + res.status);
-      items = ((await res.json()).items || []).filter(c => !c.primary);
-    }catch(e){ status.textContent = 'Takvim listesi alınamadı: ' + e.message; return; }
-    status.textContent = '';
-    const chosen = await openCalendarListPicker(items);
-    if(!chosen) return;
-    status.textContent = 'Takvimler kontrol ediliyor…';
-    const results = await Promise.all(chosen.map(async c => ({ id: c.id, name: c.summaryOverride || c.summary || c.id, readable: await testCalendarReadable(c.id) })));
-    updateAvailability(a => { a.conflictCalendars = results; });
-    rerenderSettingsKeepingScroll();
-    if(results.some(r => !r.readable)) alert('Bazı takvimler eklendi ama etkinlikleri okunamadı; listede "okunamadı" yazanlar çakışma kontrolüne girmez.');
-  });
 }
 
 /* ---------- Client forms: consent + scales sent by a one-time link ---------- */
@@ -10683,7 +10136,6 @@ function renderSettingsPage(){
       ${state.driveInvoiceFolderId ? `<button class="settings-btn" id="settingsClearDriveFolderBtn" style="width:auto; margin-left:8px;">Kaldır</button>` : ''}
     </div>
 
-    ${availabilitySettingsHtml()}
 
     ${formsSettingsHtml()}
 
@@ -10785,7 +10237,6 @@ function renderSettingsPage(){
     });
   }
 
-  wireAvailabilitySettings();
   wireFormsSettings();
   document.getElementById('settingsExportBtn').addEventListener('click', exportCurrentDataJson);
   document.getElementById('settingsImportInput').addEventListener('change', handleImportJsonFile);
@@ -11120,9 +10571,7 @@ function renderMonthGrid(monthStart, byDate){
     if(iso === todayStr) cls.push('today');
     if(iso === calendarSelectedDate) cls.push('selected');
     if(count) cls.push('has-events');
-    const off = dayOffLabel(iso);
-    if(off) cls.push('day-off');
-    cells += `<button type="button" class="${cls.join(' ')}" data-date="${iso}"${off ? ` title="${escapeAttr(off)}"` : ''}><span class="cal-big-cell-num">${d}</span>${count?`<span class="cal-big-cell-dot"></span>`:''}</button>`;
+    cells += `<button type="button" class="${cls.join(' ')}" data-date="${iso}"><span class="cal-big-cell-num">${d}</span>${count?`<span class="cal-big-cell-dot"></span>`:''}</button>`;
   }
   return `
     <div class="cal-month-weekdays">${dayNames.map(d=>`<span>${d}</span>`).join('')}</div>
@@ -11141,9 +10590,7 @@ function renderWeekGrid(weekStart, byDate){
     const cls = ['cal-week-cell'];
     if(iso === todayStr) cls.push('today');
     if(iso === calendarSelectedDate) cls.push('selected');
-    const off = dayOffLabel(iso);
-    if(off) cls.push('day-off');
-    cells += `<button type="button" class="${cls.join(' ')}" data-date="${iso}"${off ? ` title="${escapeAttr(off)}"` : ''}>
+    cells += `<button type="button" class="${cls.join(' ')}" data-date="${iso}">
       <span class="cal-week-cell-day">${dayNamesFull[d.getDay()].slice(0,3)}</span>
       <span class="cal-week-cell-num">${d.getDate()}</span>
       ${count?`<span class="cal-week-cell-count">${count}</span>`:''}
