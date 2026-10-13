@@ -3991,7 +3991,7 @@ function renderMain(){
     document.body.classList.remove('mobile-detail');
   });
 
-  if(client.profile && client.profile.email){
+  if(clientInviteEmails(client).length){
     loadNextAppointmentInfo(client);
   }
 
@@ -5519,7 +5519,8 @@ async function loadNextAppointmentInfo(client){
     }
     return;
   }
-  const email = client.profile.email.trim().toLowerCase();
+  const emails = clientInviteEmails(client);
+  if(!emails.length) return;
   const events = await fetchUpcomingRangeEvents(180);
   const stillThere = document.getElementById('nextApptInfo');
   if(!stillThere) return; // user navigated away while loading
@@ -5540,7 +5541,8 @@ async function loadNextAppointmentInfo(client){
   const today = todayIso();
   const matches = events.filter(ev=>{
     const attendees = ev.attendees || [];
-    const isMatch = attendees.some(a => (a.email||'').trim().toLowerCase() === email);
+    // Match on either person: a session with only the second person invited belongs to this client too.
+    const isMatch = attendees.some(a => emails.includes((a.email||'').trim().toLowerCase()));
     if(!isMatch) return false;
     const start = ev.start && (ev.start.dateTime || ev.start.date);
     if(!start) return false;
@@ -10643,11 +10645,17 @@ function renderSettingsPage(){
   document.getElementById('settingsResetBtn').addEventListener('click', resetAllData);
 }
 
+// Every invite address of a client: the main person and, for couples/families, the second person.
+function clientInviteEmails(client){
+  const p = (client && client.profile) || {};
+  return [p.email, p.secondPerson && p.secondPerson.email]
+    .map(e => (e || '').trim().toLowerCase()).filter(Boolean);
+}
+
 function getKnownClientEmails(){
   const map = {};
   state.clients.forEach(c=>{
-    const email = c.profile && c.profile.email && c.profile.email.trim().toLowerCase();
-    if(email) map[email] = c;
+    clientInviteEmails(c).forEach(email => { if(!map[email]) map[email] = c; });
   });
   return map;
 }
