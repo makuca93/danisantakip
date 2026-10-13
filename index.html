@@ -1289,6 +1289,7 @@
   .cal-nav-btn:hover{background:var(--neutral-bg);}
   .cal-nav-label{font-size:13px; font-weight:600; color:var(--ink); text-align:center; flex:1;}
   .cal-grid-container{margin-bottom:12px;}
+  .cal-grid-container:empty{display:none;}
   .cal-month-weekdays{
     display:grid;
     grid-template-columns:repeat(7, 1fr);
@@ -10650,7 +10651,7 @@ function renderWeekGrid(weekStart, byDate){
 function renderDayGrid(dayStart){
   const iso = isoDate(dayStart);
   calendarSelectedDate = iso;
-  return `<div class="cal-day-header-big">${turkishDayName(iso)}, ${formatShortDate(iso)}</div>`;
+  return ''; // the date is already shown in the navigation bar above
 }
 
 function wireCalendarGrid(byDate){
