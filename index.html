@@ -2161,6 +2161,19 @@
   .surprise-continue-btn:hover{filter:brightness(0.97);}
 
   /* Reschedule popover — mini month calendar + 15min time dropdown */
+  .home-new-appt-btn{display:block; width:100%; margin:0 0 10px; padding:10px 12px; border:1px dashed var(--card-line); border-radius:9px; background:var(--paper); color:inherit; font:inherit; font-weight:600; cursor:pointer; text-align:left;}
+  .home-new-appt-btn:hover{border-style:solid;}
+  .home-appt-overlay{position:fixed; inset:0; background:rgba(43,45,51,0.35); display:flex; align-items:flex-start; justify-content:center; z-index:150; padding:24px 16px; overflow-y:auto;}
+  .home-appt-box{background:var(--card); border-radius:14px; width:100%; max-width:560px; padding:16px 18px; box-shadow:0 10px 40px rgba(0,0,0,.18);}
+  .home-appt-head{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:12px;}
+  .home-appt-close{background:none; border:none; font-size:16px; cursor:pointer; color:var(--muted); padding:4px 8px;}
+  .home-appt-search{width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--card-line); border-radius:8px; font:inherit; margin-bottom:10px;}
+  .home-appt-list{display:flex; flex-direction:column; gap:6px; max-height:55vh; overflow-y:auto;}
+  .home-appt-client, .home-appt-who button{text-align:left; padding:11px 12px; border:1px solid var(--card-line); border-radius:8px; background:var(--paper); font:inherit; cursor:pointer; color:inherit;}
+  .home-appt-client:hover, .home-appt-who button:hover{border-color:var(--muted);}
+  .home-appt-who{display:flex; flex-direction:column; gap:8px;}
+  .home-appt-back{margin-top:12px; background:none; border:none; color:var(--muted); cursor:pointer; font:inherit; padding:4px 0;}
+  .home-appt-box #calendarPanel{border:none; padding:0; margin-bottom:0;}
   .reschedule-overlay{
     position:fixed; inset:0;
     background:rgba(43,45,51,0.35);
@@ -5427,6 +5440,16 @@ function calendarPanelHtml(client){
           <option value="60">60 dakika</option>
         </select>
       </div>
+      ${hasNamedSecondPerson(client) ? `
+      <div class="field-block full">
+        <label>Kim için?</label>
+        <select class="cal-with">
+          <option value="" selected>— Seç —</option>
+          <option value="both">👥 Birlikte — ${escapeHtml(client.name)} & ${escapeHtml(client.profile.secondPerson.name.trim())}</option>
+          <option value="primary">👤 Sadece ${escapeHtml(client.name)}</option>
+          <option value="second">👤 Sadece ${escapeHtml(client.profile.secondPerson.name.trim())}</option>
+        </select>
+      </div>` : ''}
       <div class="field-block full" id="calInviteBlock">
         <label>Davet Edilecekler</label>
         ${client.profile && client.profile.secondPerson && client.profile.secondPerson.email ? `
@@ -5733,9 +5756,15 @@ function wireCalendarPanel(client){
   let titleManuallyEdited = false;
   titleInput.addEventListener('input', ()=>{ titleManuallyEdited = true; });
 
+  const withSel = panel.querySelector('.cal-with');
   function updateDefaultInviteTitle(){
     if(titleManuallyEdited) return;
     const names = [];
+    if(withSel && withSel.value){
+      const a = client.name, b = client.profile.secondPerson.name.trim();
+      titleInput.value = `${withSel.value === 'both' ? a + ' & ' + b : (withSel.value === 'second' ? b : a)}-Psychotherapy Session`;
+      return;
+    }
     const singleCb = panel.querySelector('.cal-invite');
     const primaryCb = panel.querySelector('.cal-invite-primary');
     const secondCb = panel.querySelector('.cal-invite-second');
@@ -5748,6 +5777,17 @@ function wireCalendarPanel(client){
   [panel.querySelector('.cal-invite'), panel.querySelector('.cal-invite-primary'), panel.querySelector('.cal-invite-second')]
     .filter(Boolean)
     .forEach(cb => cb.addEventListener('change', updateDefaultInviteTitle));
+  if(withSel) withSel.addEventListener('change', ()=>{
+    // Pre-tick the invites to match who the session is for (still editable).
+    const v = withSel.value;
+    const pCb = panel.querySelector('.cal-invite-primary'), sCb = panel.querySelector('.cal-invite-second'), oneCb = panel.querySelector('.cal-invite');
+    if(v){
+      if(pCb && !pCb.disabled) pCb.checked = (v === 'both' || v === 'primary');
+      if(sCb) sCb.checked = (v === 'both' || v === 'second');
+      if(oneCb && !oneCb.disabled) oneCb.checked = (v === 'both' || v === 'primary');
+    }
+    updateDefaultInviteTitle();
+  });
 
   panel.querySelector('.cal-create-btn').addEventListener('click', async ()=>{
     const title = panel.querySelector('.cal-title').value.trim();
@@ -5768,8 +5808,13 @@ function wireCalendarPanel(client){
     if(secondInviteCb && secondInviteCb.checked && client.profile && client.profile.secondPerson && client.profile.secondPerson.email){
       inviteEmails.push(client.profile.secondPerson.email.trim());
     }
-    const invitedBoth = secondInviteCb ? (!!(primaryInviteCb && primaryInviteCb.checked) && secondInviteCb.checked) : undefined;
-    const attendee = (secondInviteCb && invitedBoth === false) ? (secondInviteCb.checked ? 'second' : ((primaryInviteCb && primaryInviteCb.checked) ? 'primary' : undefined)) : undefined;
+    if(withSel && !withSel.value){
+      alert('Randevunun kim için olduğunu seç (birlikte ya da tek kişi).');
+      withSel.focus();
+      return;
+    }
+    const invitedBoth = withSel ? (withSel.value === 'both') : (secondInviteCb ? (!!(primaryInviteCb && primaryInviteCb.checked) && secondInviteCb.checked) : undefined);
+    const attendee = withSel ? (withSel.value === 'both' ? undefined : withSel.value) : ((secondInviteCb && invitedBoth === false) ? (secondInviteCb.checked ? 'second' : ((primaryInviteCb && primaryInviteCb.checked) ? 'primary' : undefined)) : undefined);
     const repeatWeekly = panel.querySelector('.cal-repeat').checked;
     const repeatWeeks = Math.max(2, Math.min(52, Number(panel.querySelector('.cal-repeat-weeks').value) || 8));
     if(!title || !dateStr || !timeRaw){
@@ -10617,9 +10662,99 @@ function wireCalendarGrid(byDate){
   });
 }
 
+/* ---------- Home calendar: create an appointment straight from a chosen day ---------- */
+// Step 1 pick the client, step 2 (couples/families) who it is for, step 3 the same appointment panel as on the client page
+// (time, duration, invites, weekly repeat, past-date session note), so every existing rule applies unchanged.
+function openHomeAppointmentDialog(dateStr){
+  if(document.getElementById('calendarPanel')) return; // a client page panel is already in the DOM
+  const overlay = document.createElement('div');
+  overlay.className = 'home-appt-overlay';
+  overlay.innerHTML = `<div class="home-appt-box" role="dialog" aria-modal="true">
+    <div class="home-appt-head"><strong class="home-appt-title"></strong><button type="button" class="home-appt-close" title="Kapat">✕</button></div>
+    <div class="home-appt-body"></div></div>`;
+  document.body.appendChild(overlay);
+  const titleEl = overlay.querySelector('.home-appt-title');
+  const body = overlay.querySelector('.home-appt-body');
+  let observer = null;
+  const close = ()=>{ if(observer) observer.disconnect(); overlay.remove(); };
+  overlay.querySelector('.home-appt-close').addEventListener('click', close);
+  overlay.addEventListener('click', ev => { if(ev.target === overlay) close(); });
+
+  const clients = (state.clients || []).filter(c => !(c.profile && c.profile.terminated))
+    .sort((a,b)=> clientDisplayName(a).localeCompare(clientDisplayName(b), 'tr'));
+
+  function stepClient(){
+    titleEl.textContent = `${turkishDayName(dateStr)}, ${formatShortDate(dateStr)} — danışan seç`;
+    body.innerHTML = `<input type="search" class="home-appt-search" placeholder="Danışan ara…" autocomplete="off">
+      <div class="home-appt-list"></div>`;
+    const input = body.querySelector('.home-appt-search');
+    const list = body.querySelector('.home-appt-list');
+    const draw = ()=>{
+      const q = input.value.trim().toLocaleLowerCase('tr');
+      const hits = clients.filter(c => !q || clientDisplayName(c).toLocaleLowerCase('tr').includes(q)
+        || (c.name||'').toLocaleLowerCase('tr').includes(q)
+        || ((c.profile && c.profile.secondPerson && c.profile.secondPerson.name) || '').toLocaleLowerCase('tr').includes(q));
+      list.innerHTML = hits.length ? hits.map(c => `<button type="button" class="home-appt-client" data-id="${escapeAttr(c.id)}">
+          ${hasNamedSecondPerson(c) ? '👥' : '👤'} ${escapeHtml(clientDisplayName(c))}</button>`).join('')
+        : '<div class="cal-day-empty">Eşleşen danışan yok.</div>';
+      list.querySelectorAll('.home-appt-client').forEach(b => b.addEventListener('click', ()=>{
+        const c = state.clients.find(x => x.id === b.dataset.id);
+        if(!c) return;
+        if(hasNamedSecondPerson(c)) stepWho(c); else stepPanel(c, '');
+      }));
+    };
+    input.addEventListener('input', draw);
+    draw();
+    setTimeout(()=> input.focus(), 30);
+  }
+
+  function stepWho(c){
+    const a = c.name, b = c.profile.secondPerson.name.trim();
+    titleEl.textContent = `${clientDisplayName(c)} — kim için?`;
+    body.innerHTML = `<div class="home-appt-who">
+        <button type="button" data-v="both">👥 Birlikte — ${escapeHtml(a)} & ${escapeHtml(b)}</button>
+        <button type="button" data-v="primary">👤 Sadece ${escapeHtml(a)}</button>
+        <button type="button" data-v="second">👤 Sadece ${escapeHtml(b)}</button>
+      </div>
+      <button type="button" class="home-appt-back">← Başka danışan seç</button>`;
+    body.querySelectorAll('.home-appt-who button').forEach(btn => btn.addEventListener('click', ()=> stepPanel(c, btn.dataset.v)));
+    body.querySelector('.home-appt-back').addEventListener('click', stepClient);
+  }
+
+  function stepPanel(c, who){
+    titleEl.textContent = `${clientDisplayName(c)} — randevu`;
+    body.innerHTML = calendarPanelHtml(c) + `<button type="button" class="home-appt-back">← Başka danışan seç</button>`;
+    const panel = body.querySelector('#calendarPanel');
+    panel.classList.add('open');
+    const dtBtn = panel.querySelector('.cal-datetime-btn');
+    dtBtn.setAttribute('data-date', dateStr);
+    dtBtn.textContent = calDateTimeButtonLabel(dateStr, '');
+    wireCalendarPanel(c); // loads that day's existing appointments because the panel is open
+    const withSel = panel.querySelector('.cal-with');
+    if(withSel && who){ withSel.value = who; withSel.dispatchEvent(new Event('change')); }
+    body.querySelector('.home-appt-back').addEventListener('click', ()=>{ if(observer) observer.disconnect(); observer = null; stepClient(); });
+    // The panel closes itself after a successful create (and re-renders the home page) — close the dialog with it.
+    observer = new MutationObserver(()=>{ if(!panel.classList.contains('open')) close(); });
+    observer.observe(panel, { attributes: true, attributeFilter: ['class'] });
+    dtBtn.click(); // go straight to picking the time
+  }
+
+  stepClient();
+}
+
 function renderCalendarSelectedList(byDate){
   const listBox = document.getElementById('calSelectedList');
   if(!listBox) return;
+  renderCalendarSelectedListInner(byDate, listBox);
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'home-new-appt-btn';
+  addBtn.textContent = `➕ ${formatShortDate(calendarSelectedDate)} için randevu oluştur`;
+  addBtn.addEventListener('click', ()=> openHomeAppointmentDialog(calendarSelectedDate));
+  listBox.insertBefore(addBtn, listBox.firstChild);
+}
+
+function renderCalendarSelectedListInner(byDate, listBox){
   const dayRowHtml = (items)=> items.map(({ev,client})=>{
     const timeLabel = ev.start.dateTime ? formatEventTime(ev.start.dateTime) : 'Tüm gün';
     return `<div class="cal-day-event-row" data-client-id="${client.id}">
