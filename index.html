@@ -2162,6 +2162,26 @@
   .surprise-continue-btn:hover{filter:brightness(0.97);}
 
   /* Reschedule popover — mini month calendar + 15min time dropdown */
+  .extra-cal-block{margin-top:12px; padding-top:10px; border-top:1px dashed var(--card-line);}
+  .extra-cal-head{font-size:11.5px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-bottom:6px;}
+  .extra-cal-row{display:flex; align-items:baseline; gap:8px; padding:5px 0; font-size:13px; color:var(--muted);}
+  .extra-cal-time{flex:0 0 auto; min-width:118px; font-variant-numeric:tabular-nums;}
+  .extra-cal-title{flex:1; color:var(--ink); opacity:.8; min-width:0; overflow-wrap:anywhere;}
+  .extra-cal-name{flex:0 0 auto; font-size:11px; padding:1px 7px; border-radius:999px; background:var(--neutral-bg); max-width:40%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .conflict-group{background:#fdf0dc; border:1px solid #e6bf86; border-radius:8px; padding:10px 12px; margin-top:8px; font-size:13px; color:#5c4126;}
+  .conflict-group ul{margin:6px 0 0; padding-left:18px;}
+  .extra-cal-list{display:flex; flex-direction:column; gap:6px; margin:8px 0;}
+  .extra-cal-setting-row{display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--card-line); border-radius:7px; font-size:13px;}
+  .extra-cal-setting-row em{display:block; font-style:normal; font-size:11.5px; color:var(--muted); overflow-wrap:anywhere;}
+  .extra-cal-setting-row button{background:none; border:none; color:var(--muted); cursor:pointer; font-size:12px; padding:4px 6px;}
+  .extra-cal-bad{color:#b0602a; font-weight:600;}
+  .extra-cal-add{display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;}
+  .extra-cal-add input{flex:1 1 180px; min-width:0;}
+  .extra-cal-pick{display:flex; align-items:center; gap:8px; font-size:13px; padding:6px 0;}
+  .extra-cal-help{margin-top:10px; font-size:13px; color:var(--muted);}
+  .extra-cal-help summary{cursor:pointer;}
+  .extra-cal-help ol{padding-left:18px;}
+  @media (max-width: 520px){ .extra-cal-row{flex-wrap:wrap;} .extra-cal-time{min-width:0;} }
   .home-new-appt-btn{display:flex; align-items:center; gap:10px; width:100%; margin:0 0 12px; padding:9px 12px; border:1px solid var(--highlight-line); border-radius:10px; background:linear-gradient(135deg, var(--grad-start), var(--grad-end)); color:var(--ink); font-family:inherit; font-size:13.5px; font-weight:500; letter-spacing:.1px; cursor:pointer; text-align:left; transition:box-shadow .15s, transform .15s;}
   .home-new-appt-btn:hover{box-shadow:0 2px 10px rgba(43,45,51,.08); transform:translateY(-1px);}
   .home-new-appt-btn .plus{flex:0 0 auto; width:24px; height:24px; border-radius:50%; background:var(--card); border:1px solid var(--highlight-line); display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1; color:var(--ink);}
@@ -4310,7 +4330,8 @@ function miniCalendarMonthHtml(year, month, selectedIso){
 
 // Opens a small popover with a mini month calendar (date) + 15-minute dropdown (time)
 // to replace the old prompt()-based reschedule flow.
-function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm, title }){
+// `conflictCheck` ({ durationMinutes, skipEventId }) warns about clashes with the main and extra calendars on Kaydet.
+function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm, title, conflictCheck }){
   const overlay = document.createElement('div');
   overlay.className = 'reschedule-overlay';
 
@@ -4353,8 +4374,15 @@ function openReschedulePopover({ initialDate, initialTimeLabel, onConfirm, title
     overlay.querySelector('.reschedule-cancel-btn').addEventListener('click', ()=>{
       overlay.remove();
     });
-    overlay.querySelector('.reschedule-confirm-btn').addEventListener('click', ()=>{
+    overlay.querySelector('.reschedule-confirm-btn').addEventListener('click', async (ev)=>{
       const timeLabel = overlay.querySelector('.reschedule-time-select').value;
+      if(conflictCheck){
+        const btn = ev.currentTarget;
+        btn.disabled = true; btn.textContent = 'Kontrol ediliyor…';
+        const ok = await confirmNoConflict(selectedIso, parseAmPmTime(timeLabel), conflictCheck.durationMinutes || 50, conflictCheck.skipEventId);
+        btn.disabled = false; btn.textContent = 'Kaydet';
+        if(!ok) return; // stay open so another time can be picked
+      }
       overlay.remove();
       onConfirm(selectedIso, timeLabel);
     });
@@ -5660,6 +5688,19 @@ async function loadCalendarDayEvents(panel, client){
   const box = panel.querySelector('.cal-day-events');
   if(!dateStr){ box.textContent = 'Tarih seçince görünecek…'; return; }
   box.textContent = 'Yükleniyor…';
+  const extraBox = (()=>{
+    let el = panel.querySelector('.cal-extra-events');
+    if(!el){ el = document.createElement('div'); el.className = 'cal-extra-events'; box.parentNode.insertBefore(el, box.nextSibling); }
+    el.innerHTML = '';
+    return el;
+  })();
+  if(getExtraCalendars().length){
+    fetchExtraEventsForDay(dateStr).then(items => {
+      const cur = panel.querySelector('.cal-datetime-btn');
+      if(!cur || cur.getAttribute('data-date') !== dateStr) return;
+      extraBox.innerHTML = items ? extraEventsHtml(items) : '';
+    }).catch(()=>{});
+  }
   const events = await fetchDayEvents(dateStr);
   if(events === null){
     box.textContent = 'Randevular yüklenemedi (Google bağlantısı gerekebilir).';
@@ -5709,6 +5750,7 @@ async function loadCalendarDayEvents(panel, client){
       const currentTimeLabel = (timeEl && timeEl.textContent !== 'Tüm gün') ? timeEl.textContent : '10:00 AM';
 
       openReschedulePopover({
+        conflictCheck: { durationMinutes: 50, skipEventId: eventId },
         initialDate: dateStr,
         initialTimeLabel: currentTimeLabel,
         onConfirm: async (newDate, newTimeLabel)=>{
@@ -5858,6 +5900,23 @@ function wireCalendarPanel(client){
       return;
     }
 
+    // Clashes with the main calendar or the extra calendars: warn (never block) before creating anything.
+    const skipDates = new Set();
+    btn.textContent = 'Kontrol ediliyor…';
+    if(repeatWeekly){
+      const base0 = new Date(dateStr + 'T00:00:00');
+      const weekDates = Array.from({ length: repeatWeeks }, (_, i) => isoDate(addDaysLocal(base0, i*7)));
+      const checked = await Promise.all(weekDates.map(async d => ({ dateStr: d, issues: await calendarConflictIssues(d, timeStr, durationMinutes).catch(()=>[]) })));
+      const problems = checked.filter(c => c.issues.length);
+      if(problems.length){
+        const choice = await askConflictWarning(problems, problems.length < repeatWeeks);
+        if(!choice){ btn.disabled = false; btn.textContent = 'Randevu Oluştur'; return; }
+        if(choice === 'skip') problems.forEach(pr => skipDates.add(pr.dateStr));
+      }
+    }else if(!(await confirmNoConflict(dateStr, timeStr, durationMinutes))){
+      btn.disabled = false; btn.textContent = 'Randevu Oluştur'; return;
+    }
+
     if(repeatWeekly){
       const baseDate = new Date(dateStr + 'T00:00:00');
       let successCount = 0;
@@ -5865,6 +5924,7 @@ function wireCalendarPanel(client){
         btn.textContent = `Oluşturuluyor… (${i+1}/${repeatWeeks})`;
         const d = addDaysLocal(baseDate, i*7);
         const dStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        if(skipDates.has(dStr)) continue; // skipped in the clash warning
         const created = await createCalendarEvent(client, { title, dateStr: dStr, timeStr, durationMinutes, inviteEmails });
         if(created){
           successCount++;
@@ -5887,7 +5947,7 @@ function wireCalendarPanel(client){
       if(successCount) logAudit('randevu oluşturuldu (haftalık tekrar)', `${client.name} - ${successCount} hafta`, client.id);
       calendarViewCache = {};
       btn.disabled = false; btn.textContent = 'Randevu Oluştur';
-      alert(`${successCount} / ${repeatWeeks} randevu Google Takvimine eklendi.`);
+      alert(`${successCount} / ${repeatWeeks - skipDates.size} randevu Google Takvimine eklendi.` + (skipDates.size ? ` ${skipDates.size} hafta çakışma nedeniyle atlandı.` : ''));
       calendarCheckedClientIds.delete(client.id);
       panel.classList.remove('open');
       if(successCount) markPreviousSessionAsNext(client, dateStr, title);
@@ -6792,6 +6852,10 @@ function renderSessionCard(client, session, index, defaultOpenId){
     const originalDate = session.date;
     const originalStartTime = session.calendarStartTime;
     openReschedulePopover({
+      conflictCheck: {
+        durationMinutes: (session.calendarStartTime && session.calendarEndTime) ? Math.max(15, Math.round((new Date(session.calendarEndTime) - new Date(session.calendarStartTime)) / 60000)) : 50,
+        skipEventId: session.calendarEventId || session.detachedFromEventId
+      },
       title: 'Seans Tarih ve Saatini Değiştir',
       initialDate: session.date,
       initialTimeLabel: session.calendarStartTime ? formatEventTime(session.calendarStartTime) : '10:00 AM',
@@ -7257,6 +7321,274 @@ async function sendTaskReminder(taskId){
     alert('Hatırlatma gönderilemedi: ' + errText);
   }
   if(mainView === 'practice') renderPracticeContent();
+}
+
+/* ---------- Extra Google calendars: read-only, never shown as appointments ---------- */
+// Other calendars (another Gmail shared with this account, a holiday calendar…). Their events are only
+// listed under the chosen day and checked for clashes when an appointment is created or moved.
+const CANADA_HOLIDAY_CAL_ID = 'en.canadian#holiday@group.v.calendar.google.com';
+
+function getExtraCalendars(){ return Array.isArray(state && state.extraCalendars) ? state.extraCalendars : []; }
+function setExtraCalendars(list){ state.extraCalendars = list; saveState(); extraDayCache = {}; }
+
+async function fetchCalendarEventsForDay(token, calId, dateStr){
+  const start = new Date(`${dateStr}T00:00:00`);
+  const end = addDaysLocal(start, 1);
+  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events?timeMin=${encodeURIComponent(start.toISOString())}&timeMax=${encodeURIComponent(end.toISOString())}&singleEvents=true&orderBy=startTime&maxResults=100`;
+  const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  return ((await res.json()).items || []).filter(ev => ev.status !== 'cancelled');
+}
+
+function eventIsBusy(ev){
+  if(!ev || ev.status === 'cancelled' || ev.transparency === 'transparent') return false;
+  const me = (ev.attendees || []).find(x => x.self);
+  return !(me && me.responseStatus === 'declined');
+}
+function eventIntervalMs(ev){
+  if(ev.start && ev.start.dateTime) return [new Date(ev.start.dateTime).getTime(), new Date(ev.end.dateTime).getTime()];
+  if(ev.start && ev.start.date) return [new Date(ev.start.date + 'T00:00:00').getTime(), new Date(ev.end.date + 'T00:00:00').getTime()];
+  return null;
+}
+function eventTimeRangeLabel(ev){
+  return ev.start && ev.start.dateTime ? `${formatEventTime(ev.start.dateTime)}–${formatEventTime(ev.end.dateTime)}` : 'Tüm gün';
+}
+
+// Events of the extra calendars on one day: [{ ev, cal }]. Cached for a few minutes.
+let extraDayCache = {};
+async function fetchExtraEventsForDay(dateStr){
+  const cals = getExtraCalendars();
+  if(!cals.length || !dateStr) return [];
+  const hit = extraDayCache[dateStr];
+  if(hit && Date.now() - hit.at < 5 * 60000) return hit.items;
+  const token = await ensureGoogleAccessToken();
+  if(!token) return null;
+  const lists = await Promise.all(cals.map(async c => {
+    try{ return (await fetchCalendarEventsForDay(token, c.id, dateStr)).map(ev => ({ ev, cal: c })); }
+    catch(e){ console.warn('Ek takvim okunamadı', c.id, e); return []; }
+  }));
+  const items = lists.flat().sort((a,b)=> ((a.ev.start.dateTime || a.ev.start.date || '')).localeCompare(b.ev.start.dateTime || b.ev.start.date || ''));
+  extraDayCache[dateStr] = { at: Date.now(), items };
+  return items;
+}
+
+function extraEventsHtml(items, heading){
+  if(!items || !items.length) return '';
+  return `<div class="extra-cal-block"><div class="extra-cal-head">${heading || 'Diğer takvimlerde bu gün'}</div>${items.map(({ ev, cal }) => `
+    <div class="extra-cal-row"><span class="extra-cal-time">${eventTimeRangeLabel(ev)}</span><span class="extra-cal-title">${escapeHtml(ev.summary || 'Meşgul')}</span><span class="extra-cal-name">${escapeHtml(cal.name || cal.id)}</span></div>`).join('')}</div>`;
+}
+
+// What clashes with dateStr timeStr (+duration): busy events in the main calendar and the extra calendars,
+// plus any all-day event of an extra calendar (e.g. a statutory holiday).
+async function calendarConflictIssues(dateStr, timeStr, durationMinutes, skipEventId){
+  if(!dateStr || !timeStr) return [];
+  const token = await ensureGoogleAccessToken();
+  if(!token) return [];
+  const cals = [{ id: 'primary', name: '' }, ...getExtraCalendars()];
+  const lists = await Promise.all(cals.map(async c => {
+    try{ return (await fetchCalendarEventsForDay(token, c.id, dateStr)).map(ev => ({ ev, cal: c })); }
+    catch(e){ return []; }
+  }));
+  const start = new Date(`${dateStr}T${timeStr}:00`).getTime();
+  const end = start + (durationMinutes || 50) * 60000;
+  const seen = new Set(), issues = [];
+  lists.flat().forEach(({ ev, cal }) => {
+    if(skipEventId && ev.id === skipEventId) return;
+    const iv = eventIntervalMs(ev);
+    if(!iv) return;
+    const allDay = !(ev.start && ev.start.dateTime);
+    const flagged = (allDay && cal.id !== 'primary') || (eventIsBusy(ev) && iv[0] < end && iv[1] > start);
+    if(!flagged) return;
+    const key = (ev.iCalUID || ev.id) + '|' + iv[0];
+    if(seen.has(key)) return; // the same event can sit in two calendars
+    seen.add(key);
+    issues.push(`${allDay ? 'Bu gün' : 'Çakışma'}: ${eventTimeRangeLabel(ev)} — ${ev.summary || 'Meşgul'}${cal.name ? ` (${cal.name})` : ''}`);
+  });
+  return issues;
+}
+
+// groups: [{ dateStr, issues }]. Returns 'continue', 'skip' (weekly repeats only) or null (cancel).
+function askConflictWarning(groups, allowSkip){
+  return new Promise((resolve)=>{
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    modal.style.zIndex = '400';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:440px; max-height:86vh; overflow:auto;">
+        <div class="backups-box-header"><h2>⚠️ Takvimde başka bir şey var</h2></div>
+        <div style="padding:0 20px 20px;">
+          ${groups.map(g => `<div class="conflict-group"><strong>${turkishDayName(g.dateStr)}, ${formatShortDate(g.dateStr)}</strong>
+            <ul>${g.issues.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul></div>`).join('')}
+          <div style="display:flex; flex-direction:column; gap:8px; margin-top:12px;">
+            <button class="reschedule-confirm-btn" id="cfCancel" type="button" style="width:100%;">Vazgeç, başka zaman seçeyim</button>
+            ${allowSkip ? `<button class="settings-btn" id="cfSkip" type="button" style="width:100%;">Bu ${groups.length} haftayı atla, diğerlerini oluştur</button>` : ''}
+            <button class="reschedule-cancel-btn" id="cfGo" type="button" style="width:100%;">${allowSkip || groups.length > 1 ? 'Yine de hepsini oluştur' : 'Yine de devam et'}</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    const done = v => { modal.remove(); resolve(v); };
+    modal.querySelector('#cfCancel').addEventListener('click', ()=> done(null));
+    modal.querySelector('#cfGo').addEventListener('click', ()=> done('continue'));
+    const skip = modal.querySelector('#cfSkip');
+    if(skip) skip.addEventListener('click', ()=> done('skip'));
+  });
+}
+
+async function confirmNoConflict(dateStr, timeStr, durationMinutes, skipEventId){
+  let issues = [];
+  try{ issues = await calendarConflictIssues(dateStr, timeStr, durationMinutes, skipEventId); }catch(e){ return true; }
+  if(!issues.length) return true;
+  return (await askConflictWarning([{ dateStr, issues }], false)) === 'continue';
+}
+
+/* ----- Settings ----- */
+function extraCalendarsSettingsHtml(){
+  const cals = getExtraCalendars();
+  const hasHoliday = cals.some(c => c.id === CANADA_HOLIDAY_CAL_ID);
+  return `
+    <div class="settings-section" id="extraCalendarsSettings">
+      <h3>📅 Ek Google Takvimleri</h3>
+      <p>Buraya eklediğin takvimler uygulamanın takviminde randevu olarak görünmez. Ana sayfada seçtiğin günün altında ve randevu formunda listelenir; randevu oluştururken ya da tarih değiştirirken çakışma varsa uyarı çıkar (engellemez).</p>
+      <div class="extra-cal-list">
+        ${cals.length ? cals.map(c => `<div class="extra-cal-setting-row" data-cal="${escapeAttr(c.id)}"><span>${escapeHtml(c.name || c.id)}${c.name && c.name !== c.id ? `<em>${escapeHtml(c.id)}</em>` : ''}${c.readable === false ? ' <b class="extra-cal-bad">⚠️ okunamadı</b>' : ''}</span><button type="button" class="extra-cal-del" title="Kaldır">✕</button></div>`).join('')
+          : `<div class="todo-empty">Ek takvim eklenmedi.</div>`}
+      </div>
+      <div class="extra-cal-add">
+        <input type="text" id="extraCalId" class="settings-select" placeholder="Takvim kimliği ya da Gmail adresi">
+        <input type="text" id="extraCalName" class="settings-select" placeholder="Görünen ad (ör. CDCD)">
+        <button class="settings-btn" id="extraCalAdd" type="button" style="width:auto;">Ekle</button>
+      </div>
+      <div class="extra-cal-add">
+        <button class="settings-btn" id="extraCalPick" type="button" style="width:auto;">Takvim listemden seç</button>
+        ${hasHoliday ? '' : `<button class="settings-btn" id="extraCalHoliday" type="button" style="width:auto;">🇨🇦 Kanada resmî tatillerini ekle</button>`}
+      </div>
+      <div id="extraCalStatus" class="consent-status" style="margin-top:6px;"></div>
+      <details class="extra-cal-help"><summary>Başka bir Gmail takvimini nasıl eklerim?</summary>
+        <ol>
+          <li>O Gmail hesabıyla Google Takvim'i aç → sol menüde takvimin yanındaki ⋮ → <b>Ayarlar ve paylaşım</b>.</li>
+          <li><b>Belirli kişilerle paylaş</b> → bu uygulamada kullandığın ikitherapy.ca adresini ekle → izin: <b>Tüm etkinlik ayrıntılarını gör</b> (sadece dolu/boş görmek istersen "Yalnızca boş/meşgul").</li>
+          <li>Buraya o Gmail adresini (ana takvimin kimliği odur) yaz, istersen bir ad ver, <b>Ekle</b>'ye bas.</li>
+        </ol>
+        <p>Paylaşım kabul edilince ikitherapy hesabının Google Takvim'inde de görünür; "Takvim listemden seç" ile de seçebilirsin.</p>
+      </details>
+    </div>`;
+}
+
+function rerenderSettingsKeepingScroll(){
+  const scroller = document.scrollingElement || document.documentElement;
+  const main = document.getElementById('main');
+  const y = scroller.scrollTop, my = main ? main.scrollTop : 0;
+  renderSettingsPage();
+  scroller.scrollTop = y;
+  if(main) main.scrollTop = my;
+}
+
+// One-off permission to read the LIST of calendars; separate from the app's normal Google permission.
+function requestCalendarListToken(){
+  return new Promise((resolve)=>{
+    if(!window.google || !window.google.accounts || !window.google.accounts.oauth2){ resolve(null); return; }
+    try{
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GIS_CLIENT_ID,
+        scope: 'https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+        callback: (r)=> resolve(r && r.access_token ? r.access_token : null),
+        error_callback: ()=> resolve(null)
+      });
+      client.requestAccessToken({ login_hint: currentUser && currentUser.email ? currentUser.email : undefined });
+    }catch(e){ resolve(null); }
+  });
+}
+
+async function testCalendarReadable(calId){
+  const token = await ensureGoogleAccessToken();
+  if(!token) return false;
+  try{ await fetchCalendarEventsForDay(token, calId, todayIso()); return true; }catch(e){ return false; }
+}
+
+async function addExtraCalendar(id, name){
+  const readable = await testCalendarReadable(id);
+  const list = getExtraCalendars().filter(c => c.id !== id);
+  list.push({ id, name: name || id, readable });
+  setExtraCalendars(list);
+  return readable;
+}
+
+function openCalendarListPicker(items){
+  return new Promise((resolve)=>{
+    const cur = getExtraCalendars();
+    const modal = document.createElement('div');
+    modal.className = 'backups-modal';
+    modal.style.display = 'flex';
+    modal.innerHTML = `
+      <div class="backups-box" style="max-width:420px; max-height:86vh; overflow:auto;">
+        <div class="backups-box-header"><h2>Eklenecek takvimler</h2></div>
+        <div style="padding:0 20px 20px;">
+          ${items.length ? items.map((c,i) => `<label class="extra-cal-pick"><input type="checkbox" data-i="${i}" ${cur.some(x => x.id === c.id) ? 'checked' : ''}> <span>${escapeHtml(c.summaryOverride || c.summary || c.id)}</span></label>`).join('') : `<div class="todo-empty">Ana takvimin dışında başka takvim bulunamadı.</div>`}
+          <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+            <button class="reschedule-cancel-btn" id="calPickCancel" type="button">Vazgeç</button>
+            <button class="reschedule-confirm-btn" id="calPickSave" type="button">Kaydet</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#calPickCancel').addEventListener('click', ()=>{ modal.remove(); resolve(null); });
+    modal.querySelector('#calPickSave').addEventListener('click', ()=>{
+      const chosen = Array.from(modal.querySelectorAll('input[type=checkbox]')).filter(cb => cb.checked).map(cb => items[Number(cb.dataset.i)]);
+      modal.remove();
+      resolve(chosen);
+    });
+  });
+}
+
+function wireExtraCalendarsSettings(){
+  const root = document.getElementById('extraCalendarsSettings');
+  if(!root) return;
+  const q = sel => root.querySelector(sel);
+  const status = q('#extraCalStatus');
+  root.querySelectorAll('.extra-cal-del').forEach(btn => btn.addEventListener('click', ()=>{
+    const id = btn.closest('[data-cal]').dataset.cal;
+    setExtraCalendars(getExtraCalendars().filter(c => c.id !== id));
+    rerenderSettingsKeepingScroll();
+  }));
+  q('#extraCalAdd').addEventListener('click', async ()=>{
+    const id = q('#extraCalId').value.trim();
+    if(!id) return;
+    status.textContent = 'Takvim kontrol ediliyor…';
+    const ok = await addExtraCalendar(id, q('#extraCalName').value.trim() || id);
+    rerenderSettingsKeepingScroll();
+    if(!ok) alert('Takvim eklendi ama okunamadı. Takvim başka bir hesaba aitse önce bu hesapla (ikitherapy.ca) paylaşılmış olmalı; adresi/kimliği de kontrol et.');
+  });
+  const hol = q('#extraCalHoliday');
+  if(hol) hol.addEventListener('click', async ()=>{
+    status.textContent = 'Tatil takvimi ekleniyor…';
+    const ok = await addExtraCalendar(CANADA_HOLIDAY_CAL_ID, 'Kanada tatilleri');
+    rerenderSettingsKeepingScroll();
+    if(!ok) alert('Tatil takvimi okunamadı. Google Takvim\'de "Diğer takvimler > + > İlgi alanınıza göre takvimlere göz atın > Kanada\'daki tatiller"i açıp sonra "Takvim listemden seç" ile ekleyebilirsin.');
+  });
+  q('#extraCalPick').addEventListener('click', async ()=>{
+    status.textContent = 'Google izni bekleniyor…';
+    const token = await requestCalendarListToken();
+    if(!token){ status.textContent = 'Takvim listesi alınamadı. Takvim kimliğini (ya da Gmail adresini) elle yazarak ekleyebilirsin.'; return; }
+    let items = [];
+    try{
+      const res = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250', { headers: { 'Authorization': `Bearer ${token}` } });
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      items = ((await res.json()).items || []).filter(c => !c.primary);
+    }catch(e){ status.textContent = 'Takvim listesi alınamadı: ' + e.message; return; }
+    status.textContent = '';
+    const chosen = await openCalendarListPicker(items);
+    if(!chosen) return;
+    status.textContent = 'Takvimler kontrol ediliyor…';
+    const results = await Promise.all(chosen.map(async c => {
+      const prev = getExtraCalendars().find(x => x.id === c.id);
+      return { id: c.id, name: (prev && prev.name) || c.summaryOverride || c.summary || c.id, readable: await testCalendarReadable(c.id) };
+    }));
+    setExtraCalendars(results);
+    rerenderSettingsKeepingScroll();
+    if(results.some(r => !r.readable)) alert('Bazı takvimler eklendi ama okunamadı; "okunamadı" yazanlar listede ve çakışma kontrolünde yer almaz.');
+  });
 }
 
 /* ---------- Client forms: consent + scales sent by a one-time link ---------- */
@@ -10186,6 +10518,7 @@ function renderSettingsPage(){
     </div>
 
 
+    ${extraCalendarsSettingsHtml()}
     ${formsSettingsHtml()}
 
     <div class="settings-section">
@@ -10286,6 +10619,7 @@ function renderSettingsPage(){
     });
   }
 
+  wireExtraCalendarsSettings();
   wireFormsSettings();
   document.getElementById('settingsExportBtn').addEventListener('click', exportCurrentDataJson);
   document.getElementById('settingsImportInput').addEventListener('change', handleImportJsonFile);
@@ -10756,6 +11090,15 @@ function renderCalendarSelectedList(byDate){
   addBtn.innerHTML = `<span class="plus">+</span><span class="txt"><span>Yeni randevu</span><span class="sub">${escapeHtml(turkishDayName(calendarSelectedDate))}, ${escapeHtml(formatShortDate(calendarSelectedDate))}</span></span>`;
   addBtn.addEventListener('click', ()=> openHomeAppointmentDialog(calendarSelectedDate));
   listBox.insertBefore(addBtn, listBox.firstChild);
+  if(getExtraCalendars().length && !(calendarViewMode === 'week' && weekShowFullWeek)){
+    const day = calendarSelectedDate;
+    const holder = document.createElement('div');
+    listBox.appendChild(holder);
+    fetchExtraEventsForDay(day).then(items => {
+      if(day !== calendarSelectedDate || !holder.isConnected) return;
+      holder.innerHTML = items === null ? '<div class="extra-cal-block"><div class="extra-cal-head">Diğer takvimler yüklenemedi (Google bağlantısı gerekebilir)</div></div>' : extraEventsHtml(items);
+    }).catch(()=>{});
+  }
 }
 
 function renderCalendarSelectedListInner(byDate, listBox){
