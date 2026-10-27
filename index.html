@@ -7834,6 +7834,18 @@ async function loadPdfJs(){
   throw new Error('PDF okuyucu yüklenemedi (internet bağlantısını kontrol et)');
 }
 
+// PDFs exported from Word (Calibri etc.) often draw "ti", "fi", "ff"… as one ligature glyph whose text
+// value is wrong: "ti" comes out as "5" or "Ɵ". Put the real letters back.
+function fixPdfLigatures(str){
+  return String(str)
+    .replace(/ﬀ/g, 'ff').replace(/ﬁ/g, 'fi').replace(/ﬂ/g, 'fl').replace(/ﬃ/g, 'ffi').replace(/ﬄ/g, 'ffl').replace(/ﬅ|ﬆ/g, 'st')
+    .replace(/Ɵ/g, 'ti')
+    // "5" inside a word ("consen5ng", "5me", "ques5on") — but not numbers, "5pm", "5th", "M5V"
+    .replace(/(?<=[a-zçğıöşü])5(?=[a-zçğıöşü])/g, 'ti')
+    .replace(/(?<![\p{L}\d])5(?=[a-z]{2,})(?!(?:am|pm|th|min|mins|hr|hrs|kg|km|ml|mg)\b)/gu, 'ti')
+    .replace(/(?<=[a-z]{2})5(?![\p{L}\d])/gu, 'ti');
+}
+
 async function pdfToConsentHtml(buffer){
   const pdfjs = await loadPdfJs();
   const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
@@ -7859,7 +7871,7 @@ async function pdfToConsentHtml(buffer){
       }else if(it.str && x - cur.endX > size * 0.18 && !/\s$/.test(cur.runs.length ? cur.runs[cur.runs.length-1].text : '')){
         cur.runs.push({ text: ' ', b: false });
       }
-      if(it.str) cur.runs.push({ text: it.str, b: isBold(it) });
+      if(it.str) cur.runs.push({ text: fixPdfLigatures(it.str), b: isBold(it) });
       cur.size = Math.max(cur.size, size);
       cur.endX = x + (it.width || 0);
       if(it.hasEOL){ lines.push(cur); cur = null; }
