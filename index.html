@@ -1737,6 +1737,7 @@
   .form-alert-banner p{margin:4px 0 8px; color:#6b3a43;}
   .form-alert-open{display:block; width:100%; text-align:left; background:#fff; border:1px solid #e0a3ad; color:#8a3644; font-family:inherit; font-size:13.5px; font-weight:600; padding:9px 12px; border-radius:8px; cursor:pointer; margin-top:6px;}
   .form-view-h{font-size:14.5px; margin:16px 0 6px;}
+  .form-view-sub{font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; margin:10px 0 4px;}
   .form-view-table{width:100%; border-collapse:collapse; font-size:12.5px;}
   .form-view-table td{border-top:1px solid var(--card-line); padding:6px 4px; vertical-align:top;}
   .form-view-table td:last-child{white-space:nowrap; font-weight:600; text-align:right; padding-left:10px;}
@@ -7625,6 +7626,32 @@ const FORM_SCALES = {
     bands: [[4,'Minimal'],[9,'Mild'],[14,'Moderate'],[21,'Severe']]
   }
 };
+// Intake form (English), sent like the scales and filled in on the client form page.
+// The definition travels with each request, so the form page needs no update when this list changes.
+const INTAKE_FORM = {
+  id: 'individual-intake-v1',
+  title: 'Individual Psychotherapy Intake Form',
+  sections: [
+    { title: 'Demographic Information', fields: [
+      { id: 'name', label: 'Name', type: 'text', required: true, autocomplete: 'given-name' },
+      { id: 'surname', label: 'Surname', type: 'text', required: true, autocomplete: 'family-name' },
+      { id: 'dob', label: 'Date of Birth', type: 'date', required: true },
+      { id: 'address', label: 'Address', type: 'textarea', autocomplete: 'street-address' }
+    ]},
+    { title: 'Emergency Contact', fields: [
+      { id: 'ecName', label: 'Full Name', type: 'text' },
+      { id: 'ecRelationship', label: 'Relationship', type: 'text' },
+      { id: 'ecPhone', label: 'Phone Number', type: 'tel' }
+    ]},
+    { title: 'Primary Care Provider Information (Family Doctor)',
+      note: 'Please provide the following details if you authorize us to contact your primary care provider.',
+      fields: [
+        { id: 'pcpName', label: 'PCP Name', type: 'text' },
+        { id: 'pcpClinic', label: 'PCP Clinic Info', type: 'textarea' }
+    ]}
+  ]
+};
+
 const CONSENT_TYPES = { individual: 'Bireysel terapi', couple: 'Çift terapisi', minor: 'Reşit olmayan danışan', ifhp: 'IFHP' };
 const CONSENT_DEFAULT_TITLES = {
   individual: 'Consent to Psychotherapy Services',
@@ -7759,6 +7786,7 @@ function loadScriptOnce(src){
 async function readConsentFile(file){
   const name = (file.name || '').toLowerCase();
   if(name.endsWith('.txt')) return plainTextToConsentHtml(await file.text());
+  if(name.endsWith('.pdf') || file.type === 'application/pdf') return sanitizeConsentHtml(await pdfToConsentHtml(await file.arrayBuffer()));
   if(!name.endsWith('.docx')) throw new Error('unsupported');
   const buffer = await file.arrayBuffer();
   // 1) Preferred: the mammoth library (best formatting). It is fetched from a CDN, which can be
@@ -7786,6 +7814,141 @@ async function readConsentFile(file){
     console.error('Yerleşik .docx okuyucu da başarısız', e, lastError);
     throw new Error((e && e.message) || 'docx');
   }
+}
+
+// PDF → editable consent text. Reads the text layer with pdf.js and rebuilds headings, bold runs,
+// paragraphs and bullet lists from font sizes, font names and line spacing. A scanned PDF (only images)
+// has no text layer, so it cannot be read this way.
+async function loadPdfJs(){
+  if(window.pdfjsLib) return window.pdfjsLib;
+  const sources = [
+    ['https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'],
+    ['https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js', 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js']
+  ];
+  for(const [lib, worker] of sources){
+    const savedDefine = window.define;
+    try{ window.define = undefined; await loadScriptOnce(lib); }catch(e){ continue; }
+    finally{ window.define = savedDefine; }
+    if(window.pdfjsLib){ window.pdfjsLib.GlobalWorkerOptions.workerSrc = worker; return window.pdfjsLib; }
+  }
+  throw new Error('PDF okuyucu yüklenemedi (internet bağlantısını kontrol et)');
+}
+
+async function pdfToConsentHtml(buffer){
+  const pdfjs = await loadPdfJs();
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const lines = [];
+  for(let p = 1; p <= pdf.numPages; p++){
+    const page = await pdf.getPage(p);
+    const pageH = (page.view && page.view[3]) || 792;
+    const tc = await page.getTextContent();
+    let fontNames = {};
+    try{
+      await page.getOperatorList(); // makes the real font names (e.g. "Arial-BoldMT") available
+      Object.keys(tc.styles || {}).forEach(k => { try{ const f = page.commonObjs.get(k); fontNames[k] = (f && (f.name || f.loadedName)) || ''; }catch(e){} });
+    }catch(e){}
+    const isBold = it => /bold|black|heavy|semibold|demi/i.test(fontNames[it.fontName] || '') || /bold/i.test(((tc.styles || {})[it.fontName] || {}).fontFamily || '');
+    let cur = null;
+    tc.items.forEach(it => {
+      if(typeof it.str !== 'string') return;
+      const size = Math.round(Math.hypot(it.transform[2], it.transform[3]) * 10) / 10 || Math.abs(it.transform[3]);
+      const x = it.transform[4], yPos = it.transform[5];
+      if(!cur || Math.abs(cur.y - yPos) > Math.max(2, size * 0.4)){
+        if(cur) lines.push(cur);
+        cur = { page: p, y: yPos, rel: yPos / pageH, x, size, runs: [], endX: x };
+      }else if(it.str && x - cur.endX > size * 0.18 && !/\s$/.test(cur.runs.length ? cur.runs[cur.runs.length-1].text : '')){
+        cur.runs.push({ text: ' ', b: false });
+      }
+      if(it.str) cur.runs.push({ text: it.str, b: isBold(it) });
+      cur.size = Math.max(cur.size, size);
+      cur.endX = x + (it.width || 0);
+      if(it.hasEOL){ lines.push(cur); cur = null; }
+    });
+    if(cur) lines.push(cur);
+  }
+  const text = l => l.runs.map(r => r.text).join('').replace(/\s+/g, ' ').trim();
+  const real = lines.filter(l => text(l));
+  if(!real.length) throw new Error('Bu PDF\'te seçilebilir metin yok (taranmış bir belge olabilir). Word ya da metin olarak yükle veya metni kutuya yapıştır.');
+  // Body font size = the most common size; clearly larger lines are headings.
+  const sizeCount = {};
+  real.forEach(l => { const k = Math.round(l.size); sizeCount[k] = (sizeCount[k] || 0) + text(l).length; });
+  const body = Number(Object.keys(sizeCount).sort((a,b)=> sizeCount[b] - sizeCount[a])[0]) || 11;
+  const minX = Math.min(...real.map(l => l.x));
+  // Page headers/footers (text in the top or bottom margin repeated on most pages) and page numbers are dropped.
+  const pages = new Set(real.map(l => l.page)).size;
+  const inMargin = l => l.rel > 0.92 || l.rel < 0.08;
+  const repeats = {};
+  real.filter(inMargin).forEach(l => { const k = text(l).replace(/\d+/g, '#'); repeats[k] = (repeats[k] || new Set()).add(l.page); });
+  const kept = real.filter(l => {
+    const t = text(l);
+    if(inMargin(l) && /^(page\s*)?\d+(\s*(of|\/)\s*\d+)?$/i.test(t)) return false;
+    if(inMargin(l) && pages >= 2 && repeats[t.replace(/\d+/g, '#')].size >= Math.max(2, Math.ceil(pages * 0.6))) return false;
+    return true;
+  });
+
+  const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const runsHtml = runs => {
+    let out = '', open = false;
+    runs.forEach(r => {
+      if(r.b && !open && r.text.trim()){ out += '<strong>'; open = true; }
+      else if(!r.b && open && r.text.trim()){ out += '</strong>'; open = false; }
+      out += esc(r.text);
+    });
+    return (open ? out + '</strong>' : out).replace(/\s+/g, ' ').trim();
+  };
+  // Bullets include Word's Symbol-font bullet, which arrives as a private-use character.
+  const BULLET = /^\s*([•●▪◦‣∙·\-–*■□○►➢✓❖§\uF000-\uF8FF]|\d{1,2}[.)]|[a-z][.)])\s+/i;
+  const blocks = [];
+  let para = null, prev = null;
+  const endPara = ()=>{ if(para){ blocks.push(para); para = null; } };
+  kept.forEach(l => {
+    const t = text(l);
+    const allBold = l.runs.filter(r => r.text.trim()).every(r => r.b);
+    const gap = prev && prev.page === l.page ? (prev.y - l.y) : null;
+    // Across a page break, a sentence that did not end continues the same paragraph.
+    const pageCarry = prev && prev.page !== l.page && Math.abs(prev.size - l.size) < 0.5 && !/[.:!?]["”')]?$/.test(text(prev));
+    const bigGap = pageCarry ? false : (gap === null || gap > Math.max(prev.size, l.size) * 1.6);
+    const isHeading = l.size >= body * 1.15 || (allBold && t.length < 90 && !/[.,;:]$/.test(t) && bigGap);
+    const bullet = BULLET.exec(t);
+    if(isHeading){
+      endPara();
+      const lvl = l.size >= body * 1.45 ? 'h2' : 'h3';
+      const lastB = blocks[blocks.length - 1];
+      if(lastB && lastB.tag === lvl && !bigGap) lastB.html += ' ' + esc(t); // heading wrapped onto two lines
+      else blocks.push({ tag: lvl, html: esc(t) });
+    }else if(bullet){
+      endPara();
+      const runs = l.runs.slice();
+      // drop the bullet character itself
+      let cut = bullet[0].length;
+      while(cut > 0 && runs.length){
+        const r = runs[0];
+        if(r.text.length <= cut){ cut -= r.text.length; runs.shift(); }
+        else { runs[0] = { ...r, text: r.text.slice(cut) }; cut = 0; }
+      }
+      para = { tag: 'li', ordered: /^(\d{1,2}|[a-z])[.)]$/i.test(bullet[1]), html: runsHtml(runs), x: l.x };
+    }else if(para && !bigGap && (para.tag !== 'li' || l.x > minX + 2)){
+      para.html += ' ' + runsHtml(l.runs); // continuation of the same paragraph / list item
+    }else{
+      endPara();
+      para = { tag: 'p', html: runsHtml(l.runs) };
+    }
+    prev = l;
+  });
+  endPara();
+  let html = '', list = null;
+  blocks.forEach(b => {
+    if(b.tag === 'li'){
+      const lt = b.ordered ? 'ol' : 'ul';
+      if(list !== lt){ if(list) html += `</${list}>`; html += `<${lt}>`; list = lt; }
+      html += `<li>${b.html}</li>`;
+    }else{
+      if(list){ html += `</${list}>`; list = null; }
+      html += `<${b.tag}>${b.html}</${b.tag}>`;
+    }
+  });
+  if(list) html += `</${list}>`;
+  return html;
 }
 
 // Minimal .docx reader: a .docx is a zip file whose main text is word/document.xml.
@@ -7929,13 +8092,13 @@ function formsSettingsHtml(){
   return `
     <div class="settings-section">
       <h3>📝 Onam Formları</h3>
-      <p>Her tür için onam metnini Word dosyası (.docx) olarak yükle ya da metni aşağıdaki kutuya yapıştır. İmza bölümü sabittir ve her forma otomatik eklenir. Bu metinler sadece senin hesabına özel — ${currentPersonId()==='kubilay' ? 'Duygu' : 'Kubilay'} kendi onam metinlerini ayrı yükler.</p>
+      <p>Her tür için onam metnini Word (.docx) ya da PDF dosyası olarak yükle ya da metni aşağıdaki kutuya yapıştır. İmza bölümü sabittir ve her forma otomatik eklenir. Bu metinler sadece senin hesabına özel — ${currentPersonId()==='kubilay' ? 'Duygu' : 'Kubilay'} kendi onam metinlerini ayrı yükler.</p>
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
         <select id="consentTypeSelect" class="settings-select">
           ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}" ${consentSettingsType===k?'selected':''}>${CONSENT_TYPES[k]}</option>`).join('')}
         </select>
-        <button class="settings-btn" id="consentUploadBtn" style="width:auto;">📄 Word / metin dosyası yükle</button>
-        <input type="file" id="consentFileInput" accept=".docx,.txt,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" hidden>
+        <button class="settings-btn" id="consentUploadBtn" style="width:auto;">📄 Word / PDF / metin dosyası yükle</button>
+        <input type="file" id="consentFileInput" accept=".docx,.pdf,.txt,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,text/plain" hidden>
       </div>
       <div id="consentStatus" class="consent-status"></div>
       <label class="consent-label" for="consentTitleInput">Başlık (danışanın göreceği)</label>
@@ -8042,7 +8205,7 @@ async function wireFormsSettings(){
     }catch(e){
       console.error('Onam dosyası okunamadı', e);
       alert(e && e.message === 'unsupported'
-        ? 'Sadece Word (.docx) ve düz metin (.txt) dosyaları yüklenebilir. Eski .doc dosyasını Word\'de "Farklı Kaydet > .docx" ile çevirebilir, PDF için metni kopyalayıp kutuya yapıştırabilirsin.'
+        ? 'Sadece Word (.docx), PDF ve düz metin (.txt) dosyaları yüklenebilir. Eski .doc dosyasını Word\'de "Farklı Kaydet > .docx" ile çevirebilirsin.'
         : 'Dosya okunamadı: ' + (e && e.message ? e.message : 'bilinmeyen hata') + '\n\nMetni Word\'den kopyalayıp kutuya yapıştırarak da ekleyebilirsin.');
       fill();
     }
@@ -8124,13 +8287,23 @@ function scoreFormScale(s){
   return { total, band };
 }
 
+function intakeValue(intake, id){
+  for(const sec of (intake && intake.sections) || []){
+    const f = (sec.fields || []).find(x => x.id === id);
+    if(f) return f.value || '';
+  }
+  return '';
+}
+function intakeFullName(intake){ return [intakeValue(intake, 'name'), intakeValue(intake, 'surname')].filter(Boolean).join(' '); }
+
 function summarizeFormPayload(payload){
   const scales = (payload.scales || []).filter(s => FORM_SCALES[s.id]).map(s=>{
     const r = scoreFormScale(s);
     return { id: s.id, name: s.respondentName || '', total: r.total, band: r.band, item9: s.id === 'phq9' ? (s.answers[8] || 0) : null };
   });
   const signers = payload.consent ? (payload.consent.signers || []).map(s => s.name) : [];
-  return { scales, signers, flag: scales.some(s => s.item9 > 0) };
+  const intakeNames = payload.intake ? [intakeFullName(payload.intake)].filter(Boolean) : [];
+  return { scales, signers, intake: intakeNames, flag: scales.some(s => s.item9 > 0) };
 }
 
 async function createFormRequest(client, opts){
@@ -8155,12 +8328,12 @@ async function createFormRequest(client, opts){
   const write = async (content, dob)=>{
     const token = newFormToken();
     const key = dob || 'open';
-    await window.FB.setDoc(formContentRef(token, key), { consent, scales: opts.scales, ...content });
+    await window.FB.setDoc(formContentRef(token, key), { consent, scales: opts.scales, ...(opts.intake ? { intake: INTAKE_FORM } : {}), ...content });
     await window.FB.setDoc(formRequestRef(token), { ...cover, needsDob: !!dob, dobOf: opts.consentType === 'minor' ? 'client' : 'self' });
     return { token, key };
   };
   const dobs = opts.dobs || [];
-  const entry = { createdAt: now, expiresAt, dobCheck: !!(opts.dobs && opts.dobs.length), consentType: opts.consentType || null, consentVersion: consent ? consent.version : null, scales: opts.scales, status: 'open', sentTo: [] };
+  const entry = { createdAt: now, expiresAt, dobCheck: !!(opts.dobs && opts.dobs.length), consentType: opts.consentType || null, consentVersion: consent ? consent.version : null, scales: opts.scales, intake: !!opts.intake, status: 'open', sentTo: [] };
   if(opts.consentType === 'couple'){
     // Each person gets their own link and signs on their own device.
     const names = [client.name, sp.name.trim()];
@@ -8187,6 +8360,7 @@ async function createFormRequest(client, opts){
 
 function formEntryContents(e){
   const parts = [];
+  if(e.intake) parts.push('Intake formu');
   if(e.consentType) parts.push(`Onam (${CONSENT_TYPES[e.consentType] || e.consentType})`);
   (e.scales || []).forEach(id => parts.push(FORM_SCALES[id] ? FORM_SCALES[id].title : id));
   return parts.join(' · ');
@@ -8263,6 +8437,8 @@ function openSendFormsModal(client){
           ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}">${CONSENT_TYPES[k]}${k===defaultType?' (bu danışan için uygun)':''}</option>`).join('')}
         </select>
         <div id="sendConsentNote" class="consent-status" style="margin-top:6px;"></div>
+        <label class="consent-label">Intake (İngilizce)</label>
+        <div class="tick-row"><input type="checkbox" id="sendIntake"><span>Bireysel terapi intake formu</span></div>
         <label class="consent-label">Ölçekler (İngilizce)</label>
         <div class="tick-row"><input type="checkbox" id="sendPhq9"><span>PHQ-9 (depresyon)</span></div>
         <div class="tick-row"><input type="checkbox" id="sendGad7"><span>GAD-7 (kaygı)</span></div>
@@ -8292,7 +8468,7 @@ function openSendFormsModal(client){
     if(type && !ready) msg = 'Onam metinleri yükleniyor…';
     else if(type && !getConsentTemplate(type)) msg = `⚠️ "${CONSENT_TYPES[type]}" onam metni henüz eklenmemiş. Ayarlar > Onam Formları bölümünden ekle.`;
     else if(type === 'couple' && !hasSecond) msg = '⚠️ Çift onamı için profilde ikinci kişinin adı girilmiş olmalı.';
-    else if(type === 'couple') msg = 'Her birine kendi e-posta adresine ayrı bir bağlantı gider; her biri kendi cihazından imzalar ve kendi ölçeğini doldurur.';
+    else if(type === 'couple') msg = 'Her birine kendi e-posta adresine ayrı bir bağlantı gider; her biri kendi cihazından imzalar, kendi ölçeğini ve intake formunu doldurur.';
     else if(type === 'minor') msg = 'Onamı veli imzalar; ölçekleri danışan doldurur.';
     note.textContent = msg;
     return !msg.startsWith('⚠️') && !(type && !ready);
@@ -8321,7 +8497,8 @@ function openSendFormsModal(client){
     if(document.getElementById('sendPhq9').checked) scales.push('phq9');
     if(document.getElementById('sendGad7').checked) scales.push('gad7');
     const consentType = typeSel.value;
-    if(!consentType && !scales.length){ alert('En az bir form seç.'); return; }
+    const intake = document.getElementById('sendIntake').checked;
+    if(!consentType && !scales.length && !intake){ alert('En az bir form seç.'); return; }
     if(!validate()) return;
     let dobs = null;
     if(dobCheck.checked){
@@ -8337,7 +8514,7 @@ function openSendFormsModal(client){
     createBtn.disabled = true; createBtn.textContent = 'Oluşturuluyor…';
     let entry;
     try{
-      entry = await createFormRequest(client, { consentType, scales, dobs, days: Number(document.getElementById('sendDays').value) });
+      entry = await createFormRequest(client, { consentType, scales, intake, dobs, days: Number(document.getElementById('sendDays').value) });
     }catch(e){
       console.error('Form bağlantısı oluşturulamadı', e);
       createBtn.disabled = false; createBtn.textContent = 'Bağlantı oluştur';
@@ -8408,7 +8585,7 @@ async function checkOpenFormRequests(){
           entry.reviewed = !entry.result.flag;
         }else{
           const doneParts = entry.parts.filter(pt => pt.status === 'done');
-          entry.result = { scales: doneParts.flatMap(pt => pt.result.scales), signers: doneParts.flatMap(pt => pt.result.signers), flag: doneParts.some(pt => pt.result.flag) };
+          entry.result = { scales: doneParts.flatMap(pt => pt.result.scales), signers: doneParts.flatMap(pt => pt.result.signers), intake: doneParts.flatMap(pt => pt.result.intake || []), flag: doneParts.some(pt => pt.result.flag) };
           entry.submittedAt = Math.max(...doneParts.map(pt => pt.submittedAt));
           if(doneParts.length === entry.parts.length) entry.status = 'done';
           if(target.result.flag) entry.reviewed = false;
@@ -8471,6 +8648,7 @@ function formEntryHtml(e){
   const resultHtml = r ? `
     <div class="form-result">
       ${r.signers.length ? `<div>✍️ İmzalayan: ${escapeHtml(r.signers.join(', '))}</div>` : ''}
+      ${(r.intake && r.intake.length) ? `<div>📋 Intake: ${escapeHtml(r.intake.join(', '))}</div>` : ''}
       ${r.scales.map(s => `<div><strong>${FORM_SCALES[s.id].title}${multi ? ' — ' + escapeHtml(s.name) : ''}:</strong> ${s.total} (${s.band})${s.item9 > 0 ? ` <span class="form-flag">⚠️ Madde 9: ${escapeHtml(FORM_FREQ[s.item9])}</span>` : ''}</div>`).join('')}
     </div>` : '';
   const isOpen = e.status === 'open' && Date.now() <= e.expiresAt;
@@ -8488,6 +8666,7 @@ function formEntryHtml(e){
           : btn('copy:0', '🔗 Bağlantıyı kopyala')) + btn('draft', '📧 Gmail taslağı') : ''}
       ${r ? btn('view', '👁 Yanıtları gör') : ''}
       ${r && e.consentType ? btn('pdf-consent', '📄 İmzalı onam PDF') + btn('drive-consent', "☁️ Onamı Drive'a kaydet") : ''}
+      ${r && e.intake ? btn('pdf-intake', '📄 Intake PDF') + btn('drive-intake', "☁️ Intake'i Drive'a kaydet") : ''}
       ${r && (e.scales || []).length ? btn('pdf-scales', '📄 Ölçek PDF') + btn('drive-scales', "☁️ Ölçeği Drive'a kaydet") : ''}
       ${btn('delete', (e.status === 'open' && !r) ? 'İptal et' : 'Sil')}
     </div>
@@ -8563,18 +8742,18 @@ function wireFormsPanel(client){
       catch(e){ console.error('Form kaydı yüklenemedi', e); alert('Form kaydı yüklenemedi, bağlantını kontrol et.'); done(original, 10); return; }
       if(act === 'view'){ done(original, 10); openFormResponseModal(client, entry, rec); return; }
       try{
-        const isConsent = act.endsWith('consent');
-        const doc = isConsent ? await buildConsentPdf(client, entry, rec) : await buildScalesPdf(client, entry, rec);
-        const filename = formPdfFilename(isConsent ? 'Consent' : 'Scales', client, entry);
+        const isConsent = act.endsWith('consent'), isIntake = act.endsWith('intake');
+        const doc = isConsent ? await buildConsentPdf(client, entry, rec) : isIntake ? await buildIntakePdf(client, entry, rec) : await buildScalesPdf(client, entry, rec);
+        const filename = formPdfFilename(isConsent ? 'Consent' : isIntake ? 'Intake' : 'Scales', client, entry);
         if(act.startsWith('pdf')){
           await savePdfWithPicker(doc, filename);
-          logAudit(isConsent ? 'imzalı onam PDF indirildi' : 'ölçek PDF indirildi', client.name, client.id);
+          logAudit(isConsent ? 'imzalı onam PDF indirildi' : isIntake ? 'intake PDF indirildi' : 'ölçek PDF indirildi', client.name, client.id);
           done(original, 10);
         }else{
           if(!state.driveFormsFolderId){ alert('Önce Ayarlar > Form Kayıt Klasörü bölümünden bir klasör seçmelisin.'); done(original, 10); return; }
           busy('⏳ Kaydediliyor…');
           const ok = await uploadPdfToDriveFolder(doc, filename, state.driveFormsFolderId);
-          logAudit(ok ? (isConsent ? "imzalı onam Drive'a kaydedildi" : "ölçek PDF Drive'a kaydedildi") : "form PDF Drive'a kaydedilemedi", client.name, client.id);
+          logAudit(ok ? (isConsent ? "imzalı onam Drive'a kaydedildi" : isIntake ? "intake PDF Drive'a kaydedildi" : "ölçek PDF Drive'a kaydedildi") : "form PDF Drive'a kaydedilemedi", client.name, client.id);
           done(ok ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene', 3000);
         }
       }catch(e){
@@ -8619,7 +8798,8 @@ async function loadFormRecord(entry, client){
           checks: (consentDef.checks || []).map((_, i) => done.every(d => d.payload.consent && d.payload.consent.checks && d.payload.consent.checks[i])),
           signers: parts.map((pt, i) => (pt.payload && pt.payload.consent) ? pt.payload.consent.signers[0] : { role: 'client', name: entry.parts[i].name, missing: true })
         } : null,
-        scales: done.flatMap(d => d.payload.scales || [])
+        scales: done.flatMap(d => d.payload.scales || []),
+        intakes: parts.map((pt, i) => pt.payload && pt.payload.intake ? { ...pt.payload.intake, respondentName: entry.parts[i].name } : null).filter(Boolean)
       },
       submittedAt: Math.max(...done.map(d => d.submittedAt || 0)) || entry.submittedAt,
       tokens: entry.parts.map(pt => pt.token)
@@ -8628,6 +8808,7 @@ async function loadFormRecord(entry, client){
     const one = await loadOne(entry.token, entry.key);
     if(!one.payload) throw new Error('Kayıt bulunamadı');
     (one.payload.scales || []).forEach(sc => { sc.respondentName = client.name; });
+    one.payload.intakes = one.payload.intake ? [{ ...one.payload.intake, respondentName: client.name }] : [];
     rec = { request: one.request, payload: one.payload, submittedAt: one.submittedAt || entry.submittedAt, tokens: [entry.token] };
   }
   label(rec);
@@ -8660,6 +8841,14 @@ function openFormResponseModal(client, entry, rec){
         ${s.id === 'phq9' ? `<tr><td>Functional difficulty</td><td>${s.difficulty == null ? 'Not answered' : escapeHtml(FORM_DIFFICULTY[s.difficulty])}</td></tr>` : ''}
       </table>`;
   }).join('');
+  const intakes = p.intakes || [];
+  const intakeHtml = intakes.map(it => `
+      <h3 class="form-view-h">${escapeHtml(it.title || 'Intake form')}${intakes.length > 1 ? ' — ' + escapeHtml(it.respondentName || '') : ''}</h3>
+      ${(it.sections || []).map(sec => `
+        <div class="form-view-sub">${escapeHtml(sec.title)}</div>
+        <table class="form-view-table">
+          ${(sec.fields || []).map(f => `<tr><td>${escapeHtml(f.label)}</td><td style="white-space:pre-wrap;">${f.value ? escapeHtml(f.type === 'date' ? formatShortDate(f.value) : f.value) : '<span style="color:var(--muted)">—</span>'}</td></tr>`).join('')}
+        </table>`).join('')}`).join('');
   const modal = document.createElement('div');
   modal.className = 'backups-modal';
   modal.style.display = 'flex';
@@ -8668,7 +8857,7 @@ function openFormResponseModal(client, entry, rec){
       <div class="backups-box-header"><h2>${escapeHtml(client.name)} — form yanıtları</h2><button type="button" id="formViewClose">✕</button></div>
       <div style="padding:0 20px 20px;">
         <div class="form-entry-meta">Gönderildi: ${formatBackupTime(rec.submittedAt)}</div>
-        ${consentHtml}${scalesHtml}
+        ${intakeHtml}${consentHtml}${scalesHtml}
       </div>
     </div>`;
   document.body.appendChild(modal);
@@ -8911,6 +9100,32 @@ async function buildScalesPdf(client, entry, rec){
   });
   formPdfRecord(w, entry, rec);
   w.footers(`Questionnaire results — ${rec.request.clientLabel || ''}`);
+  return w.doc;
+}
+
+async function buildIntakePdf(client, entry, rec){
+  const intakes = rec.payload.intakes || [];
+  if(!intakes.length) throw new Error('Bu kayıtta intake formu yok');
+  const w = await makePdfWriter();
+  formPdfHeader(w, intakes[0].title || 'Intake form', rec);
+  intakes.forEach((it, idx) => {
+    if(idx > 0){ w.doc.addPage(); }
+    if(intakes.length > 1) w.text(`Completed by: ${it.respondentName || ''}`, { size:11, bold:true, gap:2.5 });
+    (it.sections || []).forEach(sec => {
+      w.ensure(22);
+      w.text(sec.title, { size:12, bold:true, gap:1.2 });
+      if(sec.note) w.text(sec.note, { size:9.5, color:90, gap:1.8 });
+      (sec.fields || []).forEach(f => {
+        w.ensure(12);
+        w.text(f.label, { size:9.5, color:90, gap:0.3 });
+        const v = f.value ? (f.type === 'date' ? new Date(f.value + 'T00:00:00').toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' }) : f.value) : '—';
+        w.text(v, { size:10.5, bold:!!f.value, indent:4, gap:1.8 });
+      });
+      w.space(2.5);
+    });
+  });
+  formPdfRecord(w, entry, rec);
+  w.footers(`${intakes[0].title || 'Intake form'} — ${rec.request.clientLabel || ''}`);
   return w.doc;
 }
 
