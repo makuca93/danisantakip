@@ -7840,6 +7840,9 @@ function fixPdfLigatures(str){
   return String(str)
     .replace(/ﬀ/g, 'ff').replace(/ﬁ/g, 'fi').replace(/ﬂ/g, 'fl').replace(/ﬃ/g, 'ffi').replace(/ﬄ/g, 'ffl').replace(/ﬅ|ﬆ/g, 'st')
     .replace(/Ɵ/g, 'ti')
+    // Unknown glyphs (private-use, replacement character, control codes) or a "?" inside a word are the same broken ligature.
+    .replace(/(?<=[a-zçğıöşü])[\uE000-\uF8FF\uFFFD\u0001-\u0008\u000E-\u001F?](?=[a-zçğıöşü])/g, 'ti')
+    .replace(/(?<![\p{L}\d])[\uE000-\uF8FF\uFFFD](?=[a-z]{2,})/gu, 'ti')
     // "5" inside a word ("consen5ng", "5me", "ques5on") — but not numbers, "5pm", "5th", "M5V"
     .replace(/(?<=[a-zçğıöşü])5(?=[a-zçğıöşü])/g, 'ti')
     .replace(/(?<![\p{L}\d])5(?=[a-z]{2,})(?!(?:am|pm|th|min|mins|hr|hrs|kg|km|ml|mg)\b)/gu, 'ti')
