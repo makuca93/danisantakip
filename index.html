@@ -1737,6 +1737,9 @@
   .form-alert-banner p{margin:4px 0 8px; color:#6b3a43;}
   .form-alert-open{display:block; width:100%; text-align:left; background:#fff; border:1px solid #e0a3ad; color:#8a3644; font-family:inherit; font-size:13.5px; font-weight:600; padding:9px 12px; border-radius:8px; cursor:pointer; margin-top:6px;}
   .form-view-h{font-size:14.5px; margin:16px 0 6px;}
+  .send-lang-row{display:flex; gap:8px;}
+  .send-lang{flex:1; display:flex; align-items:center; gap:8px; padding:9px 12px; border:1px solid var(--card-line); border-radius:8px; font-size:14px; cursor:pointer;}
+  .send-lang:has(input:checked){background:var(--highlight); border-color:var(--highlight-line); font-weight:600;}
   .form-view-sub{font-size:12px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; margin:10px 0 4px;}
   .form-view-table{width:100%; border-collapse:collapse; font-size:12.5px;}
   .form-view-table td{border-top:1px solid var(--card-line); padding:6px 4px; vertical-align:top;}
@@ -7676,6 +7679,98 @@ const INTAKE_FORM = {
   ]
 };
 
+// ---- Turkish versions. Scores and answer values are identical to the English forms. ----
+const FORM_DIFFICULTY_Q = 'If you checked off any problems, how difficult have these problems made it for you to do your work, take care of things at home, or get along with other people?';
+const FORM_FREQ_TR = ['Hiç', 'Birkaç gün', 'Günlerin yarısından fazlasında', 'Neredeyse her gün'];
+const FORM_DIFFICULTY_TR = ['Hiç zorlaştırmadı', 'Biraz zorlaştırdı', 'Çok zorlaştırdı', 'Aşırı derecede zorlaştırdı'];
+const FORM_DIFFICULTY_Q_TR = 'Yukarıdaki sorunlardan herhangi birini işaretlediyseniz, bu sorunlar işinizi yapmanızı, evdeki işlerle ilgilenmenizi ya da diğer insanlarla geçinmenizi ne kadar zorlaştırdı?';
+const FORM_SCALES_TR = {
+  phq9: {
+    title: 'PHQ-9 (Hasta Sağlığı Anketi)',
+    stem: 'Son 2 hafta içinde aşağıdaki sorunlardan herhangi biri sizi ne sıklıkla rahatsız etti?',
+    items: [
+      'Bir şeyler yapmaya karşı az ilgi duyma ya da bunlardan zevk alamama',
+      'Kendinizi çökkün, depresif ya da umutsuz hissetme',
+      'Uykuya dalmakta ya da uykuyu sürdürmekte güçlük çekme veya çok fazla uyuma',
+      'Kendinizi yorgun hissetme ya da enerjinizin az olması',
+      'İştahsızlık ya da aşırı yeme',
+      'Kendinizi kötü hissetme — ya da başarısız olduğunuzu veya kendinizi ya da ailenizi hayal kırıklığına uğrattığınızı düşünme',
+      'Gazete okumak ya da televizyon izlemek gibi şeylere dikkatinizi vermekte güçlük çekme',
+      'Başkalarının fark edebileceği kadar yavaş hareket etme ya da konuşma? Ya da tam tersi — her zamankinden çok daha fazla hareket edecek kadar kıpır kıpır ya da huzursuz olma',
+      'Ölmüş olmanın daha iyi olacağını ya da kendinize bir şekilde zarar vermeyi düşünme'
+    ]
+  },
+  gad7: {
+    title: 'GAD-7 (Yaygın Anksiyete Bozukluğu Ölçeği)',
+    stem: 'Son 2 hafta içinde aşağıdaki sorunlar sizi ne sıklıkla rahatsız etti?',
+    items: [
+      'Sinirli, kaygılı ya da gergin hissetme',
+      'Endişelenmeyi durduramama ya da kontrol edememe',
+      'Farklı şeyler hakkında çok fazla endişelenme',
+      'Rahatlamakta güçlük çekme',
+      'Yerinizde duramayacak kadar huzursuz olma',
+      'Kolayca sinirlenme ya da tahammülsüz olma',
+      'Sanki korkunç bir şey olacakmış gibi korkma'
+    ]
+  }
+};
+// Texts of the chosen scales in the chosen language; they travel with each request so the form page shows them as sent.
+function scaleTextsFor(lang, ids){
+  const out = {};
+  (ids || Object.keys(FORM_SCALES)).forEach(id => {
+    const en = FORM_SCALES[id];
+    if(!en) return;
+    const tr = lang === 'tr' ? FORM_SCALES_TR[id] : null;
+    out[id] = {
+      title: (tr || en).title, stem: (tr || en).stem, items: (tr || en).items.slice(),
+      freq: (lang === 'tr' ? FORM_FREQ_TR : FORM_FREQ).slice(),
+      difficultyQ: lang === 'tr' ? FORM_DIFFICULTY_Q_TR : FORM_DIFFICULTY_Q,
+      difficulty: (lang === 'tr' ? FORM_DIFFICULTY_TR : FORM_DIFFICULTY).slice()
+    };
+  });
+  return out;
+}
+// Texts used to show/print a stored response: the ones sent with it, else the built-in English ones.
+function scaleTextsOf(rec, id){
+  const t = rec && rec.request && rec.request.scaleTexts && rec.request.scaleTexts[id];
+  return t || scaleTextsFor('en', [id])[id];
+}
+const BAND_TR = { 'Minimal': 'Minimal', 'Mild': 'Hafif', 'Moderate': 'Orta', 'Moderately severe': 'Orta-şiddetli', 'Severe': 'Şiddetli' };
+
+const INTAKE_FORM_TR = {
+  id: 'individual-intake-v1-tr',
+  title: 'Bireysel Psikoterapi Ön Bilgi Formu',
+  sections: [
+    { title: 'Kişisel Bilgiler', fields: [
+      { id: 'name', label: 'Ad', type: 'text', required: true, autocomplete: 'given-name' },
+      { id: 'surname', label: 'Soyad', type: 'text', required: true, autocomplete: 'family-name' },
+      { id: 'dob', label: 'Doğum Tarihi', type: 'date', required: true },
+      { id: 'address', label: 'Adres', type: 'textarea', required: true, autocomplete: 'street-address' }
+    ]},
+    { title: 'Acil Durumda Ulaşılacak Kişi', fields: [
+      { id: 'ecName', label: 'Ad Soyad', type: 'text' },
+      { id: 'ecRelationship', label: 'Yakınlık Derecesi', type: 'text' },
+      { id: 'ecPhone', label: 'Telefon Numarası', type: 'tel' }
+    ]},
+    { title: 'Aile Hekimi Bilgileri (Family Doctor)',
+      note: 'Aile hekiminizle iletişime geçmemize izin veriyorsanız lütfen aşağıdaki bilgileri doldurun.',
+      fields: [
+        { id: 'pcpName', label: 'Aile Hekiminin Adı', type: 'text' },
+        { id: 'pcpClinic', label: 'Klinik Bilgileri (ad, adres, telefon)', type: 'textarea' }
+    ]}
+  ]
+};
+const CONSENT_ACK_TR = 'Bu formu okudum ve anladım, soru sorma fırsatım oldu ve koşullarını kabul ediyorum.';
+const CONSENT_DEFAULT_TITLES_TR = {
+  individual: 'Psikoterapi Hizmetleri Onam Formu',
+  couple: 'Çift Terapisi Hizmetleri Onam Formu',
+  minor: 'Reşit Olmayan Danışan için Psikoterapi Onam Formu',
+  ifhp: 'Psikoterapi Hizmetleri Onam Formu (IFHP)'
+};
+const FORM_LANGS = { tr: 'Türkçe', en: 'English' };
+function consentDefaultTitle(type, lang){ return (lang === 'tr' ? CONSENT_DEFAULT_TITLES_TR : CONSENT_DEFAULT_TITLES)[type]; }
+function consentAck(lang){ return lang === 'tr' ? CONSENT_ACK_TR : CONSENT_ACK; }
+
 const CONSENT_TYPES = { individual: 'Bireysel terapi', couple: 'Çift terapisi', minor: 'Reşit olmayan danışan', ifhp: 'IFHP' };
 const CONSENT_DEFAULT_TITLES = {
   individual: 'Consent to Psychotherapy Services',
@@ -7790,9 +7885,11 @@ async function ensurePracticeLoaded(){
   return !!practiceState;
 }
 
-function getConsentTemplate(type){
-  // Each therapist keeps their own consent texts (stored in their own data, not the shared doc).
-  const t = state && state.consentTemplates && state.consentTemplates[type];
+function consentStoreKey(lang){ return lang === 'tr' ? 'consentTemplatesTr' : 'consentTemplates'; }
+function getConsentTemplate(type, lang){
+  // Each therapist keeps their own consent texts (stored in their own data, not the shared doc), one set per language.
+  const store = state && state[consentStoreKey(lang)];
+  const t = store && store[type];
   if(!t || !t.html || !consentHtmlToBlocks(t.html).length) return null;
   return t;
 }
@@ -8125,7 +8222,9 @@ function openSignaturePadModal(){
 
 /* ----- Settings: consent templates, therapist signature, forms folder ----- */
 let consentSettingsType = 'individual';
-const consentSettingsDrafts = {}; // survives re-renders while editing
+let consentSettingsLang = 'tr';
+const consentSettingsDrafts = {}; // survives re-renders while editing; keyed "type:lang"
+const consentDraftKey = ()=> `${consentSettingsType}:${consentSettingsLang}`;
 
 function formsSettingsHtml(){
   return `
@@ -8135,6 +8234,9 @@ function formsSettingsHtml(){
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
         <select id="consentTypeSelect" class="settings-select">
           ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}" ${consentSettingsType===k?'selected':''}>${CONSENT_TYPES[k]}</option>`).join('')}
+        </select>
+        <select id="consentLangSelect" class="settings-select" title="Bu metnin dili — danışana bu dilde gönderdiğinde kullanılır">
+          ${Object.keys(FORM_LANGS).map(k=>`<option value="${k}" ${consentSettingsLang===k?'selected':''}>${FORM_LANGS[k]}</option>`).join('')}
         </select>
         <button class="settings-btn" id="consentUploadBtn" style="width:auto;">📄 Word / PDF / metin dosyası yükle</button>
         <input type="file" id="consentFileInput" accept=".docx,.pdf,.txt,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,text/plain" hidden>
@@ -8164,7 +8266,7 @@ function formsSettingsHtml(){
       <div id="consentEditor" class="consent-editor" contenteditable="true"></div>
       <div class="consent-fixed">
         <strong>Sabit imza bölümü (değiştirilemez, otomatik eklenir)</strong>
-        <div>☐ ${escapeHtml(CONSENT_ACK)}</div>
+        <div id="consentAckPreview">☐ ${escapeHtml(consentAck(consentSettingsLang))}</div>
         <div>Ad Soyad · İmza · Tarih — çift terapisinde iki imza sırayla, reşit olmayan danışanda veli imzası ve yakınlık derecesi.</div>
       </div>
       <div style="display:flex; gap:8px; margin-top:10px;">
@@ -8196,25 +8298,30 @@ async function wireFormsSettings(){
   const editor = document.getElementById('consentEditor');
   const status = document.getElementById('consentStatus');
 
+  const langSel = document.getElementById('consentLangSelect');
   const fill = ()=>{
-    const type = consentSettingsType;
-    const draft = consentSettingsDrafts[type];
-    const saved = state.consentTemplates && state.consentTemplates[type];
-    titleInput.value = draft ? draft.title : ((saved && saved.title) || CONSENT_DEFAULT_TITLES[type]);
+    const type = consentSettingsType, lang = consentSettingsLang;
+    const draft = consentSettingsDrafts[consentDraftKey()];
+    const store = state[consentStoreKey(lang)];
+    const saved = store && store[type];
+    const ackEl = document.getElementById('consentAckPreview');
+    if(ackEl) ackEl.textContent = '☐ ' + consentAck(lang);
+    titleInput.value = draft ? draft.title : ((saved && saved.title) || consentDefaultTitle(type, lang));
     editor.innerHTML = draft ? draft.html : ((saved && saved.html) || '');
     if(draft) status.textContent = '✏️ Kaydedilmemiş değişiklikler var.';
     else if(saved && saved.html) status.textContent = `✅ Kayıtlı — son güncelleme: ${formatBackupTime(saved.updatedAt)}${saved.sourceName ? ' · ' + saved.sourceName : ''}`;
-    else status.textContent = '⚠️ Bu tür için henüz metin yok — metin eklenmeden bu onam gönderilemez.';
+    else status.textContent = `⚠️ Bu türün ${FORM_LANGS[lang]} metni henüz yok — eklenmeden bu onam ${FORM_LANGS[lang]} olarak gönderilemez.`;
   };
   const keepDraft = (sourceName)=>{
-    const prev = consentSettingsDrafts[consentSettingsType] || {};
-    consentSettingsDrafts[consentSettingsType] = { title: titleInput.value, html: editor.innerHTML, sourceName: sourceName || prev.sourceName || '' };
+    const prev = consentSettingsDrafts[consentDraftKey()] || {};
+    consentSettingsDrafts[consentDraftKey()] = { title: titleInput.value, html: editor.innerHTML, sourceName: sourceName || prev.sourceName || '' };
     status.textContent = '✏️ Kaydedilmemiş değişiklikler var.';
   };
 
   fill();
 
   typeSel.addEventListener('change', ()=>{ consentSettingsType = typeSel.value; fill(); });
+  langSel.addEventListener('change', ()=>{ consentSettingsLang = langSel.value; fill(); });
   titleInput.addEventListener('input', ()=> keepDraft());
   editor.addEventListener('input', ()=> keepDraft());
   // Formatting buttons act on the selected text. mousedown + preventDefault keeps the selection in the editor.
@@ -8249,18 +8356,19 @@ async function wireFormsSettings(){
       fill();
     }
   });
-  const collect = ()=>({ title: titleInput.value.trim() || CONSENT_DEFAULT_TITLES[consentSettingsType], html: sanitizeConsentHtml(editor.innerHTML) });
+  const collect = ()=>({ title: titleInput.value.trim() || consentDefaultTitle(consentSettingsType, consentSettingsLang), html: sanitizeConsentHtml(editor.innerHTML) });
   document.getElementById('consentSaveBtn').addEventListener('click', async ()=>{
-    const type = consentSettingsType;
+    const type = consentSettingsType, lang = consentSettingsLang, dkey = consentDraftKey();
     const { title, html } = collect();
     if(!consentHtmlToBlocks(html).length){ alert('Metin boş. Bir dosya yükle ya da metni kutuya yapıştır.'); return; }
-    if(!state.consentTemplates) state.consentTemplates = {};
-    const draft = consentSettingsDrafts[type] || {};
-    const prev = state.consentTemplates[type] || {};
-    state.consentTemplates[type] = { title, html, updatedAt: Date.now(), sourceName: draft.sourceName || prev.sourceName || '' };
-    delete consentSettingsDrafts[type];
+    const sk = consentStoreKey(lang);
+    if(!state[sk]) state[sk] = {};
+    const draft = consentSettingsDrafts[dkey] || {};
+    const prev = state[sk][type] || {};
+    state[sk][type] = { title, html, updatedAt: Date.now(), sourceName: draft.sourceName || prev.sourceName || '' };
+    delete consentSettingsDrafts[dkey];
     await saveState();
-    showToast(`✅ ${CONSENT_TYPES[type]} onam formu kaydedildi.`);
+    showToast(`✅ ${CONSENT_TYPES[type]} onam formu (${FORM_LANGS[lang]}) kaydedildi.`);
     if(document.body.contains(typeSel)) fill();
   });
   document.getElementById('consentPreviewBtn').addEventListener('click', ()=>{
@@ -8275,8 +8383,10 @@ async function wireFormsSettings(){
         <div class="backups-box-header"><h2>${escapeHtml(title)}</h2><button type="button" id="consentPreviewClose">✕</button></div>
         <div style="padding:0 20px 20px;">
           <div class="consent-editor" style="border:none; padding:0; min-height:0; max-height:none;">${html}</div>
-          <div style="border-top:2px solid var(--card-line); margin-top:14px; padding-top:12px; font-size:13.5px;">☐ ${escapeHtml(CONSENT_ACK)}</div>
-          ${type === 'couple' ? sigBox('Signature 1 of 2') + sigBox('Signature 2 of 2') : type === 'minor' ? sigBox('Parent / guardian signature') : sigBox('Your signature')}
+          <div style="border-top:2px solid var(--card-line); margin-top:14px; padding-top:12px; font-size:13.5px;">☐ ${escapeHtml(consentAck(consentSettingsLang))}</div>
+          ${consentSettingsLang === 'tr'
+            ? (type === 'couple' ? sigBox('İmzanız (eşiniz kendi bağlantısından ayrıca imzalar)') : type === 'minor' ? sigBox('Veli / vasi imzası') : sigBox('İmzanız'))
+            : (type === 'couple' ? sigBox('Your signature (your partner signs separately)') : type === 'minor' ? sigBox('Parent / guardian signature') : sigBox('Your signature'))}
         </div>
       </div>`;
     document.body.appendChild(modal);
@@ -8309,9 +8419,11 @@ function newFormToken(){
   return FORM_OWNER_CODES[currentPersonId()] + '.' + btoa(String.fromCharCode.apply(null, b)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 }
 const FORM_OWNER_CODES = { kubilay: 'a', duygu: 'b' };
-function formLinkForToken(token){
+function formLinkForToken(token, lang){
   // Links made before the owner code existed still need the old "p" parameter.
-  return token.indexOf('.') === 1 ? `${FORM_PAGE_URL}#t=${token}` : `${FORM_PAGE_URL}#p=${currentPersonId()}&t=${token}`;
+  // "l=tr" lets the page speak Turkish from the first screen (before the forms themselves are loaded).
+  const l = lang === 'tr' ? '&l=tr' : '';
+  return token.indexOf('.') === 1 ? `${FORM_PAGE_URL}#t=${token}${l}` : `${FORM_PAGE_URL}#p=${currentPersonId()}&t=${token}${l}`;
 }
 // Couple requests have one part (own link, own device) per person; everything else is a single link.
 function formTokens(entry){ return entry.parts ? entry.parts.map(p => p.token) : [entry.token]; }
@@ -8350,9 +8462,11 @@ async function createFormRequest(client, opts){
   const p = getProvider();
   const sp = client.profile && client.profile.secondPerson;
   let consent = null;
+  const lang = opts.lang === 'tr' ? 'tr' : 'en';
   if(opts.consentType){
-    const t = getConsentTemplate(opts.consentType);
-    consent = { type: opts.consentType, title: t.title || CONSENT_DEFAULT_TITLES[opts.consentType], html: t.html, checks: [CONSENT_ACK], version: hashString((t.title||'') + t.html + CONSENT_ACK) };
+    const t = getConsentTemplate(opts.consentType, lang);
+    const ack = consentAck(lang);
+    consent = { type: opts.consentType, lang, title: t.title || consentDefaultTitle(opts.consentType, lang), html: t.html, checks: [ack], version: hashString((t.title||'') + t.html + ack) };
   }
   const now = Date.now();
   const expiresAt = now + opts.days * 24*60*60*1000;
@@ -8360,19 +8474,22 @@ async function createFormRequest(client, opts){
   // and the forms themselves, stored under a key. With the birth-date check on, the key IS the date of
   // birth, so the forms can only be opened — and answers only submitted — by someone who knows it.
   const cover = {
-    v: 2, owner: me, createdAt: window.FB.serverTimestamp(), expiresAt: new Date(expiresAt),
+    v: 2, owner: me, lang, createdAt: window.FB.serverTimestamp(), expiresAt: new Date(expiresAt),
     practice: 'İki Therapy',
     therapist: { name: p.name || '', credential: p.credential || '', regNumber: p.regNumber || '' }
   };
   const write = async (content, dob)=>{
     const token = newFormToken();
     const key = dob || 'open';
-    await window.FB.setDoc(formContentRef(token, key), { consent, scales: opts.scales, ...(opts.intake ? { intake: INTAKE_FORM } : {}), ...content });
+    await window.FB.setDoc(formContentRef(token, key), {
+      lang, consent, scales: opts.scales, scaleTexts: scaleTextsFor(lang, opts.scales),
+      ...(opts.intake ? { intake: lang === 'tr' ? INTAKE_FORM_TR : INTAKE_FORM } : {}), ...content
+    });
     await window.FB.setDoc(formRequestRef(token), { ...cover, needsDob: !!dob, dobOf: opts.consentType === 'minor' ? 'client' : 'self' });
     return { token, key };
   };
   const dobs = opts.dobs || [];
-  const entry = { createdAt: now, expiresAt, dobCheck: !!(opts.dobs && opts.dobs.length), consentType: opts.consentType || null, consentVersion: consent ? consent.version : null, scales: opts.scales, intake: !!opts.intake, status: 'open', sentTo: [] };
+  const entry = { createdAt: now, expiresAt, dobCheck: !!(opts.dobs && opts.dobs.length), lang, consentType: opts.consentType || null, consentVersion: consent ? consent.version : null, scales: opts.scales, intake: !!opts.intake, status: 'open', sentTo: [] };
   if(opts.consentType === 'couple'){
     // Each person gets their own link and signs on their own device.
     const names = [client.name, sp.name.trim()];
@@ -8399,6 +8516,7 @@ async function createFormRequest(client, opts){
 
 function formEntryContents(e){
   const parts = [];
+  if(e.lang === 'tr') parts.push('🇹🇷');
   if(e.intake) parts.push('Intake formu');
   if(e.consentType) parts.push(`Onam (${CONSENT_TYPES[e.consentType] || e.consentType})`);
   (e.scales || []).forEach(id => parts.push(FORM_SCALES[id] ? FORM_SCALES[id].title : id));
@@ -8433,8 +8551,11 @@ async function createGmailTextDraft(to, subject, bodyText){
 async function createFormLinkDraft(client, entry){
   const sp = client.profile && client.profile.secondPerson;
   const primaryEmail = (client.profile && client.profile.email || '').trim();
-  const until = new Date(entry.expiresAt).toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' });
-  const body = (name, token) => `Hello${name ? ' ' + name : ''},\n\nPlease complete your forms before our next session using the secure link below. It takes about 3 to 5 minutes and works on a phone.\n\n${formLinkForToken(token)}\n\nThis link is personal: it can be used once and is valid until ${until}.\n\nBest regards,\n${getProvider().name || ''}`;
+  const tr = entry.lang === 'tr';
+  const until = new Date(entry.expiresAt).toLocaleDateString(tr ? 'tr-TR' : 'en-CA', { year:'numeric', month:'long', day:'numeric' });
+  const body = tr
+    ? (name, token) => `Merhaba${name ? ' ' + name : ''},\n\nLütfen bir sonraki seansımızdan önce aşağıdaki güvenli bağlantıdan formlarınızı doldurun. Yaklaşık 3–5 dakika sürer ve telefondan da doldurulabilir.\n\n${formLinkForToken(token, 'tr')}\n\nBu bağlantı size özeldir: yalnızca bir kez kullanılabilir ve ${until} tarihine kadar geçerlidir.\n\nSevgilerimle,\n${getProvider().name || ''}`
+    : (name, token) => `Hello${name ? ' ' + name : ''},\n\nPlease complete your forms before our next session using the secure link below. It takes about 3 to 5 minutes and works on a phone.\n\n${formLinkForToken(token)}\n\nThis link is personal: it can be used once and is valid until ${until}.\n\nBest regards,\n${getProvider().name || ''}`;
   // Couples: one separate draft per person, each to that person's own address with their own link.
   const targets = entry.parts
     ? entry.parts.map((pt, i) => ({ name: pt.name, token: pt.token, email: i === 0 ? primaryEmail : ((sp && sp.email) || '').trim(), skip: pt.status !== 'open' }))
@@ -8445,7 +8566,7 @@ async function createFormLinkDraft(client, entry){
     const label = t.label || t.name;
     if(t.skip) continue;
     if(!t.email){ lines.push(`❌ ${label}: profilde e-posta yok — bağlantısını kopyalayıp gönder`); continue; }
-    const r = await createGmailTextDraft(t.email, 'Forms to complete before your session', body(t.name, t.token));
+    const r = await createGmailTextDraft(t.email, tr ? 'Seansınızdan önce doldurmanız gereken formlar' : 'Forms to complete before your session', body(t.name, t.token));
     if(r.ok){ sent.push(t.email); lines.push(`✅ ${label}: taslak hazır → ${t.email}`); }
     else lines.push(`❌ ${label}: ${r.error}`);
   }
@@ -8470,15 +8591,19 @@ function openSendFormsModal(client){
     <div class="backups-box" style="max-width:420px;">
       <div class="backups-box-header"><h2>Form gönder</h2><button type="button" id="sendFormsClose">✕</button></div>
       <div id="sendFormsBody" style="padding:0 20px 20px;">
+        <label class="consent-label">Form dili</label>
+        <div class="send-lang-row">
+          ${Object.keys(FORM_LANGS).map(k => `<label class="send-lang"><input type="radio" name="sendLang" value="${k}" ${((client.profile && client.profile.formLang) || 'tr') === k ? 'checked' : ''}><span>${FORM_LANGS[k]}</span></label>`).join('')}
+        </div>
         <label class="consent-label">Onam formu</label>
         <select id="sendConsentType" class="settings-select" style="width:100%;">
           <option value="">Onam formu gönderme</option>
           ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}">${CONSENT_TYPES[k]}${k===defaultType?' (bu danışan için uygun)':''}</option>`).join('')}
         </select>
         <div id="sendConsentNote" class="consent-status" style="margin-top:6px;"></div>
-        <label class="consent-label">Intake (İngilizce)</label>
+        <label class="consent-label">Intake</label>
         <div class="tick-row"><input type="checkbox" id="sendIntake"><span>Bireysel terapi intake formu</span></div>
-        <label class="consent-label">Ölçekler (İngilizce)</label>
+        <label class="consent-label">Ölçekler</label>
         <div class="tick-row"><input type="checkbox" id="sendPhq9"><span>PHQ-9 (depresyon)</span></div>
         <div class="tick-row"><input type="checkbox" id="sendGad7"><span>GAD-7 (kaygı)</span></div>
         <label class="consent-label">Kimlik doğrulama</label>
@@ -8500,12 +8625,13 @@ function openSendFormsModal(client){
   const note = document.getElementById('sendConsentNote');
   const createBtn = document.getElementById('sendFormsCreate');
   let ready = true; // consent texts live in the therapist's own data, already loaded
+  const langOf = ()=> (modal.querySelector('input[name="sendLang"]:checked') || {}).value || 'tr';
 
   const validate = ()=>{
     const type = typeSel.value;
     let msg = '';
     if(type && !ready) msg = 'Onam metinleri yükleniyor…';
-    else if(type && !getConsentTemplate(type)) msg = `⚠️ "${CONSENT_TYPES[type]}" onam metni henüz eklenmemiş. Ayarlar > Onam Formları bölümünden ekle.`;
+    else if(type && !getConsentTemplate(type, langOf())) msg = `⚠️ "${CONSENT_TYPES[type]}" onam metninin ${FORM_LANGS[langOf()]} sürümü henüz eklenmemiş. Ayarlar > Onam Formları bölümünden (dil: ${FORM_LANGS[langOf()]}) ekle.`;
     else if(type === 'couple' && !hasSecond) msg = '⚠️ Çift onamı için profilde ikinci kişinin adı girilmiş olmalı.';
     else if(type === 'couple') msg = 'Her birine kendi e-posta adresine ayrı bir bağlantı gider; her biri kendi cihazından imzalar, kendi ölçeğini ve intake formunu doldurur.';
     else if(type === 'minor') msg = 'Onamı veli imzalar; ölçekleri danışan doldurur.';
@@ -8528,6 +8654,7 @@ function openSendFormsModal(client){
   };
   dobCheck.addEventListener('change', renderDobFields);
   typeSel.addEventListener('change', ()=>{ validate(); renderDobFields(); });
+  modal.querySelectorAll('input[name="sendLang"]').forEach(r => r.addEventListener('change', validate));
   validate();
   renderDobFields();
 
@@ -8553,7 +8680,10 @@ function openSendFormsModal(client){
     createBtn.disabled = true; createBtn.textContent = 'Oluşturuluyor…';
     let entry;
     try{
-      entry = await createFormRequest(client, { consentType, scales, intake, dobs, days: Number(document.getElementById('sendDays').value) });
+      const lang = langOf();
+      const liveC = state.clients.find(c => c.id === client.id) || client;
+      if(liveC.profile && liveC.profile.formLang !== lang){ liveC.profile.formLang = lang; } // remembered for next time (saved with the request)
+      entry = await createFormRequest(client, { consentType, scales, intake, lang, dobs, days: Number(document.getElementById('sendDays').value) });
     }catch(e){
       console.error('Form bağlantısı oluşturulamadı', e);
       createBtn.disabled = false; createBtn.textContent = 'Bağlantı oluştur';
@@ -8569,7 +8699,7 @@ function openSendFormsModal(client){
         <div id="sendFormsDraftResult" style="font-size:12.5px; white-space:pre-line;"></div>
         ${formTokens(entry).map((t,i)=>`<button class="settings-btn send-forms-copy" data-token="${escapeAttr(t)}" style="width:100%;">🔗 ${entry.parts ? escapeHtml(entry.parts[i].name) + ' bağlantısını kopyala' : 'Bağlantıyı kopyala'}</button>`).join('')}
       </div>`;
-    document.querySelectorAll('.send-forms-copy').forEach(b => b.addEventListener('click', ()=> copyFormLink(b.getAttribute('data-token'))));
+    document.querySelectorAll('.send-forms-copy').forEach(b => b.addEventListener('click', ()=> copyFormLink(b.getAttribute('data-token'), entry.lang)));
     document.getElementById('sendFormsDraft').addEventListener('click', async (ev)=>{
       const b = ev.target;
       const label = b.textContent;
@@ -8582,8 +8712,8 @@ function openSendFormsModal(client){
   });
 }
 
-async function copyFormLink(token){
-  const link = formLinkForToken(token);
+async function copyFormLink(token, lang){
+  const link = formLinkForToken(token, lang);
   try{ await navigator.clipboard.writeText(link); showToast('🔗 Bağlantı kopyalandı.'); }
   catch(e){ prompt('Bağlantıyı kopyala:', link); }
 }
@@ -8688,7 +8818,7 @@ function formEntryHtml(e){
     <div class="form-result">
       ${r.signers.length ? `<div>✍️ İmzalayan: ${escapeHtml(r.signers.join(', '))}</div>` : ''}
       ${(r.intake && r.intake.length) ? `<div>📋 Intake: ${escapeHtml(r.intake.join(', '))}</div>` : ''}
-      ${r.scales.map(s => `<div><strong>${FORM_SCALES[s.id].title}${multi ? ' — ' + escapeHtml(s.name) : ''}:</strong> ${s.total} (${s.band})${s.item9 > 0 ? ` <span class="form-flag">⚠️ Madde 9: ${escapeHtml(FORM_FREQ[s.item9])}</span>` : ''}</div>`).join('')}
+      ${r.scales.map(s => `<div><strong>${FORM_SCALES[s.id] ? FORM_SCALES[s.id].title : s.id}${multi ? ' — ' + escapeHtml(s.name) : ''}:</strong> ${s.total} (${s.band})${s.item9 > 0 ? ` <span class="form-flag">⚠️ Madde 9: ${escapeHtml(FORM_FREQ[s.item9])}</span>` : ''}</div>`).join('')}
     </div>` : '';
   const isOpen = e.status === 'open' && Date.now() <= e.expiresAt;
   const btn = (act, label) => `<button type="button" class="form-act" data-act="${act}">${label}</button>`;
@@ -8736,7 +8866,7 @@ function wireFormsPanel(client){
       const original = btn.textContent;
       const busy = t => { btn.disabled = true; btn.textContent = t; };
       const done = (t, ms) => { btn.textContent = t; setTimeout(()=>{ if(document.body.contains(btn)){ btn.textContent = original; btn.disabled = false; } }, ms || 2500); };
-      if(act.startsWith('copy:')){ copyFormLink(formTokens(entry)[Number(act.slice(5))]); return; }
+      if(act.startsWith('copy:')){ copyFormLink(formTokens(entry)[Number(act.slice(5))], entry.lang); return; }
       if(act === 'reviewed'){ entry.reviewed = true; saveState(); logAudit('form yanıtı değerlendirildi olarak işaretlendi', client.name, client.id); refresh(); return; }
       if(act === 'draft'){
         if(!clientEmailList(client)){ alert('Bu danışanın profilinde e-posta yok. Bağlantıyı kopyalayıp başka yolla gönderebilirsin.'); return; }
@@ -8871,20 +9001,20 @@ function openFormResponseModal(client, entry, rec){
         <div><strong>${escapeHtml(s.name)}</strong>${s.relationship ? ` (${escapeHtml(s.relationship)})` : ''}${s.role === 'guardian' ? ' — veli' : ''}${s.clientName ? `<br><span>Danışan adı (velinin yazdığı): ${escapeHtml(s.clientName)}</span>` : ''}<br><span>${escapeHtml(formDateTimeEn(new Date(s.signedAt).getTime()))}</span></div>
       </div>`).join('')}` : '';
   const scalesHtml = (p.scales || []).filter(s => FORM_SCALES[s.id]).map(s=>{
-    const sc = FORM_SCALES[s.id];
+    const sc = { ...FORM_SCALES[s.id], ...scaleTextsOf(rec, s.id) };
     const r = scoreFormScale(s);
     return `
       <h3 class="form-view-h">${sc.title}${multi ? ' — ' + escapeHtml(s.respondentName) : ''}: ${r.total} (${r.band})</h3>
       <table class="form-view-table">
-        ${sc.items.map((t,i)=>`<tr class="${s.id==='phq9' && i===8 && s.answers[i] > 0 ? 'flag' : ''}"><td>${i+1}. ${escapeHtml(t)}</td><td>${s.answers[i]} — ${escapeHtml(FORM_FREQ[s.answers[i]] || '')}</td></tr>`).join('')}
-        ${s.id === 'phq9' ? `<tr><td>Functional difficulty</td><td>${s.difficulty == null ? 'Not answered' : escapeHtml(FORM_DIFFICULTY[s.difficulty])}</td></tr>` : ''}
+        ${sc.items.map((t,i)=>`<tr class="${s.id==='phq9' && i===8 && s.answers[i] > 0 ? 'flag' : ''}"><td>${i+1}. ${escapeHtml(t)}</td><td>${s.answers[i]} — ${escapeHtml(sc.freq[s.answers[i]] || '')}</td></tr>`).join('')}
+        ${s.id === 'phq9' ? `<tr><td>${escapeHtml(sc.difficultyQ)}</td><td>${s.difficulty == null ? '—' : escapeHtml(sc.difficulty[s.difficulty])}</td></tr>` : ''}
       </table>`;
   }).join('');
   const intakes = p.intakes || [];
   const intakeHtml = intakes.map(it => `
       <h3 class="form-view-h">${escapeHtml(it.title || 'Intake form')}${intakes.length > 1 ? ' — ' + escapeHtml(it.respondentName || '') : ''}</h3>
       ${(it.sections || []).map(sec => `
-        <div class="form-view-sub">${escapeHtml(sec.title)}</div>
+        <div class="form-view-sub" lang="${rec.request.lang === 'tr' ? 'tr' : 'en'}">${escapeHtml(sec.title)}</div>
         <table class="form-view-table">
           ${(sec.fields || []).map(f => `<tr><td>${escapeHtml(f.label)}</td><td style="white-space:pre-wrap;">${f.value ? escapeHtml(f.type === 'date' ? formatShortDate(f.value) : f.value) : '<span style="color:var(--muted)">—</span>'}</td></tr>`).join('')}
         </table>`).join('')}`).join('');
@@ -9036,36 +9166,70 @@ async function makePdfWriter(opts){
         y += h + 1.5;
       }catch(e){ console.error('İmza görseli eklenemedi', e); w.text('[signature image unavailable]', { size:9, color:120 }); }
     },
-    footers(label){
+    footers(label, pageFmt){
       const n = doc.getNumberOfPages();
       for(let i = 1; i <= n; i++){
         doc.setPage(i); doc.setFont(family, 'normal'); doc.setFontSize(8); doc.setTextColor(125);
-        doc.text(T(`${label} — Page ${i} of ${n}`), M, 271);
+        doc.text(T(`${label} — ${pageFmt ? pageFmt(i, n) : `Page ${i} of ${n}`}`), M, 271);
       }
     }
   };
   return w;
 }
 
+const PDF_TEXT = {
+  en: {
+    therapist: 'Therapist', regNo: 'Registration No.', client: 'Client', record: 'Electronic record', requestId: 'Request ID',
+    linkCreated: 'Link created', mailedSep: 'Personal links e-mailed separately to', mailed: 'Link e-mailed to',
+    delivered: 'Link delivered by the therapist directly (no e-mail draft recorded)', submitted: 'Submitted (server time)',
+    tz: 'Time zone of the device used', dob: 'Identity check: date of birth confirmed before the form opened', lang: '',
+    agreement: 'Agreement and signature', guardian: 'Parent / guardian', clientN: n => `Client ${n}`, name: 'Name', notSigned: 'Not signed.',
+    relOf: r => ` (${r} of the client)`, clientNameBy: "Client's name as entered by the signer", signedEl: 'Signed electronically',
+    typed: ' (signature adopted by typing the name)', date: 'Date', textVersion: 'Form text version', consent: 'Consent form',
+    results: 'Questionnaire results', total: (t, max, band) => `Total score: ${t} of ${max} — ${band}`, notAnswered: 'Not answered',
+    item9: a => `Note: item 9 (thoughts of being better off dead or of self-harm) was answered "${a}".`,
+    completedBy: 'Completed by', intake: 'Intake form', page: (i, n) => `Page ${i} of ${n}`, locale: 'en-CA', band: b => b
+  },
+  tr: {
+    therapist: 'Terapist', regNo: 'Kayıt No.', client: 'Danışan', record: 'Elektronik kayıt', requestId: 'Talep kimliği',
+    linkCreated: 'Bağlantının oluşturulması', mailedSep: 'Kişisel bağlantıların ayrı ayrı gönderildiği adresler', mailed: 'Bağlantının gönderildiği adres',
+    delivered: 'Bağlantı terapist tarafından doğrudan iletildi (e-posta taslağı kaydı yok)', submitted: 'Gönderim (sunucu saati)',
+    tz: 'Kullanılan cihazın saat dilimi', dob: 'Kimlik doğrulama: form açılmadan önce doğum tarihi doğrulandı', lang: 'Form dili: Türkçe',
+    agreement: 'Onay ve imza', guardian: 'Veli / vasi', clientN: n => `Danışan ${n}`, name: 'Ad Soyad', notSigned: 'İmzalanmadı.',
+    relOf: r => ` (danışanın ${r})`, clientNameBy: 'İmzalayanın yazdığı danışan adı', signedEl: 'Elektronik olarak imzalandı',
+    typed: ' (imza, ad yazılarak oluşturuldu)', date: 'Tarih', textVersion: 'Form metni sürümü', consent: 'Onam formu',
+    results: 'Ölçek sonuçları', total: (t, max, band) => `Toplam puan: ${t} / ${max} — ${band}`, notAnswered: 'Yanıtlanmadı',
+    item9: a => `Not: 9. madde (ölmüş olmanın daha iyi olacağı ya da kendine zarar verme düşünceleri) "${a}" olarak yanıtlandı.`,
+    completedBy: 'Dolduran', intake: 'Ön bilgi formu', page: (i, n) => `Sayfa ${i} / ${n}`, locale: 'tr-TR', band: b => BAND_TR[b] || b
+  }
+};
+function pdfTextFor(rec){ return PDF_TEXT[(rec && rec.request && rec.request.lang) === 'tr' ? 'tr' : 'en']; }
+function formDateTimeIn(ms, P){
+  return new Date(ms).toLocaleString(P.locale, { year:'numeric', month:'long', day:'numeric', hour:'numeric', minute:'2-digit', timeZoneName:'short' });
+}
+
 function formPdfHeader(w, title, rec){
   const t = rec.request.therapist || {};
+  const P = pdfTextFor(rec);
   w.text(rec.request.practice || 'İki Therapy', { size:9, color:110, gap:1 });
   w.text(title, { size:16, bold:true, gap:3 });
-  w.text(`Therapist: ${t.name || ''}${t.credential ? ', ' + t.credential : ''}${t.regNumber ? ' — Registration No. ' + t.regNumber : ''}`, { size:9.5, color:90, gap:0.8 });
-  w.text(`Client: ${rec.request.clientLabel || ''}`, { size:9.5, color:90, gap:2 });
+  w.text(`${P.therapist}: ${t.name || ''}${t.credential ? ', ' + t.credential : ''}${t.regNumber ? ` — ${P.regNo} ` + t.regNumber : ''}`, { size:9.5, color:90, gap:0.8 });
+  w.text(`${P.client}: ${rec.request.clientLabel || ''}`, { size:9.5, color:90, gap:2 });
   w.rule();
 }
 
 function formPdfRecord(w, entry, rec, extra){
+  const P = pdfTextFor(rec);
   w.rule();
-  w.text('Electronic record', { size:9.5, bold:true, gap:1.2 });
+  w.text(P.record, { size:9.5, bold:true, gap:1.2 });
   const lines = [
-    `Request ID: ${(rec.tokens || [entry.token]).map(t => t.slice(0, 10)).join(', ')}`,
-    `Link created: ${formDateTimeEn(entry.createdAt)}`,
-    (entry.sentTo && entry.sentTo.length) ? `${entry.parts ? 'Personal links e-mailed separately to' : 'Link e-mailed to'}: ${entry.sentTo.join(', ')}` : 'Link delivered by the therapist directly (no e-mail draft recorded)',
-    `Submitted (server time): ${formDateTimeEn(rec.submittedAt)}`,
-    rec.payload.timezone ? `Time zone of the device used: ${rec.payload.timezone}` : '',
-    entry.dobCheck ? 'Identity check: date of birth confirmed before the form opened' : ''
+    `${P.requestId}: ${(rec.tokens || [entry.token]).map(t => t.slice(0, 10)).join(', ')}`,
+    `${P.linkCreated}: ${formDateTimeIn(entry.createdAt, P)}`,
+    (entry.sentTo && entry.sentTo.length) ? `${entry.parts ? P.mailedSep : P.mailed}: ${entry.sentTo.join(', ')}` : P.delivered,
+    `${P.submitted}: ${formDateTimeIn(rec.submittedAt, P)}`,
+    rec.payload.timezone ? `${P.tz}: ${rec.payload.timezone}` : '',
+    entry.dobCheck ? P.dob : '',
+    P.lang
   ].concat(extra || []).filter(Boolean);
   lines.forEach(l => w.text(l, { size:8.5, color:95, gap:0.6 }));
 }
@@ -9081,35 +9245,36 @@ async function buildConsentPdf(client, entry, rec){
     else if(b.type === 'li') w.rich(b.runs, { indent:4, gap:1.2 });
     else w.rich(b.runs, { gap:2.6 });
   });
+  const P = pdfTextFor(rec);
   w.rule();
   w.ensure(60);
-  w.text('Agreement and signature', { size:12, bold:true, gap:2 });
+  w.text(P.agreement, { size:12, bold:true, gap:2 });
   (c.checks || []).forEach((t,i)=> w.text(`${pc.checks && pc.checks[i] ? '[x]' : '[ ]'} ${t}`, { gap:2.4 }));
   (pc.signers || []).forEach((s,i)=>{
     w.ensure(48);
     w.space(2);
-    w.text(s.role === 'guardian' ? 'Parent / guardian' : ((pc.signers.length > 1) ? `Client ${i+1}` : 'Client'), { size:10, bold:true, gap:1 });
+    w.text(s.role === 'guardian' ? P.guardian : ((pc.signers.length > 1) ? P.clientN(i+1) : P.client), { size:10, bold:true, gap:1 });
     if(s.missing){
-      w.text(`Name: ${s.name}`, { size:10, gap:0.8 });
-      w.text('Not signed.', { size:9.5, color:80, gap:2 });
+      w.text(`${P.name}: ${s.name}`, { size:10, gap:0.8 });
+      w.text(P.notSigned, { size:9.5, color:80, gap:2 });
       return;
     }
     if(/^data:image\/png;base64,/.test(s.signature || '')) w.image(s.signature, 62);
-    w.text(`Name: ${s.name}${s.relationship ? ` (${s.relationship} of the client)` : ''}`, { size:10, gap:0.8 });
-    if(s.clientName) w.text(`Client's name as entered by the signer: ${s.clientName}`, { size:10, gap:0.8 });
-    w.text(`Signed electronically${s.signatureMethod === 'typed' ? ' (signature adopted by typing the name)' : ''}: ${formDateTimeEn(new Date(s.signedAt).getTime())}`, { size:9.5, color:80, gap:2 });
+    w.text(`${P.name}: ${s.name}${s.relationship ? P.relOf(s.relationship) : ''}`, { size:10, gap:0.8 });
+    if(s.clientName) w.text(`${P.clientNameBy}: ${s.clientName}`, { size:10, gap:0.8 });
+    w.text(`${P.signedEl}${s.signatureMethod === 'typed' ? P.typed : ''}: ${formDateTimeIn(new Date(s.signedAt).getTime(), P)}`, { size:9.5, color:80, gap:2 });
   });
   if(state.providerSignature){
     const t = rec.request.therapist || {};
     w.ensure(48);
     w.space(2);
-    w.text('Therapist', { size:10, bold:true, gap:1 });
+    w.text(P.therapist, { size:10, bold:true, gap:1 });
     w.image(state.providerSignature, 62);
-    w.text(`Name: ${t.name || ''}${t.credential ? ', ' + t.credential : ''}`, { size:10, gap:0.8 });
-    w.text(`Date: ${formDateTimeEn(entry.createdAt)}`, { size:9.5, color:80, gap:2 });
+    w.text(`${P.name}: ${t.name || ''}${t.credential ? ', ' + t.credential : ''}`, { size:10, gap:0.8 });
+    w.text(`${P.date}: ${formDateTimeIn(entry.createdAt, P)}`, { size:9.5, color:80, gap:2 });
   }
-  formPdfRecord(w, entry, rec, [`Form text version: ${c.version || ''}`]);
-  w.footers(`${c.title || 'Consent form'} — ${rec.request.clientLabel || ''}`);
+  formPdfRecord(w, entry, rec, [`${P.textVersion}: ${c.version || ''}`]);
+  w.footers(`${c.title || P.consent} — ${rec.request.clientLabel || ''}`, P.page);
   return w.doc;
 }
 
@@ -9117,39 +9282,42 @@ async function buildScalesPdf(client, entry, rec){
   const scales = (rec.payload.scales || []).filter(s => FORM_SCALES[s.id]);
   if(!scales.length) throw new Error('Bu kayıtta ölçek yok');
   const multi = new Set(scales.map(s => s.respondentName)).size > 1;
+  const P = pdfTextFor(rec);
   const w = await makePdfWriter();
-  formPdfHeader(w, 'Questionnaire results', rec);
+  formPdfHeader(w, P.results, rec);
   scales.forEach(s=>{
-    const sc = FORM_SCALES[s.id];
+    const sc = { ...FORM_SCALES[s.id], ...scaleTextsOf(rec, s.id) };
     const r = scoreFormScale(s);
     w.ensure(40);
     w.text(`${sc.title}${multi ? ' — ' + s.respondentName : ''}`, { size:13, bold:true, gap:1 });
-    w.text(`Total score: ${r.total} of ${sc.bands[sc.bands.length-1][0]} — ${r.band}`, { size:11, bold:true, gap:2 });
+    w.text(P.total(r.total, sc.bands[sc.bands.length-1][0], P.band(r.band)), { size:11, bold:true, gap:2 });
     w.text(sc.stem, { size:9.5, color:90, gap:2 });
     sc.items.forEach((t,i)=>{
       w.ensure(12);
       w.text(`${i+1}. ${t}`, { size:10, gap:0.4 });
-      w.text(`${s.answers[i]} — ${FORM_FREQ[s.answers[i]] || ''}`, { size:10, bold:true, indent:5, gap:1.8 });
+      w.text(`${s.answers[i]} — ${sc.freq[s.answers[i]] || ''}`, { size:10, bold:true, indent:5, gap:1.8 });
     });
     if(s.id === 'phq9'){
-      w.text(`Functional difficulty: ${s.difficulty == null ? 'Not answered' : FORM_DIFFICULTY[s.difficulty]}`, { size:10, gap:1.6 });
-      if(s.answers[8] > 0) w.text(`Note: item 9 (thoughts of being better off dead or of self-harm) was answered "${FORM_FREQ[s.answers[8]]}".`, { size:10, bold:true, gap:2 });
+      w.text(sc.difficultyQ, { size:10, gap:0.4 });
+      w.text(s.difficulty == null ? P.notAnswered : sc.difficulty[s.difficulty], { size:10, bold:true, indent:5, gap:1.8 });
+      if(s.answers[8] > 0) w.text(P.item9(sc.freq[s.answers[8]]), { size:10, bold:true, gap:2 });
     }
     w.space(3);
   });
   formPdfRecord(w, entry, rec);
-  w.footers(`Questionnaire results — ${rec.request.clientLabel || ''}`);
+  w.footers(`${P.results} — ${rec.request.clientLabel || ''}`, P.page);
   return w.doc;
 }
 
 async function buildIntakePdf(client, entry, rec){
   const intakes = rec.payload.intakes || [];
   if(!intakes.length) throw new Error('Bu kayıtta intake formu yok');
+  const P = pdfTextFor(rec);
   const w = await makePdfWriter();
-  formPdfHeader(w, intakes[0].title || 'Intake form', rec);
+  formPdfHeader(w, intakes[0].title || P.intake, rec);
   intakes.forEach((it, idx) => {
     if(idx > 0){ w.doc.addPage(); }
-    if(intakes.length > 1) w.text(`Completed by: ${it.respondentName || ''}`, { size:11, bold:true, gap:2.5 });
+    if(intakes.length > 1) w.text(`${P.completedBy}: ${it.respondentName || ''}`, { size:11, bold:true, gap:2.5 });
     (it.sections || []).forEach(sec => {
       w.ensure(22);
       w.text(sec.title, { size:12, bold:true, gap:1.2 });
@@ -9157,14 +9325,14 @@ async function buildIntakePdf(client, entry, rec){
       (sec.fields || []).forEach(f => {
         w.ensure(12);
         w.text(f.label, { size:9.5, color:90, gap:0.3 });
-        const v = f.value ? (f.type === 'date' ? new Date(f.value + 'T00:00:00').toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' }) : f.value) : '—';
+        const v = f.value ? (f.type === 'date' ? new Date(f.value + 'T00:00:00').toLocaleDateString(P.locale, { year:'numeric', month:'long', day:'numeric' }) : f.value) : '—';
         w.text(v, { size:10.5, bold:!!f.value, indent:4, gap:1.8 });
       });
       w.space(2.5);
     });
   });
   formPdfRecord(w, entry, rec);
-  w.footers(`${intakes[0].title || 'Intake form'} — ${rec.request.clientLabel || ''}`);
+  w.footers(`${intakes[0].title || P.intake} — ${rec.request.clientLabel || ''}`, P.page);
   return w.doc;
 }
 
