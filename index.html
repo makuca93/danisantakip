@@ -1933,6 +1933,7 @@
     font-style:italic;
     text-align:center;
   }
+  .invoice-drive-btn.saved{background:var(--green-bg); border-color:var(--green); color:var(--green);}
   .invoice-actions-label{
     margin-top:12px;
     padding-top:12px;
@@ -6944,7 +6945,7 @@ function renderSessionCard(client, session, index, defaultOpenId){
       generateInvoiceForSession(client, session, 'save');
     });
     const driveBtn = div.querySelector('.invoice-drive-btn');
-    applyDriveInvoiceBtnState(driveBtn, session.id); // keep "Kaydediliyor…/Kaydedildi" across re-renders
+    applyDriveInvoiceBtnState(driveBtn, session.id, session); // keep "Kaydediliyor…/Kaydedildi" across re-renders
     driveBtn.addEventListener('click', async ()=>{
       const sid = session.id;
       if(driveInvoiceBtnState[sid]) return; // already running for this session
@@ -6965,6 +6966,13 @@ function renderSessionCard(client, session, index, defaultOpenId){
         console.error("Drive'a kaydetme hatası", e);
         allOk = false;
       }
+      if(allOk){
+        // Remember the save on the session itself, so the button keeps showing it (and still allows saving again).
+        const liveClient = state.clients.find(c => c.id === client.id) || client;
+        const liveSession = (liveClient.sessions || []).find(x => x.id === sid) || session;
+        liveSession.driveSavedAt = Date.now();
+        saveState();
+      }
       setDriveInvoiceBtnState(sid, { text: allOk ? '✅ Kaydedildi' : '❌ Başarısız, tekrar dene', disabled: true });
       setTimeout(()=> setDriveInvoiceBtnState(sid, null), allOk ? 3000 : 4000);
     });
@@ -6984,10 +6992,26 @@ function renderSessionCard(client, session, index, defaultOpenId){
 const driveInvoiceBtnState = {};
 const DRIVE_INVOICE_BTN_DEFAULT = "☁️ Drive'a Kaydet";
 
-function applyDriveInvoiceBtnState(btn, sessionId){
+function findSessionById(sessionId){
+  for(const c of (state.clients || [])){
+    const s = (c.sessions || []).find(x => x.id === sessionId);
+    if(s) return s;
+  }
+  return null;
+}
+
+function applyDriveInvoiceBtnState(btn, sessionId, session){
   if(!btn) return;
   const st = driveInvoiceBtnState[sessionId];
-  btn.textContent = st ? st.text : DRIVE_INVOICE_BTN_DEFAULT;
+  const sess = findSessionById(sessionId) || session;
+  const savedAt = sess && sess.driveSavedAt;
+  btn.classList.toggle('saved', !st && !!savedAt);
+  if(st) btn.textContent = st.text;
+  else if(savedAt){
+    const d = new Date(savedAt);
+    btn.textContent = `✅ Drive'da · ${pad2(d.getDate())}.${pad2(d.getMonth()+1)} — yeniden kaydet`;
+  }else btn.textContent = DRIVE_INVOICE_BTN_DEFAULT;
+  btn.title = savedAt ? `Son kayıt: ${formatBackupTime(savedAt)}. Tekrar kaydetmek için tıkla.` : '';
   btn.disabled = !!(st && st.disabled);
 }
 
