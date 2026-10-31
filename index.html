@@ -7012,9 +7012,9 @@ function applyDriveInvoiceBtnState(btn, sessionId, session){
   if(st) btn.textContent = st.text;
   else if(savedAt){
     const d = new Date(savedAt);
-    btn.textContent = `✅ Drive'da · ${pad2(d.getDate())}.${pad2(d.getMonth()+1)} — yeniden kaydet`;
+    btn.textContent = `✅ Kaydedildi: ${pad2(d.getDate())}.${pad2(d.getMonth()+1)} · tekrar kaydet`;
   }else btn.textContent = DRIVE_INVOICE_BTN_DEFAULT;
-  btn.title = savedAt ? `Son kayıt: ${formatBackupTime(savedAt)}. Tekrar kaydetmek için tıkla.` : '';
+  btn.title = savedAt ? `Drive'a en son ${formatBackupTime(savedAt)} tarihinde kaydedildi. Tekrar kaydetmek için tıkla.` : '';
   btn.disabled = !!(st && st.disabled);
 }
 
