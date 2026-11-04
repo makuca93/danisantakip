@@ -4646,8 +4646,9 @@ async function createGmailDraftWithAttachment(client, session, doc, filename, re
 
   recipient = recipient || invoiceRecipient(client, 'primary');
   const to = recipient.email;
-  const subject = `Your Receipt from ${getProvider().name} - ${formatInvoiceDate(session.date)}`;
-  const bodyText = `Hello ${recipient.name || client.name},\n\nPlease find your receipt for the session on ${formatInvoiceDate(session.date)} attached.\n\nBest regards,`;
+  const kind = isInvoiceDocType(client) ? 'Invoice' : 'Receipt';
+  const subject = `Your ${kind} from ${getProvider().name} - ${formatInvoiceDate(session.date)}`;
+  const bodyText = `Hello ${recipient.name || client.name},\n\nPlease find your ${kind.toLowerCase()} for the session on ${formatInvoiceDate(session.date)} attached.\n\nBest regards,`;
   const safeName = filename.replace(/[^\x20-\x7E]|"/g, '_');
 
   const pdfBase64 = btoa(arrayBufferToBinaryString(doc.output('arraybuffer')));
@@ -4859,11 +4860,18 @@ function askBillToName(client){
   });
 }
 
+// Receipt (paid) is the default; a client profile can ask for an invoice (amount due) instead. IFHP is always an invoice.
+function isInvoiceDocType(client){
+  return !!(client && client.profile && (client.profile.ifhp || client.profile.docType === 'invoice'));
+}
+
 function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName, isAssessment){
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   const amountStr = `CA$${rate.toFixed(2)}`;
-  const docTitle = ifhp ? 'INVOICE' : 'RECEIPT';
+  const asInvoice = ifhp || isInvoiceDocType(client);
+  const showNumber = asInvoice && !!invoiceNumber;
+  const docTitle = asInvoice ? 'INVOICE' : 'RECEIPT';
   const clientName = toAscii(billToName || client.name);
 
   // left accent bar
@@ -4890,8 +4898,8 @@ function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName,
   doc.text(docTitle, 196, 20, { align:'right' });
   doc.setFont('helvetica','normal'); doc.setFontSize(10);
   doc.setTextColor(107,111,120);
-  if(ifhp){ doc.text(`# ${invoiceNumber}`, 196, 27, { align:'right' }); }
-  doc.text(formatInvoiceDate(session.date), 196, ifhp ? 33 : 27, { align:'right' });
+  if(showNumber){ doc.text(`# ${invoiceNumber}`, 196, 27, { align:'right' }); }
+  doc.text(formatInvoiceDate(session.date), 196, showNumber ? 33 : 27, { align:'right' });
 
   // bill to
   let by = 60;
@@ -4939,7 +4947,7 @@ function buildInvoiceDoc(client, session, ifhp, rate, invoiceNumber, billToName,
   doc.text('CA$0.00', 191, ty + 13, { align:'right' });
   doc.setFont('helvetica','bold'); doc.setFontSize(12);
   doc.setTextColor(43,45,51);
-  doc.text(ifhp ? 'BALANCE DUE' : 'AMOUNT PAID', 136, ty + 20.5);
+  doc.text(asInvoice ? 'BALANCE DUE' : 'AMOUNT PAID', 136, ty + 20.5);
   doc.text(amountStr, 191, ty + 20.5, { align:'right' });
 
   // footer band
@@ -4967,7 +4975,7 @@ async function resolveInvoiceDetails(client, session){
   }
 
   let invoiceNumber = session.lastInvoiceNumber || '';
-  const wantsInvoiceNumber = ifhp || !!(client.profile && client.profile.useInvoiceNumber);
+  const wantsInvoiceNumber = ifhp || !!(client.profile && (client.profile.useInvoiceNumber || client.profile.docType === 'invoice'));
   if(wantsInvoiceNumber && !invoiceNumber){
     const entered = await askInvoiceNumber(session.id);
     if(!entered || !entered.trim()){
@@ -6420,6 +6428,12 @@ function profilePanelHtml(client){
         ` : `
         <input type="number" class="profile-rate" placeholder="Seans ücreti (CA$)" value="${p.rate!=null?p.rate:''}" ${p.ifhp?'disabled':''} style="margin-top:8px; max-width:180px;">
         `}
+        <div class="tick-row" style="margin-top:10px; flex-wrap:wrap; gap:8px;"><span>Belge türü:</span>
+          <select class="profile-doc-type settings-select" ${p.ifhp ? 'disabled' : ''} style="width:auto;">
+            <option value="receipt" ${(!p.ifhp && p.docType !== 'invoice') ? 'selected' : ''}>Receipt (ödendi makbuzu)</option>
+            <option value="invoice" ${(p.ifhp || p.docType === 'invoice') ? 'selected' : ''}>Invoice (ödenecek fatura)</option>
+          </select>
+          ${p.ifhp ? '<span style="font-size:12px; opacity:.7;">IFHP danışanlarında her zaman invoice</span>' : ''}</div>
         <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-no-invoice" ${p.noInvoice?'checked':''}><span>Bu danışana fatura hazırlanmayacak</span></div>
         <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-use-invoice-number" ${p.useInvoiceNumber?'checked':''}><span>Bu danışan için fatura numarası eklensin</span></div>
       </div>
@@ -6578,6 +6592,12 @@ function wireProfilePanel(client){
     saveState();
     renderMain();
     document.getElementById('profilePanel').classList.add('open');
+  });
+
+  const docTypeSel = panel.querySelector('.profile-doc-type');
+  if(docTypeSel) docTypeSel.addEventListener('change', ()=>{
+    client.profile.docType = docTypeSel.value === 'invoice' ? 'invoice' : 'receipt';
+    saveState();
   });
 
   const useInvoiceNumberCb = panel.querySelector('.profile-use-invoice-number');
