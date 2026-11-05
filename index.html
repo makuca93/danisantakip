@@ -8242,7 +8242,7 @@ function openSignaturePadModal(){
 
 /* ----- Settings: consent templates, therapist signature, forms folder ----- */
 let consentSettingsType = 'individual';
-let consentSettingsLang = 'tr';
+const consentSettingsLang = 'en'; // consent texts exist in English only
 const consentSettingsDrafts = {}; // survives re-renders while editing; keyed "type:lang"
 const consentDraftKey = ()=> `${consentSettingsType}:${consentSettingsLang}`;
 
@@ -8254,9 +8254,6 @@ function formsSettingsHtml(){
       <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
         <select id="consentTypeSelect" class="settings-select">
           ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}" ${consentSettingsType===k?'selected':''}>${CONSENT_TYPES[k]}</option>`).join('')}
-        </select>
-        <select id="consentLangSelect" class="settings-select" title="Bu metnin dili — danışana bu dilde gönderdiğinde kullanılır">
-          ${Object.keys(FORM_LANGS).map(k=>`<option value="${k}" ${consentSettingsLang===k?'selected':''}>${FORM_LANGS[k]}</option>`).join('')}
         </select>
         <button class="settings-btn" id="consentUploadBtn" style="width:auto;">📄 Word / PDF / metin dosyası yükle</button>
         <input type="file" id="consentFileInput" accept=".docx,.pdf,.txt,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/pdf,text/plain" hidden>
@@ -8318,7 +8315,6 @@ async function wireFormsSettings(){
   const editor = document.getElementById('consentEditor');
   const status = document.getElementById('consentStatus');
 
-  const langSel = document.getElementById('consentLangSelect');
   const fill = ()=>{
     const type = consentSettingsType, lang = consentSettingsLang;
     const draft = consentSettingsDrafts[consentDraftKey()];
@@ -8330,7 +8326,7 @@ async function wireFormsSettings(){
     editor.innerHTML = draft ? draft.html : ((saved && saved.html) || '');
     if(draft) status.textContent = '✏️ Kaydedilmemiş değişiklikler var.';
     else if(saved && saved.html) status.textContent = `✅ Kayıtlı — son güncelleme: ${formatBackupTime(saved.updatedAt)}${saved.sourceName ? ' · ' + saved.sourceName : ''}`;
-    else status.textContent = `⚠️ Bu türün ${FORM_LANGS[lang]} metni henüz yok — eklenmeden bu onam ${FORM_LANGS[lang]} olarak gönderilemez.`;
+    else status.textContent = '⚠️ Bu tür için henüz metin yok — metin eklenmeden bu onam gönderilemez.';
   };
   const keepDraft = (sourceName)=>{
     const prev = consentSettingsDrafts[consentDraftKey()] || {};
@@ -8341,7 +8337,6 @@ async function wireFormsSettings(){
   fill();
 
   typeSel.addEventListener('change', ()=>{ consentSettingsType = typeSel.value; fill(); });
-  langSel.addEventListener('change', ()=>{ consentSettingsLang = langSel.value; fill(); });
   titleInput.addEventListener('input', ()=> keepDraft());
   editor.addEventListener('input', ()=> keepDraft());
   // Formatting buttons act on the selected text. mousedown + preventDefault keeps the selection in the editor.
@@ -8388,7 +8383,7 @@ async function wireFormsSettings(){
     state[sk][type] = { title, html, updatedAt: Date.now(), sourceName: draft.sourceName || prev.sourceName || '' };
     delete consentSettingsDrafts[dkey];
     await saveState();
-    showToast(`✅ ${CONSENT_TYPES[type]} onam formu (${FORM_LANGS[lang]}) kaydedildi.`);
+    showToast(`✅ ${CONSENT_TYPES[type]} onam formu kaydedildi.`);
     if(document.body.contains(typeSel)) fill();
   });
   document.getElementById('consentPreviewBtn').addEventListener('click', ()=>{
@@ -8484,9 +8479,10 @@ async function createFormRequest(client, opts){
   let consent = null;
   const lang = opts.lang === 'tr' ? 'tr' : 'en';
   if(opts.consentType){
-    const t = getConsentTemplate(opts.consentType, lang);
-    const ack = consentAck(lang);
-    consent = { type: opts.consentType, lang, title: t.title || consentDefaultTitle(opts.consentType, lang), html: t.html, checks: [ack], version: hashString((t.title||'') + t.html + ack) };
+    // Consent forms are always sent in English; only the intake form and the scales follow the chosen language.
+    const t = getConsentTemplate(opts.consentType, 'en');
+    const ack = consentAck('en');
+    consent = { type: opts.consentType, lang: 'en', title: t.title || consentDefaultTitle(opts.consentType, 'en'), html: t.html, checks: [ack], version: hashString((t.title||'') + t.html + ack) };
   }
   const now = Date.now();
   const expiresAt = now + opts.days * 24*60*60*1000;
@@ -8615,7 +8611,7 @@ function openSendFormsModal(client){
         <div class="send-lang-row">
           ${Object.keys(FORM_LANGS).map(k => `<label class="send-lang"><input type="radio" name="sendLang" value="${k}" ${((client.profile && client.profile.formLang) || 'tr') === k ? 'checked' : ''}><span>${FORM_LANGS[k]}</span></label>`).join('')}
         </div>
-        <label class="consent-label">Onam formu</label>
+        <label class="consent-label">Onam formu (her zaman İngilizce)</label>
         <select id="sendConsentType" class="settings-select" style="width:100%;">
           <option value="">Onam formu gönderme</option>
           ${Object.keys(CONSENT_TYPES).map(k=>`<option value="${k}">${CONSENT_TYPES[k]}${k===defaultType?' (bu danışan için uygun)':''}</option>`).join('')}
@@ -8651,7 +8647,7 @@ function openSendFormsModal(client){
     const type = typeSel.value;
     let msg = '';
     if(type && !ready) msg = 'Onam metinleri yükleniyor…';
-    else if(type && !getConsentTemplate(type, langOf())) msg = `⚠️ "${CONSENT_TYPES[type]}" onam metninin ${FORM_LANGS[langOf()]} sürümü henüz eklenmemiş. Ayarlar > Onam Formları bölümünden (dil: ${FORM_LANGS[langOf()]}) ekle.`;
+    else if(type && !getConsentTemplate(type, 'en')) msg = `⚠️ "${CONSENT_TYPES[type]}" onam metni henüz eklenmemiş. Ayarlar > Onam Formları bölümünden ekle.`;
     else if(type === 'couple' && !hasSecond) msg = '⚠️ Çift onamı için profilde ikinci kişinin adı girilmiş olmalı.';
     else if(type === 'couple') msg = 'Her birine kendi e-posta adresine ayrı bir bağlantı gider; her biri kendi cihazından imzalar, kendi ölçeğini ve intake formunu doldurur.';
     else if(type === 'minor') msg = 'Onamı veli imzalar; ölçekleri danışan doldurur.';
@@ -9238,8 +9234,8 @@ function formPdfHeader(w, title, rec){
   w.rule();
 }
 
-function formPdfRecord(w, entry, rec, extra){
-  const P = pdfTextFor(rec);
+function formPdfRecord(w, entry, rec, extra, textOverride){
+  const P = textOverride || pdfTextFor(rec);
   w.rule();
   w.text(P.record, { size:9.5, bold:true, gap:1.2 });
   const lines = [
@@ -9256,6 +9252,7 @@ function formPdfRecord(w, entry, rec, extra){
 
 async function buildConsentPdf(client, entry, rec){
   const c = rec.request.consent, pc = rec.payload.consent;
+  const P = PDF_TEXT[c && c.lang === 'tr' ? 'tr' : 'en'];
   if(!c || !pc) throw new Error('Bu kayıtta onam formu yok');
   const blocks = consentHtmlToBlocks(c.html);
   const w = await makePdfWriter({ italic: blocks.some(b => b.runs.some(r => r.i)) });
@@ -9265,7 +9262,6 @@ async function buildConsentPdf(client, entry, rec){
     else if(b.type === 'li') w.rich(b.runs, { indent:4, gap:1.2 });
     else w.rich(b.runs, { gap:2.6 });
   });
-  const P = pdfTextFor(rec);
   w.rule();
   w.ensure(60);
   w.text(P.agreement, { size:12, bold:true, gap:2 });
@@ -9293,7 +9289,7 @@ async function buildConsentPdf(client, entry, rec){
     w.text(`${P.name}: ${t.name || ''}${t.credential ? ', ' + t.credential : ''}`, { size:10, gap:0.8 });
     w.text(`${P.date}: ${formDateTimeIn(entry.createdAt, P)}`, { size:9.5, color:80, gap:2 });
   }
-  formPdfRecord(w, entry, rec, [`${P.textVersion}: ${c.version || ''}`]);
+  formPdfRecord(w, entry, rec, [`${P.textVersion}: ${c.version || ''}`], P);
   w.footers(`${c.title || P.consent} — ${rec.request.clientLabel || ''}`, P.page);
   return w.doc;
 }
