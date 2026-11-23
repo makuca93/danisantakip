@@ -2182,7 +2182,10 @@
   .extra-cal-help summary{cursor:pointer;}
   .extra-cal-help ol{padding-left:18px;}
   @media (max-width: 520px){ .extra-cal-row{flex-wrap:wrap;} .extra-cal-time{min-width:0;} }
-  .consult-panel{display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--card-line); border-radius:10px; background:var(--paper);}
+  .consult-panel{display:none; margin-bottom:12px; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--card-line); border-radius:10px; background:var(--paper);}
+  .consult-panel.open{display:flex;}
+  .prospect-action-row{margin-bottom:10px;}
+  .prospect-action-row .add-session-toggle.active{background:var(--highlight); border-color:var(--highlight-line);}
   .consult-grid{display:flex; gap:8px; flex-wrap:wrap;}
   .consult-grid .consult-datetime{flex:1 1 220px; text-align:left;}
   .consult-grid .consult-duration{flex:0 0 auto; width:auto;}
@@ -2190,7 +2193,14 @@
   .consult-panel .consult-title, .consult-panel .consult-duration{font:inherit; font-size:14px; padding:9px 10px; border:1px solid var(--card-line); border-radius:8px; background:var(--card); color:var(--ink); box-sizing:border-box;}
   .consult-panel .consult-title{width:100%;}
   .consult-list{display:flex; flex-direction:column; gap:4px; margin-top:4px; font-size:13px;}
+  .consult-item{display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 10px; padding:6px 0; border-top:1px dashed var(--card-line);}
+  .consult-item:first-child{border-top:none;}
   .consult-item.past{color:var(--muted);}
+  .consult-item.cancelled .consult-when{text-decoration:line-through; color:var(--muted);}
+  .consult-actions{display:flex; gap:10px;}
+  .consult-actions .link-btn{background:none; border:none; padding:2px 0; font:inherit; font-size:13px; color:var(--ink); text-decoration:underline; cursor:pointer;}
+  .consult-actions .consult-cancel{color:#b2475a;}
+  .profile-consults{margin-top:12px;}
   .home-new-appt-btn{display:flex; align-items:center; gap:10px; width:100%; margin:0 0 12px; padding:9px 12px; border:1px solid var(--highlight-line); border-radius:10px; background:linear-gradient(135deg, var(--grad-start), var(--grad-end)); color:var(--ink); font-family:inherit; font-size:13.5px; font-weight:500; letter-spacing:.1px; cursor:pointer; text-align:left; transition:box-shadow .15s, transform .15s;}
   .home-new-appt-btn:hover{box-shadow:0 2px 10px rgba(43,45,51,.08); transform:translateY(-1px);}
   .home-new-appt-btn .plus{flex:0 0 auto; width:24px; height:24px; border-radius:50%; background:var(--card); border:1px solid var(--highlight-line); display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1; color:var(--ink);}
@@ -3518,6 +3528,7 @@ function convertProspectToClient(prospect){
     name: prospect.name,
     generalAdminNote: prospect.notes || '',
     todos: (prospect.todos || []).slice(), // to-dos added while still a prospect move with them
+    consultations: (prospect.consultations || []).slice(),
     sessions: [],
     profile: {
       info: '', address: '',
@@ -3593,6 +3604,7 @@ async function syncProspectToGoogleContacts(prospect){
 }
 
 /* ---------- Prospects: free 15-minute consultation invite ---------- */
+const prospectPanelsOpen = { consult: false, todo: false };
 function consultationDefaultTitle(prospect){ return `${(prospect.name || '').trim() || 'Client'} - Free Consultation Session`; }
 
 function consultationPanelHtml(prospect){
@@ -3612,14 +3624,65 @@ function consultationPanelHtml(prospect){
     <div class="tick-row consult-invite"><input type="checkbox" class="consult-invite-cb" id="consultInviteCb" ${email ? 'checked' : 'disabled'}>
       <span>${email ? `${escapeHtml(email)} adresine davetiye gönder` : 'E-posta yok: davetiye gönderilemez, randevu sadece senin takvimine eklenir'}</span></div>
     <button type="button" class="settings-btn consult-create" style="width:auto;">📅 Ön görüşme oluştur</button>
-    ${list.length ? `<div class="consult-list">${list.map(c => `
-      <div class="consult-item ${new Date(c.startIso) < new Date() ? 'past' : ''}">📅 ${turkishDayName(isoDate(new Date(c.startIso)))}, ${formatShortDate(isoDate(new Date(c.startIso)))} — ${formatEventTime(c.startIso)} · ${Math.round((new Date(c.endIso) - new Date(c.startIso))/60000)} dk${c.invited ? ' · davet gönderildi' : ''}</div>`).join('')}</div>` : ''}
+    ${consultationListHtml(list, true)}
   </div>`;
+}
+
+// One line per consultation. With actions, upcoming ones get "change" and "cancel".
+function consultationListHtml(list, withActions){
+  if(!list || !list.length) return '';
+  return `<div class="consult-list">${list.map(c => {
+    const d = new Date(c.startIso);
+    const past = d < new Date();
+    const mins = Math.round((new Date(c.endIso) - d) / 60000);
+    const status = c.cancelledAt ? ' · iptal edildi' : (c.invited ? ' · davet gönderildi' : '');
+    const actions = withActions && !past && !c.cancelledAt
+      ? `<span class="consult-actions"><button type="button" class="link-btn consult-move" data-event="${escapeAttr(c.eventId)}">Değiştir</button><button type="button" class="link-btn consult-cancel" data-event="${escapeAttr(c.eventId)}">İptal et</button></span>` : '';
+    return `<div class="consult-item ${past ? 'past' : ''} ${c.cancelledAt ? 'cancelled' : ''}"><span class="consult-when">📅 ${turkishDayName(isoDate(d))}, ${formatShortDate(isoDate(d))} — ${formatEventTime(c.startIso)} · ${mins} dk${status}</span>${actions}</div>`;
+  }).join('')}</div>`;
 }
 
 function wireConsultationPanel(prospect){
   const panel = document.getElementById('consultPanel');
   if(!panel) return;
+  const liveProspect = ()=> (state.prospects || []).find(p => p.id === prospect.id) || prospect;
+  const findC = id => (liveProspect().consultations || []).find(c => c.eventId === id);
+  panel.querySelectorAll('.consult-move').forEach(b => b.addEventListener('click', ()=>{
+    const c = findC(b.dataset.event);
+    if(!c) return;
+    const d = new Date(c.startIso);
+    const mins = Math.round((new Date(c.endIso) - d) / 60000) || 15;
+    openReschedulePopover({
+      title: 'Ön görüşmeyi yeniden planla',
+      initialDate: isoDate(d),
+      initialTimeLabel: formatEventTime(c.startIso),
+      conflictCheck: { durationMinutes: mins, skipEventId: c.eventId },
+      onConfirm: async (dateIso, timeLabel)=>{
+        const ok = await rescheduleCalendarEvent(c.eventId, dateIso, parseAmPmTime(timeLabel));
+        if(!ok){ alert('Ön görüşme güncellenemedi. Takvimden silinmiş olabilir ya da Google bağlantısı gerekebilir.'); return; }
+        const start = new Date(`${dateIso}T${parseAmPmTime(timeLabel)}:00`);
+        c.startIso = start.toISOString();
+        c.endIso = new Date(start.getTime() + mins * 60000).toISOString();
+        c.updatedAt = Date.now();
+        saveState();
+        showToast('✅ Ön görüşme güncellendi, davetliye bildirim gitti.');
+        prospectPanelsOpen.consult = true;
+        renderProspectPage();
+      }
+    });
+  }));
+  panel.querySelectorAll('.consult-cancel').forEach(b => b.addEventListener('click', async ()=>{
+    const c = findC(b.dataset.event);
+    if(!c) return;
+    if(!confirm('Bu ön görüşme iptal edilsin mi? Takvimden silinir ve davetliye iptal bildirimi gider.')) return;
+    const ok = await cancelCalendarEvent(c.eventId);
+    if(!ok){ alert('Ön görüşme iptal edilemedi. Google bağlantısını kontrol edip tekrar dene.'); return; }
+    c.cancelledAt = Date.now();
+    saveState();
+    showToast('Ön görüşme iptal edildi.');
+    prospectPanelsOpen.consult = true;
+    renderProspectPage();
+  }));
   const dtBtn = panel.querySelector('.consult-datetime');
   const durSel = panel.querySelector('.consult-duration');
   dtBtn.addEventListener('click', ()=>{
@@ -3656,6 +3719,7 @@ function wireConsultationPanel(prospect){
     live.consultations.push({ eventId: created.id, startIso: created.startIso, endIso: created.endIso, title, invited: !!invite, createdAt: Date.now() });
     saveState();
     showToast(invite ? '✅ Ön görüşme oluşturuldu, davetiye gönderildi.' : '✅ Ön görüşme takvime eklendi.');
+    prospectPanelsOpen.consult = true;
     renderProspectPage();
   });
 }
@@ -3704,11 +3768,11 @@ function renderProspectPage(){
           <span class="prospect-page-contact-sync-status" style="font-size:12px; color:var(--muted); margin-left:10px;"></span>
         </div>
         <div class="field-block full">
-          <label>Ön görüşme daveti</label>
+          <div class="action-row prospect-action-row">
+            <button class="add-session-toggle ${prospectPanelsOpen.consult ? 'active' : ''}" type="button" id="toggleConsultBtn">📅 Ön görüşme daveti${(prospect.consultations||[]).filter(c=>!c.cancelledAt).length ? ` (${prospect.consultations.filter(c=>!c.cancelledAt).length})` : ''}</button>
+            <button class="add-session-toggle ${prospectPanelsOpen.todo ? 'active' : ''}" type="button" id="toggleProspectTodoBtn">✅ Yapılacaklar${(prospect.todos||[]).filter(t=>!t.done).length ? ` (${prospect.todos.filter(t=>!t.done).length})` : ''}</button>
+          </div>
           ${consultationPanelHtml(prospect)}
-        </div>
-        <div class="field-block full">
-          <label>Yapılacaklar</label>
           ${todoPanelHtml(prospect)}
         </div>
         <div class="field-block full">
@@ -3742,10 +3806,23 @@ function renderProspectPage(){
     prospect.notes = ev.target.value;
     saveState();
   });
+  // Both panels fold away; their open/closed state survives re-renders.
+  const consultPanelEl = document.getElementById('consultPanel');
+  const todoPanelEl = document.getElementById('todoPanel');
+  consultPanelEl.classList.toggle('open', prospectPanelsOpen.consult);
+  todoPanelEl.classList.toggle('open', prospectPanelsOpen.todo);
+  const wireToggle = (btnId, key, el)=>{
+    document.getElementById(btnId).addEventListener('click', (ev)=>{
+      prospectPanelsOpen[key] = !prospectPanelsOpen[key];
+      el.classList.toggle('open', prospectPanelsOpen[key]);
+      ev.currentTarget.classList.toggle('active', prospectPanelsOpen[key]);
+    });
+  };
+  wireToggle('toggleConsultBtn', 'consult', consultPanelEl);
+  wireToggle('toggleProspectTodoBtn', 'todo', todoPanelEl);
   wireConsultationPanel(prospect);
-  // To-do list works exactly like a client's; it is always shown open here.
-  document.getElementById('todoPanel').classList.add('open');
-  wireTodoPanel(prospect, renderProspectPage);
+  // To-do list works exactly like a client's.
+  wireTodoPanel(prospect, ()=>{ prospectPanelsOpen.todo = true; renderProspectPage(); });
   main.querySelector('.prospect-convert-btn').addEventListener('click', ()=>{
     convertProspectToClient(prospect);
   });
@@ -6528,6 +6605,7 @@ function profilePanelHtml(client){
           </select>
           ${p.ifhp ? '<span style="font-size:12px; opacity:.7;">IFHP danışanlarında her zaman invoice</span>' : ''}</div>
         <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-no-invoice" ${p.noInvoice?'checked':''}><span>Bu danışana fatura hazırlanmayacak</span></div>
+        ${(client.consultations || []).length ? `<div class="profile-consults"><label class="item-label">Ön görüşmeler (aday iken)</label>${consultationListHtml(client.consultations.slice().sort((a,b)=>(a.startIso||'').localeCompare(b.startIso||'')), false)}</div>` : ''}
         <div class="tick-row" style="margin-top:10px;"><input type="checkbox" class="profile-use-invoice-number" ${p.useInvoiceNumber?'checked':''}><span>Bu danışan için fatura numarası eklensin</span></div>
       </div>
       <div class="field-block full">
