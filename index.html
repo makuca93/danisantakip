@@ -2182,6 +2182,15 @@
   .extra-cal-help summary{cursor:pointer;}
   .extra-cal-help ol{padding-left:18px;}
   @media (max-width: 520px){ .extra-cal-row{flex-wrap:wrap;} .extra-cal-time{min-width:0;} }
+  .consult-panel{display:flex; flex-direction:column; gap:8px; padding:12px; border:1px solid var(--card-line); border-radius:10px; background:var(--paper);}
+  .consult-grid{display:flex; gap:8px; flex-wrap:wrap;}
+  .consult-grid .consult-datetime{flex:1 1 220px; text-align:left;}
+  .consult-grid .consult-duration{flex:0 0 auto; width:auto;}
+  .consult-invite{font-size:13px;}
+  .consult-panel .consult-title, .consult-panel .consult-duration{font:inherit; font-size:14px; padding:9px 10px; border:1px solid var(--card-line); border-radius:8px; background:var(--card); color:var(--ink); box-sizing:border-box;}
+  .consult-panel .consult-title{width:100%;}
+  .consult-list{display:flex; flex-direction:column; gap:4px; margin-top:4px; font-size:13px;}
+  .consult-item.past{color:var(--muted);}
   .home-new-appt-btn{display:flex; align-items:center; gap:10px; width:100%; margin:0 0 12px; padding:9px 12px; border:1px solid var(--highlight-line); border-radius:10px; background:linear-gradient(135deg, var(--grad-start), var(--grad-end)); color:var(--ink); font-family:inherit; font-size:13.5px; font-weight:500; letter-spacing:.1px; cursor:pointer; text-align:left; transition:box-shadow .15s, transform .15s;}
   .home-new-appt-btn:hover{box-shadow:0 2px 10px rgba(43,45,51,.08); transform:translateY(-1px);}
   .home-new-appt-btn .plus{flex:0 0 auto; width:24px; height:24px; border-radius:50%; background:var(--card); border:1px solid var(--highlight-line); display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1; color:var(--ink);}
@@ -3583,6 +3592,74 @@ async function syncProspectToGoogleContacts(prospect){
   }
 }
 
+/* ---------- Prospects: free 15-minute consultation invite ---------- */
+function consultationDefaultTitle(prospect){ return `${(prospect.name || '').trim() || 'Client'} - Free Consultation Session`; }
+
+function consultationPanelHtml(prospect){
+  const email = (prospect.email || '').trim();
+  const list = (prospect.consultations || []).slice().sort((a,b)=> (a.startIso||'').localeCompare(b.startIso||''));
+  return `
+  <div class="consult-panel" id="consultPanel">
+    <div class="consult-grid">
+      <button type="button" class="cal-datetime-btn consult-datetime" data-date="${todayIso()}" data-time="">${calDateTimeButtonLabel(todayIso(), '')}</button>
+      <select class="consult-duration">
+        <option value="15" selected>15 dk</option>
+        <option value="20">20 dk</option>
+        <option value="30">30 dk</option>
+      </select>
+    </div>
+    <input type="text" class="consult-title" value="${escapeAttr(consultationDefaultTitle(prospect))}">
+    <div class="tick-row consult-invite"><input type="checkbox" class="consult-invite-cb" id="consultInviteCb" ${email ? 'checked' : 'disabled'}>
+      <span>${email ? `${escapeHtml(email)} adresine davetiye gönder` : 'E-posta yok: davetiye gönderilemez, randevu sadece senin takvimine eklenir'}</span></div>
+    <button type="button" class="settings-btn consult-create" style="width:auto;">📅 Ön görüşme oluştur</button>
+    ${list.length ? `<div class="consult-list">${list.map(c => `
+      <div class="consult-item ${new Date(c.startIso) < new Date() ? 'past' : ''}">📅 ${turkishDayName(isoDate(new Date(c.startIso)))}, ${formatShortDate(isoDate(new Date(c.startIso)))} — ${formatEventTime(c.startIso)} · ${Math.round((new Date(c.endIso) - new Date(c.startIso))/60000)} dk${c.invited ? ' · davet gönderildi' : ''}</div>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+function wireConsultationPanel(prospect){
+  const panel = document.getElementById('consultPanel');
+  if(!panel) return;
+  const dtBtn = panel.querySelector('.consult-datetime');
+  const durSel = panel.querySelector('.consult-duration');
+  dtBtn.addEventListener('click', ()=>{
+    openReschedulePopover({
+      title: 'Ön görüşme tarihi ve saati',
+      initialDate: dtBtn.getAttribute('data-date'),
+      initialTimeLabel: dtBtn.getAttribute('data-time') || '10:00 AM',
+      conflictCheck: { durationMinutes: Number(durSel.value) || 15 },
+      onConfirm: (dateIso, timeLabel)=>{
+        dtBtn.setAttribute('data-date', dateIso);
+        dtBtn.setAttribute('data-time', timeLabel);
+        dtBtn.textContent = calDateTimeButtonLabel(dateIso, timeLabel);
+      }
+    });
+  });
+  panel.querySelector('.consult-create').addEventListener('click', async (ev)=>{
+    const btn = ev.currentTarget;
+    const dateStr = dtBtn.getAttribute('data-date');
+    const timeLabel = dtBtn.getAttribute('data-time');
+    if(!dateStr || !timeLabel){ dtBtn.click(); return; }
+    const title = panel.querySelector('.consult-title').value.trim() || consultationDefaultTitle(prospect);
+    const invite = panel.querySelector('.consult-invite-cb').checked && (prospect.email || '').trim();
+    btn.disabled = true; btn.textContent = 'Oluşturuluyor…';
+    const created = await createCalendarEvent(null, {
+      dateStr, timeStr: parseAmPmTime(timeLabel), durationMinutes: Number(durSel.value) || 15, title,
+      inviteEmails: invite ? [invite] : [],
+      privateProps: { danisanProspectId: String(prospect.id) },
+      description: 'You can join the free consultation by clicking the link in the Location field.'
+    });
+    btn.disabled = false; btn.textContent = '📅 Ön görüşme oluştur';
+    if(!created) return;
+    const live = (state.prospects || []).find(p => p.id === prospect.id) || prospect;
+    live.consultations = live.consultations || [];
+    live.consultations.push({ eventId: created.id, startIso: created.startIso, endIso: created.endIso, title, invited: !!invite, createdAt: Date.now() });
+    saveState();
+    showToast(invite ? '✅ Ön görüşme oluşturuldu, davetiye gönderildi.' : '✅ Ön görüşme takvime eklendi.');
+    renderProspectPage();
+  });
+}
+
 function renderProspectPage(){
   const main = document.getElementById('main');
   const prospect = (state.prospects||[]).find(p=>p.id===activeProspectId);
@@ -3627,6 +3704,10 @@ function renderProspectPage(){
           <span class="prospect-page-contact-sync-status" style="font-size:12px; color:var(--muted); margin-left:10px;"></span>
         </div>
         <div class="field-block full">
+          <label>Ön görüşme daveti</label>
+          ${consultationPanelHtml(prospect)}
+        </div>
+        <div class="field-block full">
           <label>Yapılacaklar</label>
           ${todoPanelHtml(prospect)}
         </div>
@@ -3661,6 +3742,7 @@ function renderProspectPage(){
     prospect.notes = ev.target.value;
     saveState();
   });
+  wireConsultationPanel(prospect);
   // To-do list works exactly like a client's; it is always shown open here.
   document.getElementById('todoPanel').classList.add('open');
   wireTodoPanel(prospect, renderProspectPage);
@@ -4590,12 +4672,13 @@ async function createCalendarEvent(client, opts){
     start: { dateTime: start.toISOString() },
     end: { dateTime: end.toISOString() },
     // Lets the app recognise its own appointments even when no client e-mail was invited.
-    ...(client && client.id ? { extendedProperties: { private: { danisanClientId: String(client.id) } } } : {})
+    ...(opts.privateProps ? { extendedProperties: { private: opts.privateProps } }
+      : (client && client.id ? { extendedProperties: { private: { danisanClientId: String(client.id) } } } : {}))
   };
   const sessionLink = getProvider().sessionLink;
   if(sessionLink && sessionLink.trim()){
     event.location = sessionLink.trim();
-    event.description = `You can join our session by clicking the link in the Location field.`;
+    event.description = opts.description || `You can join our session by clicking the link in the Location field.`;
   }
   if(opts.inviteEmails && opts.inviteEmails.length){
     event.attendees = opts.inviteEmails.map(email => ({ email }));
@@ -11150,7 +11233,10 @@ function matchClientEvents(events){
   const emailMap = getKnownClientEmails();
   // Appointments without invited e-mails are found by the client id stored on the event,
   // or (for older events) by the calendar event id saved on the client's session.
-  const byId = {}, byEventId = {};
+  const byId = {}, byEventId = {}, byProspect = {};
+  (state.prospects || []).forEach(p => {
+    byProspect[String(p.id)] = { id: p.id, name: `${p.name || '(isimsiz aday)'} (aday)`, profile: {}, isProspect: true };
+  });
   (state.clients || []).forEach(c => {
     byId[String(c.id)] = c;
     (c.sessions || []).forEach(s => { if(s.calendarEventId) byEventId[s.calendarEventId] = c; });
@@ -11159,6 +11245,8 @@ function matchClientEvents(events){
   events.forEach(ev=>{
     const tagged = ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.danisanClientId;
     if(tagged && byId[tagged]){ matched.push({ ev, client: byId[tagged] }); return; }
+    const taggedProspect = ev.extendedProperties && ev.extendedProperties.private && ev.extendedProperties.private.danisanProspectId;
+    if(taggedProspect && byProspect[taggedProspect]){ matched.push({ ev, client: byProspect[taggedProspect] }); return; }
     const attendees = ev.attendees || [];
     const hit = attendees.find(a => emailMap[(a.email||'').trim().toLowerCase()]);
     if(hit){ matched.push({ ev, client: emailMap[hit.email.trim().toLowerCase()] }); return; }
@@ -11251,8 +11339,12 @@ function wirePastCalendarButtons(box){
   box.querySelectorAll('.cal-client-link').forEach(link=>{
     link.addEventListener('click', ()=>{
       const clientId = link.getAttribute('data-client-id');
-      activeClientId = clientId;
-      mainView = 'client';
+      if((state.prospects||[]).some(p => p.id === clientId)){
+        activeProspectId = clientId; mainView = 'prospect'; sidebarListMode = 'prospects';
+      }else{
+        activeClientId = clientId;
+        mainView = 'client';
+      }
       document.body.classList.add('mobile-detail');
       render();
     });
