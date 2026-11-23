@@ -3508,7 +3508,7 @@ function convertProspectToClient(prospect){
     id: uid(),
     name: prospect.name,
     generalAdminNote: prospect.notes || '',
-    todos: [],
+    todos: (prospect.todos || []).slice(), // to-dos added while still a prospect move with them
     sessions: [],
     profile: {
       info: '', address: '',
@@ -3627,6 +3627,10 @@ function renderProspectPage(){
           <span class="prospect-page-contact-sync-status" style="font-size:12px; color:var(--muted); margin-left:10px;"></span>
         </div>
         <div class="field-block full">
+          <label>Yapılacaklar</label>
+          ${todoPanelHtml(prospect)}
+        </div>
+        <div class="field-block full">
           <button class="prospect-convert-btn" type="button">→ Danışan Yap</button>
           <button class="settings-btn danger prospect-page-del-btn" type="button" style="width:auto; margin-left:10px;">Adayı Sil</button>
         </div>
@@ -3657,6 +3661,9 @@ function renderProspectPage(){
     prospect.notes = ev.target.value;
     saveState();
   });
+  // To-do list works exactly like a client's; it is always shown open here.
+  document.getElementById('todoPanel').classList.add('open');
+  wireTodoPanel(prospect, renderProspectPage);
   main.querySelector('.prospect-convert-btn').addEventListener('click', ()=>{
     convertProspectToClient(prospect);
   });
@@ -6114,12 +6121,13 @@ function todoPanelHtml(client){
   </div>`;
 }
 
-function wireTodoPanel(client){
+function wireTodoPanel(client, rerender){
+  rerender = rerender || renderMain; // the prospect page passes its own renderer
   const panel = document.getElementById('todoPanel');
   const wasOpen = panel.classList.contains('open');
 
   const refresh = ()=>{
-    renderMain();
+    rerender();
     if(wasOpen) document.getElementById('todoPanel').classList.add('open');
   };
 
@@ -6135,14 +6143,14 @@ function wireTodoPanel(client){
     client.todos.push({ id: uid(), text, importance, dueDate, done:false, doneAt:null, ...extras });
     saveState();
     panel.classList.add('open');
-    renderMain();
+    rerender();
     document.getElementById('todoPanel').classList.add('open');
   });
 
   panel.querySelector('.todo-sort-select').addEventListener('change', (ev)=>{
     todoSortByClient[client.id] = ev.target.value;
     panel.classList.add('open');
-    renderMain();
+    rerender();
     document.getElementById('todoPanel').classList.add('open');
   });
 
@@ -6154,7 +6162,7 @@ function wireTodoPanel(client){
       todo.doneAt = todo.done ? todayIso() : null;
       saveState();
       panel.classList.add('open');
-      renderMain();
+      rerender();
       document.getElementById('todoPanel').classList.add('open');
     });
     row.querySelector('.todo-item-text-input').addEventListener('blur', (ev)=>{
@@ -6168,7 +6176,7 @@ function wireTodoPanel(client){
       todo.importance = Number(ev.target.value);
       saveState();
       panel.classList.add('open');
-      renderMain();
+      rerender();
       document.getElementById('todoPanel').classList.add('open');
     });
     row.querySelector('.todo-item-duedate-input').addEventListener('change', (ev)=>{
@@ -6176,7 +6184,7 @@ function wireTodoPanel(client){
       todo.dueDate = ev.target.value;
       saveState();
       panel.classList.add('open');
-      renderMain();
+      rerender();
       document.getElementById('todoPanel').classList.add('open');
     });
     row.querySelector('.todo-del').addEventListener('click', ()=>{
@@ -6184,7 +6192,7 @@ function wireTodoPanel(client){
         client.todos = client.todos.filter(t=>t.id!==id);
         saveState();
         panel.classList.add('open');
-        renderMain();
+        rerender();
         document.getElementById('todoPanel').classList.add('open');
       }
     });
@@ -11608,6 +11616,11 @@ function sizeHomeCalendar(){
 }
 window.addEventListener('resize', ()=> sizeHomeCalendar());
 
+// A to-do on the home list belongs to a client or to a prospect (same id space).
+function todoOwnerById(id){
+  return state.clients.find(c=>c.id===id) || (state.prospects||[]).find(p=>p.id===id) || { todos: [] };
+}
+
 function renderHome(){
   requestAnimationFrame(sizeHomeCalendar);
   const main = document.getElementById('main');
@@ -11620,6 +11633,12 @@ function renderHome(){
     (client.todos||[]).forEach(t=>{
       if(!t.done) tasks.push({ clientId: client.id, clientName: client.name, todo:t });
       else doneTasks.push({ clientId: client.id, clientName: client.name, todo:t });
+    });
+  });
+  (state.prospects||[]).forEach(p=>{
+    (p.todos||[]).forEach(t=>{
+      const row = { clientId: p.id, clientName: `${p.name || '(isimsiz aday)'} (aday)`, todo:t };
+      (t.done ? doneTasks : tasks).push(row);
     });
   });
   state.generalTodos.forEach(t=>{
@@ -11760,7 +11779,7 @@ function renderHome(){
     const clientId = row.getAttribute('data-client-id');
     const todoId = row.getAttribute('data-todo-id');
     row.querySelector('.home-task-check').addEventListener('change', (ev)=>{
-      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const list = clientId ? (todoOwnerById(clientId).todos || []) : state.generalTodos;
       const todo = list.find(t=>t.id===todoId);
       todo.done = ev.target.checked;
       todo.doneAt = todo.done ? todayIso() : null;
@@ -11768,7 +11787,7 @@ function renderHome(){
       renderHome();
     });
     row.querySelector('.home-task-text-input').addEventListener('blur', (ev)=>{
-      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const list = clientId ? (todoOwnerById(clientId).todos || []) : state.generalTodos;
       const todo = list.find(t=>t.id===todoId);
       const val = ev.target.value.trim();
       if(val){ todo.text = val; saveState(); }
@@ -11779,28 +11798,28 @@ function renderHome(){
     taskTextEl.addEventListener('input', autoResize);
     autoResize();
     row.querySelector('.home-task-importance-select').addEventListener('change', (ev)=>{
-      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const list = clientId ? (todoOwnerById(clientId).todos || []) : state.generalTodos;
       const todo = list.find(t=>t.id===todoId);
       todo.importance = Number(ev.target.value);
       saveState();
       renderHome();
     });
     row.querySelector('.home-task-duedate-input').addEventListener('change', (ev)=>{
-      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const list = clientId ? (todoOwnerById(clientId).todos || []) : state.generalTodos;
       const todo = list.find(t=>t.id===todoId);
       todo.dueDate = ev.target.value;
       saveState();
       renderHome();
     });
     {
-      const list = clientId ? state.clients.find(c=>c.id===clientId).todos : state.generalTodos;
+      const list = clientId ? (todoOwnerById(clientId).todos || []) : state.generalTodos;
       const todo = list.find(t=>t.id===todoId);
       wireTaskExtras(row, todo, saveState, renderHome);
     }
     row.querySelector('.home-task-del').addEventListener('click', ()=>{
       if(!confirm('Bu iş silinsin mi?')) return;
       if(clientId){
-        const client = state.clients.find(c=>c.id===clientId);
+        const client = todoOwnerById(clientId);
         client.todos = client.todos.filter(t=>t.id!==todoId);
       }else{
         state.generalTodos = state.generalTodos.filter(t=>t.id!==todoId);
@@ -11811,6 +11830,12 @@ function renderHome(){
     const clientBadge = row.querySelector('.home-task-client');
     if(clientBadge){
       clientBadge.addEventListener('click', ()=>{
+        if((state.prospects||[]).some(p=>p.id===clientId)){
+          activeProspectId = clientId; mainView = 'prospect'; sidebarListMode = 'prospects';
+          document.body.classList.add('mobile-detail');
+          render();
+          return;
+        }
         activeClientId = clientId;
         mainView = 'client';
         document.body.classList.add('mobile-detail');
